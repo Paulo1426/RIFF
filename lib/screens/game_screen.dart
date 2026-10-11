@@ -275,7 +275,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     setState(() {
       _playing = true;
       _paused = false;
-      _nowPlaying = instruments.map((item) => item.nombre).join(' + ');
+      _nowPlaying = '';
       _nowPlayingInstruments = instruments;
     });
     try {
@@ -411,13 +411,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   }
 
   Widget _reproductor() {
-    final scheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
+    return Vidrio(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
@@ -443,14 +437,17 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                 children: [
                   Text(
                     _paused ? 'En pausa' : 'Reproduciendo',
-                    style: Theme.of(context).textTheme.labelSmall,
+                    style: _nowPlaying.isEmpty
+                        ? Theme.of(context).textTheme.titleSmall
+                        : Theme.of(context).textTheme.labelSmall,
                   ),
-                  Text(
-                    _nowPlaying,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
+                  if (_nowPlaying.isNotEmpty)
+                    Text(
+                      _nowPlaying,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
                 ],
               ),
             ),
@@ -593,9 +590,11 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         margin: EdgeInsets.zero,
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(radioVidrio),
           side: BorderSide(
-            color: comprado ? scheme.primary : scheme.outlineVariant,
+            color: comprado
+                ? scheme.primary
+                : AppColors.purePaper.withValues(alpha: 0.85),
             width: comprado ? 2 : 1,
           ),
         ),
@@ -655,138 +654,140 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       appBar: AppBar(
         title: Text('Nivel ${widget.numeroVisible ?? widget.nivel.numero}'),
       ),
-      body: ConCarga(
-        cargando: _sending || _avanzando,
-        texto: _avanzando
-            ? 'Cargando siguiente nivel...'
-            : 'Comprobando respuesta...',
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text(
-              widget.nivel.modoPrueba
-                  ? 'Modo de prueba: ${widget.nivel.duracionFragmentoSegundos} segundos por escucha.'
-                  : 'Compra un instrumento para escuchar un fragmento de la canción.',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 12),
-            _presupuesto(),
-            const SizedBox(height: 4),
-            Text(
-              'Puedes comprar hasta 3 de los ${widget.nivel.instrumentos.length} instrumentos.',
-            ),
-            const SizedBox(height: 8),
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 1.25,
-              children: [
-                for (final instrumento in widget.nivel.instrumentos)
-                  _instrumentoTile(instrumento),
-              ],
-            ),
-            if (_purchased.isNotEmpty && !_melodyFound) ...[
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: _buying || _playing ? null : _playPurchased,
-                icon: const Icon(Icons.queue_music),
-                label: const Text('Escuchar instrumentos comprados'),
-              ),
-            ],
-            if (_melodyFound) ...[
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: _playing
-                    ? null
-                    : () => _playSong('instrumentalSong'),
-                icon: const Icon(Icons.queue_music),
-                label: const Text('Escuchar canción'),
-              ),
-            ],
-            AnimatedSize(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeOut,
-              child: _playing
-                  ? Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: _reproductor(),
-                    )
-                  : const SizedBox(width: double.infinity),
-            ),
-            const Divider(height: 32),
-            TextField(
-              controller: _answerController,
-              enabled: !_sending,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _submitAnswer(),
-              decoration: const InputDecoration(
-                labelText: '¿Qué canción es?',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            if (_message != null) ...[
-              const SizedBox(height: 8),
+      body: FondoRiff(
+        child: ConCarga(
+          cargando: _sending || _avanzando,
+          texto: _avanzando
+              ? 'Cargando siguiente nivel...'
+              : 'Comprobando respuesta...',
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
               Text(
-                _message!,
-                style: TextStyle(
-                  color: _correct == false
-                      ? Theme.of(context).colorScheme.error
-                      : null,
-                ),
+                widget.nivel.modoPrueba
+                    ? 'Modo de prueba: ${widget.nivel.duracionFragmentoSegundos} segundos por escucha.'
+                    : 'Compra un instrumento para escuchar un fragmento de la canción.',
+                style: Theme.of(context).textTheme.titleMedium,
               ),
-            ],
-            const SizedBox(height: 16),
-            if (_won) ...[
-              FilledButton.icon(
-                onPressed: _playing || _playingOffline
-                    ? null
-                    : () => _playSong('fullSong'),
-                icon: const Icon(Icons.library_music),
-                label: Text(
-                  _playingOffline
-                      ? 'Canción original disponible con internet'
-                      : 'Escuchar canción original',
-                ),
+              const SizedBox(height: 12),
+              _presupuesto(),
+              const SizedBox(height: 4),
+              Text(
+                'Puedes comprar hasta 3 de los ${widget.nivel.instrumentos.length} instrumentos.',
               ),
               const SizedBox(height: 8),
-              Row(
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 1.25,
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: _avanzando
-                          ? null
-                          : () => Navigator.of(
-                              context,
-                            ).pop(ResultadoNivel.terminar),
-                      child: const Text('Terminar nivel'),
-                    ),
-                  ),
-                  if (widget.onSiguiente != null) ...[
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: _avanzando
-                            ? null
-                            : () {
-                                setState(() => _avanzando = true);
-                                widget.onSiguiente!();
-                              },
-                        child: const Text('Siguiente nivel'),
-                      ),
-                    ),
-                  ],
+                  for (final instrumento in widget.nivel.instrumentos)
+                    _instrumentoTile(instrumento),
                 ],
               ),
-            ],
-            if (!_won)
-              FilledButton(
-                onPressed: _sending ? null : _submitAnswer,
-                child: const Text('Comprobar respuesta'),
+              if (_purchased.isNotEmpty && !_melodyFound) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _buying || _playing ? null : _playPurchased,
+                  icon: const Icon(Icons.queue_music),
+                  label: const Text('Escuchar instrumentos comprados'),
+                ),
+              ],
+              if (_melodyFound) ...[
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _playing
+                      ? null
+                      : () => _playSong('instrumentalSong'),
+                  icon: const Icon(Icons.queue_music),
+                  label: const Text('Escuchar canción'),
+                ),
+              ],
+              AnimatedSize(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOut,
+                child: _playing
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: _reproductor(),
+                      )
+                    : const SizedBox(width: double.infinity),
               ),
-          ],
+              const Divider(height: 32),
+              TextField(
+                controller: _answerController,
+                enabled: !_sending,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _submitAnswer(),
+                decoration: const InputDecoration(
+                  labelText: '¿Qué canción es?',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (_message != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _message!,
+                  style: TextStyle(
+                    color: _correct == false
+                        ? Theme.of(context).colorScheme.error
+                        : null,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              if (_won) ...[
+                FilledButton.icon(
+                  onPressed: _playing || _playingOffline
+                      ? null
+                      : () => _playSong('fullSong'),
+                  icon: const Icon(Icons.library_music),
+                  label: Text(
+                    _playingOffline
+                        ? 'Canción original disponible con internet'
+                        : 'Escuchar canción original',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _avanzando
+                            ? null
+                            : () => Navigator.of(
+                                context,
+                              ).pop(ResultadoNivel.terminar),
+                        child: const Text('Terminar nivel'),
+                      ),
+                    ),
+                    if (widget.onSiguiente != null) ...[
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: _avanzando
+                              ? null
+                              : () {
+                                  setState(() => _avanzando = true);
+                                  widget.onSiguiente!();
+                                },
+                          child: const Text('Siguiente nivel'),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+              if (!_won)
+                FilledButton(
+                  onPressed: _sending ? null : _submitAnswer,
+                  child: const Text('Comprobar respuesta'),
+                ),
+            ],
+          ),
         ),
       ),
     ),

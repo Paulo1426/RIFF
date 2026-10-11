@@ -11,7 +11,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Adivina la canción'), findsOneWidget);
+    expect(find.bySemanticsLabel('Riff'), findsOneWidget);
     expect(find.text('Continuar con Google'), findsOneWidget);
     expect(find.text('Jugar sin registrarme'), findsOneWidget);
   });

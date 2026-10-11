@@ -535,7 +535,11 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     final estado = _estado;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Adivina la canción'),
+        title: Image.asset(
+          'lib/assets/images/logo/riff_logo.png',
+          height: 48,
+          semanticLabel: 'Riff',
+        ),
         actions: [
           IconButton(
             tooltip: 'Cerrar sesión',
@@ -544,24 +548,26 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           ),
         ],
       ),
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 350),
-        child: _loading
-            ? const Cargando(
-                key: ValueKey('cargando'),
-                texto: 'Cargando progreso...',
-              )
-            : _error != null
-            ? _ErrorPanel(error: _error!, onRetry: _cargar)
-            : estado == null
-            ? const Center(child: Text('No se pudo cargar el progreso.'))
-            : _ContenidoProgreso(
-                estado: estado,
-                esInvitado: widget.user.isAnonymous,
-                offlineMode: _offlineMode,
-                onOpenDifficulty: _abrirDificultad,
-                onRefresh: _cargar,
-              ),
+      body: FondoRiff(
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 350),
+          child: _loading
+              ? const Cargando(
+                  key: ValueKey('cargando'),
+                  texto: 'Cargando progreso...',
+                )
+              : _error != null
+              ? _ErrorPanel(error: _error!, onRetry: _cargar)
+              : estado == null
+              ? const Center(child: Text('No se pudo cargar el progreso.'))
+              : _ContenidoProgreso(
+                  estado: estado,
+                  esInvitado: widget.user.isAnonymous,
+                  offlineMode: _offlineMode,
+                  onOpenDifficulty: _abrirDificultad,
+                  onRefresh: _cargar,
+                ),
+        ),
       ),
     );
   }
@@ -610,12 +616,12 @@ class _ContenidoProgreso extends StatelessWidget {
           const SizedBox(height: 16),
           for (final progreso in estado.dificultades)
             Card(
-              color: progreso.desbloqueada
-                  ? _panelDe(progreso.dificultad)
-                  : AppColors.paleMist,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.all(Radius.circular(4)),
-              ),
+              // Vidrio teñido con el color de cada dificultad.
+              color:
+                  (progreso.desbloqueada
+                          ? _panelDe(progreso.dificultad)
+                          : AppColors.paleMist)
+                      .withValues(alpha: 0.6),
               margin: const EdgeInsets.only(bottom: 12),
               child: ListTile(
                 contentPadding: const EdgeInsets.symmetric(
@@ -720,47 +726,49 @@ class _DifficultyLevelsScreenState extends State<_DifficultyLevelsScreen> {
     final niveles = widget.niveles();
     return Scaffold(
       appBar: AppBar(title: Text(_nombreDificultad(dificultad))),
-      body: niveles.isEmpty
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  progreso.total == 0
-                      ? 'Todavía no hay niveles disponibles para esta dificultad.'
-                      : 'No hay niveles completados para repetir.',
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            )
-          : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: niveles.length,
-              itemBuilder: (context, index) {
-                final asignado = niveles[index];
-                final canStart = asignado.completado || asignado.puedeIniciar;
-                return Card(
-                  child: ListTile(
-                    title: Text('Nivel ${index + 1}'),
-                    subtitle: Text(
-                      asignado.completado
-                          ? 'Completado'
-                          : 'Canción por descubrir',
-                    ),
-                    trailing: asignado.completado
-                        ? OutlinedButton(
-                            onPressed: canStart ? () => _jugar(index) : null,
-                            child: const Text('Repetir'),
-                          )
-                        : canStart
-                        ? FilledButton(
-                            onPressed: () => _jugar(index),
-                            child: const Text('Jugar'),
-                          )
-                        : const Icon(Icons.lock_outline),
+      body: FondoRiff(
+        child: niveles.isEmpty
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    progreso.total == 0
+                        ? 'Todavía no hay niveles disponibles para esta dificultad.'
+                        : 'No hay niveles completados para repetir.',
+                    textAlign: TextAlign.center,
                   ),
-                );
-              },
-            ),
+                ),
+              )
+            : ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: niveles.length,
+                itemBuilder: (context, index) {
+                  final asignado = niveles[index];
+                  final canStart = asignado.completado || asignado.puedeIniciar;
+                  return Card(
+                    child: ListTile(
+                      title: Text('Nivel ${index + 1}'),
+                      subtitle: Text(
+                        asignado.completado
+                            ? 'Completado'
+                            : 'Canción por descubrir',
+                      ),
+                      trailing: asignado.completado
+                          ? OutlinedButton(
+                              onPressed: canStart ? () => _jugar(index) : null,
+                              child: const Text('Repetir'),
+                            )
+                          : canStart
+                          ? FilledButton(
+                              onPressed: () => _jugar(index),
+                              child: const Text('Jugar'),
+                            )
+                          : const Icon(Icons.lock_outline),
+                    ),
+                  );
+                },
+              ),
+      ),
     );
   }
 }
@@ -923,26 +931,7 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // Portada de fondo sin deformar; se funde con el crema hacia abajo
-            // para que el formulario se lea sobre papel liso.
-            Image.asset(
-              'lib/assets/images/portada/login.png',
-              fit: BoxFit.cover,
-            ),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    AppColors.warmCanvas.withValues(alpha: 0),
-                    AppColors.warmCanvas.withValues(alpha: 0.6),
-                    AppColors.warmCanvas,
-                  ],
-                  stops: const [0, 0.3, 0.5],
-                ),
-              ),
-            ),
+            const FondoRiff(child: SizedBox.expand()),
             SafeArea(
               child: Center(
                 child: SingleChildScrollView(
@@ -955,17 +944,17 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Deja ver la portada antes del título.
-                          SizedBox(
-                            height: MediaQuery.sizeOf(context).height * 0.2,
-                          ),
-                          Text(
-                            'Adivina la canción',
-                            style: text.headlineMedium,
+                          Center(
+                            child: Image.asset(
+                              'lib/assets/images/logo/riff_logo.png',
+                              height: 180,
+                              semanticLabel: 'Riff',
+                            ),
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Pon a prueba tu oído y descubre la melodía',
+                            'Adivina la canción: pon a prueba tu oído y descubre la melodía',
+                            textAlign: TextAlign.center,
                             style: text.bodyLarge?.copyWith(
                               color: AppColors.ash,
                             ),
@@ -974,9 +963,13 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                           Container(
                             padding: const EdgeInsets.all(24),
                             decoration: BoxDecoration(
-                              color: AppColors.purePaper,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: AppColors.hairline),
+                              color: AppColors.purePaper.withValues(alpha: 0.7),
+                              borderRadius: BorderRadius.circular(radioVidrio),
+                              border: Border.all(
+                                color: AppColors.purePaper.withValues(
+                                  alpha: 0.85,
+                                ),
+                              ),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,

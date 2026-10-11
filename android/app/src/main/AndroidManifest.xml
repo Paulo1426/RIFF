@@ -2,7 +2,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application
-        android:label="song_guess_game"
+        android:label="Riff"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

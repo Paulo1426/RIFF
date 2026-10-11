@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -19,6 +20,11 @@ class AppColors {
   static const inkStone = Color(0xFF27262B);
   static const charcoal = Color(0xFF000000);
   static const ash = Color(0xFF737170);
+  // Colores del logo de Riff (póster del festival).
+  static const riffTurquoise = Color(0xFF22A9A4);
+  static const riffYellow = Color(0xFFF5C84A);
+  static const riffRed = Color(0xFFD8432E);
+  static const riffNavy = Color(0xFF1D3B6F);
 }
 
 ThemeData buildAppTheme() {
@@ -75,14 +81,14 @@ ThemeData buildAppTheme() {
       )
       .apply(bodyColor: AppColors.charcoal, displayColor: AppColors.charcoal);
 
-  // Controles redondos (pill), superficies casi rectas (4px), sin sombras.
+  // Controles pill y superficies de vidrio translúcido (sin sombras).
   const pill = StadiumBorder();
   const card = RoundedRectangleBorder(
-    borderRadius: BorderRadius.all(Radius.circular(4)),
+    borderRadius: BorderRadius.all(Radius.circular(24)),
   );
   const buttonPadding = EdgeInsets.symmetric(horizontal: 24, vertical: 12);
   final inputBorder = OutlineInputBorder(
-    borderRadius: BorderRadius.circular(4),
+    borderRadius: BorderRadius.circular(14),
     borderSide: const BorderSide(color: AppColors.hairline),
   );
 
@@ -107,13 +113,13 @@ ThemeData buildAppTheme() {
       scrolledUnderElevation: 0,
       titleTextStyle: textTheme.titleLarge,
     ),
-    cardTheme: const CardThemeData(
-      color: AppColors.purePaper,
+    cardTheme: CardThemeData(
+      color: AppColors.purePaper.withValues(alpha: 0.55),
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(4)),
-        side: BorderSide(color: AppColors.hairline),
+        borderRadius: BorderRadius.circular(radioVidrio),
+        side: BorderSide(color: AppColors.purePaper.withValues(alpha: 0.85)),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
@@ -130,7 +136,7 @@ ThemeData buildAppTheme() {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        backgroundColor: AppColors.purePaper,
+        backgroundColor: AppColors.purePaper.withValues(alpha: 0.6),
         foregroundColor: AppColors.charcoal,
         side: const BorderSide(color: AppColors.charcoal),
         shape: pill,
@@ -147,7 +153,7 @@ ThemeData buildAppTheme() {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: AppColors.purePaper,
+      fillColor: AppColors.purePaper.withValues(alpha: 0.7),
       border: inputBorder,
       enabledBorder: inputBorder,
       focusedBorder: inputBorder.copyWith(
@@ -174,6 +180,84 @@ ThemeData buildAppTheme() {
       behavior: SnackBarBehavior.floating,
     ),
   );
+}
+
+const radioVidrio = 20.0;
+
+/// Vidrio líquido suave: desenfoca lo de atrás bajo un blanco translúcido.
+class Vidrio extends StatelessWidget {
+  const Vidrio({super.key, required this.child, this.radio = radioVidrio});
+
+  final Widget child;
+  final double radio;
+
+  @override
+  Widget build(BuildContext context) {
+    final borde = BorderRadius.circular(radio);
+    return ClipRRect(
+      borderRadius: borde,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: borde,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppColors.purePaper.withValues(alpha: 0.72),
+                AppColors.purePaper.withValues(alpha: 0.42),
+              ],
+            ),
+            border: Border.all(
+              color: AppColors.purePaper.withValues(alpha: 0.85),
+            ),
+          ),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+/// Fondo crema con manchas suaves de los colores del logo, para que el
+/// vidrio tenga algo que desenfocar.
+class FondoRiff extends StatelessWidget {
+  const FondoRiff({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      CustomPaint(painter: _FondoPainter(), child: child);
+}
+
+class _FondoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final (x, y, r, color, alpha) in [
+      (0.05, 0.08, 0.75, AppColors.riffTurquoise, 0.30),
+      (1.0, 0.45, 0.7, AppColors.riffYellow, 0.35),
+      (0.1, 0.95, 0.65, AppColors.riffRed, 0.16),
+    ]) {
+      final center = Offset(size.width * x, size.height * y);
+      final radius = size.width * r;
+      canvas.drawCircle(
+        center,
+        radius,
+        Paint()
+          ..shader = RadialGradient(
+            colors: [
+              color.withValues(alpha: alpha),
+              color.withValues(alpha: 0),
+            ],
+          ).createShader(Rect.fromCircle(center: center, radius: radius)),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_FondoPainter oldDelegate) => false;
 }
 
 /// Disco de vinilo estilo rockola; gira mientras [girando] es true.

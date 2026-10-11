@@ -42,7 +42,7 @@ class SongGuessApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'Adivina la canción',
+    title: 'Riff',
     debugShowCheckedModeBanner: false,
     theme: buildAppTheme(),
     home:

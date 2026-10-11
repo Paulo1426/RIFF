@@ -54,13 +54,10 @@ class InstruccionesDialog extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
               child: Column(
                 children: [
-                  Text(
-                    'SONG GUESS GAME',
-                    textAlign: TextAlign.center,
-                    style: text.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.2,
-                    ),
+                  Image.asset(
+                    'lib/assets/images/logo/riff_logo.png',
+                    height: 120,
+                    semanticLabel: 'Riff',
                   ),
                   const SizedBox(height: 4),
                   Text(
