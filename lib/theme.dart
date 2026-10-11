@@ -176,37 +176,6 @@ ThemeData buildAppTheme() {
   );
 }
 
-/// Motivo de sol: medio círculo lima sobre un panel. Marca lo que suena.
-class ArteSol extends StatelessWidget {
-  const ArteSol({super.key, this.size = 48, this.fondo = AppColors.khakiPaper});
-
-  final double size;
-  final Color fondo;
-
-  @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(4),
-    child: ColoredBox(
-      color: fondo,
-      child: CustomPaint(size: Size.square(size), painter: _SolPainter()),
-    ),
-  );
-}
-
-class _SolPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) => canvas.drawArc(
-    Offset.zero & size,
-    pi,
-    pi,
-    true,
-    Paint()..color = AppColors.limeSignal,
-  );
-
-  @override
-  bool shouldRepaint(_SolPainter oldDelegate) => false;
-}
-
 /// Disco de vinilo estilo rockola; gira mientras [girando] es true.
 class DiscoGirando extends StatefulWidget {
   const DiscoGirando({super.key, this.size = 40, this.girando = true});
@@ -312,5 +281,38 @@ class Cargando extends StatelessWidget {
         ),
       ],
     ),
+  );
+}
+
+/// Cubre la pantalla con el disco girando mientras [cargando] es true.
+class ConCarga extends StatelessWidget {
+  const ConCarga({
+    super.key,
+    required this.cargando,
+    required this.texto,
+    required this.child,
+  });
+
+  final bool cargando;
+  final String texto;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    children: [
+      child,
+      Positioned.fill(
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          // ColoredBox bloquea los toques mientras carga.
+          child: cargando
+              ? ColoredBox(
+                  color: AppColors.warmCanvas.withValues(alpha: 0.9),
+                  child: Cargando(texto: texto),
+                )
+              : const SizedBox.shrink(),
+        ),
+      ),
+    ],
   );
 }

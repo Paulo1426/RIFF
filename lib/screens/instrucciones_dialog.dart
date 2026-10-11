@@ -1,7 +1,4 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../theme.dart';
 
@@ -10,7 +7,10 @@ Future<void> mostrarInstrucciones(BuildContext context) => showDialog<void>(
   builder: (_) => const InstruccionesDialog(),
 );
 
-/// Muestra las instrucciones solo la primera vez que se abre la app.
+// Una vez por apertura de la app; cerrar sesión y volver a entrar no las repite.
+var _instruccionesMostradas = false;
+
+/// Muestra las instrucciones una vez cada vez que se abre la app.
 class InstruccionesAlAbrir extends StatefulWidget {
   const InstruccionesAlAbrir({super.key, required this.child});
 
@@ -27,16 +27,10 @@ class _InstruccionesAlAbrirState extends State<InstruccionesAlAbrir> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _mostrarSiEsNueva());
   }
 
-  Future<void> _mostrarSiEsNueva() async {
-    try {
-      final directory = await getApplicationSupportDirectory();
-      final vistas = File('${directory.path}/instrucciones_vistas');
-      if (await vistas.exists()) return;
-      await vistas.create(recursive: true);
-    } catch (error) {
-      debugPrint('No se pudo leer si las instrucciones ya se vieron: $error');
-    }
-    if (mounted) await mostrarInstrucciones(context);
+  void _mostrarSiEsNueva() {
+    if (_instruccionesMostradas || !mounted) return;
+    _instruccionesMostradas = true;
+    mostrarInstrucciones(context);
   }
 
   @override
@@ -60,8 +54,6 @@ class InstruccionesDialog extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
               child: Column(
                 children: [
-                  const ArteSol(size: 44),
-                  const SizedBox(height: 12),
                   Text(
                     'SONG GUESS GAME',
                     textAlign: TextAlign.center,
