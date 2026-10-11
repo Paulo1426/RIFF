@@ -9,17 +9,30 @@ import '../models/nivel.dart';
 import '../providers/providers.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/offline_game_store.dart';
+import '../theme.dart';
 import 'game_screen.dart';
+import 'instrucciones_dialog.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.authStateChanges});
 
   final Stream<User?>? authStateChanges;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  // La sesión guardada se conserva (progreso offline e invitados), pero cada
+  // arranque pasa por el login para confirmarla.
+  bool _entered = false;
+  late final Stream<User?> _authStateChanges =
+      widget.authStateChanges ?? FirebaseAuth.instance.authStateChanges();
+
+  @override
+  Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      stream: authStateChanges ?? FirebaseAuth.instance.authStateChanges(),
+      stream: _authStateChanges,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Scaffold(
@@ -34,8 +47,16 @@ class HomeScreen extends ConsumerWidget {
           );
         }
         final user = snapshot.data;
-        if (user == null) return const FirebaseAuthScreen();
-        return _AuthenticatedHome(key: ValueKey(user.uid), user: user);
+        if (user == null || !_entered) {
+          return FirebaseAuthScreen(
+            savedUser: user,
+            onSignedIn: () => setState(() => _entered = true),
+          );
+        }
+        return InstruccionesAlAbrir(
+          key: ValueKey(user.uid),
+          child: _AuthenticatedHome(key: ValueKey(user.uid), user: user),
+        );
       },
     );
   }
@@ -255,8 +276,12 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     _offlineSnapshot = current;
   }
 
-  Future<bool> _iniciar(Nivel nivel, {int? numeroVisible}) async {
-    if (_startingLevelId != null) return false;
+  Future<ResultadoNivel?> _iniciar(
+    Nivel nivel, {
+    int? numeroVisible,
+    bool haySiguiente = false,
+  }) async {
+    if (_startingLevelId != null) return null;
     setState(() => _startingLevelId = nivel.id);
     try {
       OfflineLevelData? offlineLevel;
@@ -275,6 +300,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           nivel: offlineLevel.nivel,
           gameId: 'offline-${DateTime.now().microsecondsSinceEpoch}',
           numeroVisible: numeroVisible,
+          haySiguiente: haySiguiente,
           offlineLevel: offlineLevel,
         );
       }
@@ -286,6 +312,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           nivel: partida.nivel,
           gameId: partida.gameId,
           numeroVisible: numeroVisible,
+          haySiguiente: haySiguiente,
           offlineLevel: offlineLevel,
         );
       } catch (error) {
@@ -297,6 +324,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           nivel: offlineLevel.nivel,
           gameId: 'offline-${DateTime.now().microsecondsSinceEpoch}',
           numeroVisible: numeroVisible,
+          haySiguiente: haySiguiente,
           offlineLevel: offlineLevel,
         );
       }
@@ -306,25 +334,27 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           SnackBar(content: Text('No se pudo iniciar el nivel: $error')),
         );
       }
-      return false;
+      return null;
     } finally {
       if (mounted) setState(() => _startingLevelId = null);
     }
   }
 
-  Future<bool> _pushGame({
+  Future<ResultadoNivel?> _pushGame({
     required Nivel nivel,
     required String gameId,
     required int? numeroVisible,
+    required bool haySiguiente,
     required OfflineLevelData? offlineLevel,
   }) async {
-    if (!mounted) return false;
-    final completed = await Navigator.of(context).push<bool>(
+    if (!mounted) return null;
+    final resultado = await Navigator.of(context).push<ResultadoNivel>(
       MaterialPageRoute(
         builder: (_) => GameScreen(
           nivel: nivel,
           gameId: gameId,
           numeroVisible: numeroVisible,
+          haySiguiente: haySiguiente,
           offlineLevel: offlineLevel,
           offlineMode: _offlineMode || gameId.startsWith('offline-'),
           onOfflineCompleted: (levelId, answer) async {
@@ -339,16 +369,85 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         ),
       ),
     );
-    if (completed == true) await _cargar();
-    return completed == true;
+    if (resultado != null) {
+      final antes = _desbloqueadas();
+      final terminadoAntes = _juegoTerminado();
+      await _cargar();
+      final nuevas = _desbloqueadas().difference(antes);
+      for (final dificultad in nuevas) {
+        if (!mounted) break;
+        await _avisarDesbloqueo(dificultad);
+      }
+      if (!terminadoAntes && _juegoTerminado() && mounted) {
+        await _avisarJuegoTerminado();
+      }
+    }
+    return resultado;
   }
 
-  Future<void> _abrirDificultad(Dificultad dificultad) async {
-    final estado = _estado;
-    if (estado == null) return;
-    final progreso = estado.dificultades.firstWhere(
-      (item) => item.dificultad == dificultad,
+  Set<Dificultad> _desbloqueadas() => {
+    for (final progreso in _estado?.dificultades ?? const [])
+      // Fácil siempre está desbloqueada; no hay dificultad previa que celebrar.
+      if (progreso.desbloqueada && progreso.dificultad != Dificultad.facil)
+        progreso.dificultad,
+  };
+
+  bool _juegoTerminado() =>
+      _estado?.dificultades.any(
+        (progreso) =>
+            progreso.dificultad == Dificultad.avanzado &&
+            progreso.total >= 5 &&
+            progreso.completados >= progreso.total,
+      ) ??
+      false;
+
+  Future<void> _avisarJuegoTerminado() => showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      icon: const Icon(Icons.workspace_premium_rounded, size: 56),
+      title: const Text('¡Juego completado!', textAlign: TextAlign.center),
+      content: const Text(
+        'Superaste las tres dificultades: Fácil, Media y Avanzada. '
+        '¡Tienes un oído de campeón! Puedes repetir cualquier nivel cuando quieras.',
+        textAlign: TextAlign.center,
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('¡Genial!'),
+        ),
+      ],
+    ),
+  );
+
+  Future<void> _avisarDesbloqueo(Dificultad desbloqueada) {
+    final completada = Dificultad.values[desbloqueada.index - 1];
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.emoji_events_rounded, size: 48),
+        title: Text(
+          '¡Dificultad ${_nombreDificultad(completada)} completada!',
+          textAlign: TextAlign.center,
+        ),
+        content: Text(
+          'Superaste los 5 niveles. Ya puedes jugar la dificultad '
+          '${_nombreDificultad(desbloqueada)}.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('¡Vamos!'),
+          ),
+        ],
+      ),
     );
+  }
+
+  List<NivelAsignado> _nivelesDe(Dificultad dificultad) {
+    final estado = _estado;
+    if (estado == null) return const [];
     final esDificultadActiva = estado.dificultadActiva == dificultad;
     final nivelesRemotos = esDificultadActiva
         ? estado.niveles
@@ -367,22 +466,27 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
               )
               .toList(growable: false)
         : nivelesRemotos;
+    return niveles;
+  }
+
+  Future<void> _abrirDificultad(Dificultad dificultad) async {
+    final estado = _estado;
+    if (estado == null) return;
+    final progreso = estado.dificultades.firstWhere(
+      (item) => item.dificultad == dificultad,
+    );
 
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => _DifficultyLevelsScreen(
           dificultad: dificultad,
           progreso: progreso,
-          niveles: niveles,
-          onStart: (nivel, numeroVisible) async {
-            final completado = await _iniciar(
-              nivel,
-              numeroVisible: numeroVisible,
-            );
-            if (completado && mounted) {
-              Navigator.of(context).pop();
-            }
-          },
+          niveles: () => _nivelesDe(dificultad),
+          onStart: (nivel, numeroVisible, haySiguiente) => _iniciar(
+            nivel,
+            numeroVisible: numeroVisible,
+            haySiguiente: haySiguiente,
+          ),
         ),
       ),
     );
@@ -480,7 +584,20 @@ class _ContenidoProgreso extends StatelessWidget {
           const SizedBox(height: 16),
           for (final progreso in estado.dificultades)
             Card(
+              color: progreso.desbloqueada
+                  ? _panelDe(progreso.dificultad)
+                  : AppColors.paleMist,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.all(Radius.circular(4)),
+              ),
+              margin: const EdgeInsets.only(bottom: 12),
               child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
+                titleTextStyle: Theme.of(context).textTheme.titleLarge,
+                subtitleTextStyle: Theme.of(context).textTheme.bodyMedium,
                 leading: Icon(
                   progreso.desbloqueada ? Icons.lock_open : Icons.lock,
                 ),
@@ -501,6 +618,10 @@ class _ContenidoProgreso extends StatelessWidget {
                         width: 72,
                         child: LinearProgressIndicator(
                           value: progreso.completados / progreso.total,
+                          backgroundColor: AppColors.purePaper.withValues(
+                            alpha: 0.6,
+                          ),
+                          borderRadius: BorderRadius.circular(999),
                         ),
                       )
                     : null,
@@ -513,7 +634,7 @@ class _ContenidoProgreso extends StatelessWidget {
   }
 }
 
-class _DifficultyLevelsScreen extends StatelessWidget {
+class _DifficultyLevelsScreen extends StatefulWidget {
   const _DifficultyLevelsScreen({
     required this.dificultad,
     required this.progreso,
@@ -523,11 +644,45 @@ class _DifficultyLevelsScreen extends StatelessWidget {
 
   final Dificultad dificultad;
   final ProgresoDificultadRemoto progreso;
-  final List<NivelAsignado> niveles;
-  final Future<void> Function(Nivel nivel, int numeroVisible) onStart;
+  // Se vuelve a leer tras cada nivel para mostrar el progreso recargado.
+  final List<NivelAsignado> Function() niveles;
+  final Future<ResultadoNivel?> Function(
+    Nivel nivel,
+    int numeroVisible,
+    bool haySiguiente,
+  )
+  onStart;
+
+  @override
+  State<_DifficultyLevelsScreen> createState() =>
+      _DifficultyLevelsScreenState();
+}
+
+class _DifficultyLevelsScreenState extends State<_DifficultyLevelsScreen> {
+  Future<void> _jugar(int index) async {
+    var actual = index;
+    while (mounted) {
+      final niveles = widget.niveles();
+      if (actual >= niveles.length) break;
+      final asignado = niveles[actual];
+      if (!asignado.completado && !asignado.puedeIniciar) break;
+      final resultado = await widget.onStart(
+        asignado.nivel,
+        actual + 1,
+        actual + 1 < niveles.length,
+      );
+      if (!mounted) return;
+      setState(() {});
+      if (resultado != ResultadoNivel.siguiente) break;
+      actual++;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final dificultad = widget.dificultad;
+    final progreso = widget.progreso;
+    final niveles = widget.niveles();
     return Scaffold(
       appBar: AppBar(title: Text(_nombreDificultad(dificultad))),
       body: niveles.isEmpty
@@ -557,15 +712,13 @@ class _DifficultyLevelsScreen extends StatelessWidget {
                           : 'Canción por descubrir',
                     ),
                     trailing: asignado.completado
-                        ? FilledButton.tonal(
-                            onPressed: canStart
-                                ? () => onStart(asignado.nivel, index + 1)
-                                : null,
+                        ? OutlinedButton(
+                            onPressed: canStart ? () => _jugar(index) : null,
                             child: const Text('Repetir'),
                           )
                         : canStart
                         ? FilledButton(
-                            onPressed: () => onStart(asignado.nivel, index + 1),
+                            onPressed: () => _jugar(index),
                             child: const Text('Jugar'),
                           )
                         : const Icon(Icons.lock_outline),
@@ -576,6 +729,13 @@ class _DifficultyLevelsScreen extends StatelessWidget {
     );
   }
 }
+
+// Cada dificultad tiene su panel de color, como las secciones de la guía.
+Color _panelDe(Dificultad dificultad) => switch (dificultad) {
+  Dificultad.facil => AppColors.sageMist,
+  Dificultad.medio => AppColors.mustardField,
+  Dificultad.avanzado => AppColors.lavenderWash,
+};
 
 String _nombreDificultad(Dificultad dificultad) {
   switch (dificultad) {
@@ -611,7 +771,10 @@ class _ErrorPanel extends StatelessWidget {
 }
 
 class FirebaseAuthScreen extends StatefulWidget {
-  const FirebaseAuthScreen({super.key});
+  const FirebaseAuthScreen({super.key, this.savedUser, this.onSignedIn});
+
+  final User? savedUser;
+  final VoidCallback? onSignedIn;
 
   @override
   State<FirebaseAuthScreen> createState() => _FirebaseAuthScreenState();
@@ -623,6 +786,7 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
   final _password = TextEditingController();
   final _name = TextEditingController();
   bool _registering = false;
+  bool _showPassword = false;
   bool _busy = false;
   String? _error;
   Future<void>? _googleSignInReady;
@@ -655,6 +819,7 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
           password: _password.text,
         );
       }
+      widget.onSignedIn?.call();
     } on FirebaseAuthException catch (error) {
       if (mounted) setState(() => _error = error.message ?? error.code);
     } catch (error) {
@@ -678,6 +843,7 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
       }
       final credential = GoogleAuthProvider.credential(idToken: idToken);
       await FirebaseAuth.instance.signInWithCredential(credential);
+      widget.onSignedIn?.call();
     } on FirebaseAuthException catch (error) {
       if (mounted) setState(() => _error = error.message ?? error.code);
     } on GoogleSignInException catch (error) {
@@ -702,6 +868,7 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
     });
     try {
       await FirebaseAuth.instance.signInAnonymously();
+      widget.onSignedIn?.call();
     } on FirebaseAuthException catch (error) {
       if (mounted) setState(() => _error = error.message ?? error.code);
     } catch (error) {
@@ -713,96 +880,231 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
     return Scaffold(
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Adivina la canción',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 24),
-                  if (_registering)
-                    TextFormField(
-                      controller: _name,
-                      decoration: const InputDecoration(labelText: 'Nombre'),
-                      validator: (value) =>
-                          value == null || value.trim().isEmpty
-                          ? 'Escribe tu nombre'
-                          : null,
-                    ),
-                  TextFormField(
-                    controller: _email,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(labelText: 'Correo'),
-                    validator: (value) => value == null || !value.contains('@')
-                        ? 'Escribe un correo válido'
-                        : null,
-                  ),
-                  TextFormField(
-                    controller: _password,
-                    obscureText: true,
-                    decoration: const InputDecoration(labelText: 'Contraseña'),
-                    validator: (value) => value == null || value.length < 6
-                        ? 'Usa al menos 6 caracteres'
-                        : null,
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      _error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    onPressed: _busy ? null : _submit,
-                    child: _busy
-                        ? const CircularProgressIndicator()
-                        : Text(
-                            _registering ? 'Crear cuenta' : 'Iniciar sesión',
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Portada a modo de carátula de disco.
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: AspectRatio(
+                            aspectRatio: 16 / 9,
+                            child: Image.asset(
+                              'lib/assets/images/portada/login.png',
+                              fit: BoxFit.cover,
+                            ),
                           ),
+                        ),
+                        const SizedBox(height: 24),
+                        Row(
+                          children: [
+                            const ArteSol(size: 40),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Adivina la canción',
+                                style: text.headlineMedium,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Pon a prueba tu oído y descubre la melodía',
+                          style: text.bodyLarge?.copyWith(color: AppColors.ash),
+                        ),
+                        const SizedBox(height: 24),
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: AppColors.purePaper,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: AppColors.hairline),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                _registering ? 'Crea tu cuenta' : 'Bienvenido',
+                                style: text.titleLarge,
+                              ),
+                              const SizedBox(height: 16),
+                              if (_registering) ...[
+                                TextFormField(
+                                  controller: _name,
+                                  textInputAction: TextInputAction.next,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Nombre',
+                                    prefixIcon: Icon(Icons.person_outline),
+                                  ),
+                                  validator: (value) =>
+                                      value == null || value.trim().isEmpty
+                                      ? 'Escribe tu nombre'
+                                      : null,
+                                ),
+                                const SizedBox(height: 12),
+                              ],
+                              TextFormField(
+                                controller: _email,
+                                keyboardType: TextInputType.emailAddress,
+                                textInputAction: TextInputAction.next,
+                                decoration: const InputDecoration(
+                                  labelText: 'Correo',
+                                  prefixIcon: Icon(Icons.mail_outline),
+                                ),
+                                validator: (value) =>
+                                    value == null || !value.contains('@')
+                                    ? 'Escribe un correo válido'
+                                    : null,
+                              ),
+                              const SizedBox(height: 12),
+                              TextFormField(
+                                controller: _password,
+                                obscureText: !_showPassword,
+                                decoration: InputDecoration(
+                                  labelText: 'Contraseña',
+                                  prefixIcon: const Icon(Icons.lock_outline),
+                                  suffixIcon: IconButton(
+                                    tooltip: _showPassword
+                                        ? 'Ocultar contraseña'
+                                        : 'Mostrar contraseña',
+                                    onPressed: () => setState(
+                                      () => _showPassword = !_showPassword,
+                                    ),
+                                    icon: Icon(
+                                      _showPassword
+                                          ? Icons.visibility_off_outlined
+                                          : Icons.visibility_outlined,
+                                    ),
+                                  ),
+                                ),
+                                validator: (value) =>
+                                    value == null || value.length < 6
+                                    ? 'Usa al menos 6 caracteres'
+                                    : null,
+                              ),
+                              if (_error != null) ...[
+                                const SizedBox(height: 12),
+                                Text(
+                                  _error!,
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 20),
+                              FilledButton(
+                                onPressed: _busy ? null : _submit,
+                                child: _busy
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : Text(
+                                        _registering
+                                            ? 'Crear cuenta'
+                                            : 'Iniciar sesión',
+                                      ),
+                              ),
+                              if (!_registering &&
+                                  widget.savedUser != null) ...[
+                                const SizedBox(height: 12),
+                                OutlinedButton.icon(
+                                  onPressed: _busy ? null : widget.onSignedIn,
+                                  icon: const Icon(Icons.play_circle_outline),
+                                  label: Text(
+                                    'Continuar como ${_nombreSesion(widget.savedUser!)}',
+                                  ),
+                                ),
+                              ],
+                              if (!_registering) ...[
+                                const SizedBox(height: 16),
+                                Row(
+                                  children: [
+                                    const Expanded(child: Divider()),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                      ),
+                                      child: Text('o', style: text.bodySmall),
+                                    ),
+                                    const Expanded(child: Divider()),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                OutlinedButton.icon(
+                                  onPressed: _busy ? null : _signInWithGoogle,
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 14,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                  ),
+                                  icon: const Icon(
+                                    Icons.account_circle_outlined,
+                                  ),
+                                  label: const Text('Continuar con Google'),
+                                ),
+                                const SizedBox(height: 8),
+                                TextButton.icon(
+                                  onPressed: _busy ? null : _continueAsGuest,
+                                  icon: const Icon(
+                                    Icons.sports_esports_outlined,
+                                  ),
+                                  label: const Text('Jugar sin registrarme'),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextButton(
+                          onPressed: _busy
+                              ? null
+                              : () => setState(() {
+                                  _registering = !_registering;
+                                  _error = null;
+                                }),
+                          child: Text(
+                            _registering
+                                ? '¿Ya tienes cuenta? Inicia sesión'
+                                : '¿No tienes cuenta? Crea una nueva',
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  if (!_registering) ...[
-                    const SizedBox(height: 8),
-                    OutlinedButton.icon(
-                      onPressed: _busy ? null : _signInWithGoogle,
-                      icon: const Icon(Icons.account_circle_outlined),
-                      label: const Text('Continuar con Google'),
-                    ),
-                    TextButton(
-                      onPressed: _busy ? null : _continueAsGuest,
-                      child: const Text('Jugar sin registrarme'),
-                    ),
-                  ],
-                  TextButton(
-                    onPressed: _busy
-                        ? null
-                        : () => setState(() {
-                            _registering = !_registering;
-                            _error = null;
-                          }),
-                    child: Text(
-                      _registering ? 'Ya tengo cuenta' : 'Crear cuenta nueva',
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
+}
+
+String _nombreSesion(User user) {
+  if (user.isAnonymous) return 'invitado';
+  final nombre = user.displayName;
+  if (nombre != null && nombre.trim().isNotEmpty) return nombre;
+  return user.email ?? 'usuario';
 }

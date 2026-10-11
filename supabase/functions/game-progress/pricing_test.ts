@@ -51,27 +51,25 @@ Deno.test("the second and third prices follow the remaining budget", () => {
   }
 });
 
-Deno.test("melody is unpurchased for seven of ten outcomes", () => {
+Deno.test("melody is unpurchased for half of the outcomes", () => {
   const purchased = instruments.slice(0, 3);
-  for (let roll = 0; roll < 7; roll++) {
-    const melody = selectMelodyInstrument(instruments, purchased, () => roll);
-    if (purchased.includes(melody)) {
-      throw new Error("Seven of ten outcomes must select the unpurchased stem");
-    }
+  const melody = selectMelodyInstrument(instruments, purchased, () => 0);
+  if (purchased.includes(melody)) {
+    throw new Error("Half of the outcomes must select the unpurchased stem");
   }
 });
 
-Deno.test("melody is purchased for three of ten outcomes", () => {
+Deno.test("melody is purchased for the other half of the outcomes", () => {
   const purchased = instruments.slice(0, 3);
   for (let index = 0; index < 3; index++) {
-    const choices = [7 + index, index];
+    const choices = [1, index];
     const melody = selectMelodyInstrument(
       instruments,
       purchased,
       () => choices.shift()!,
     );
     if (melody !== purchased[index]) {
-      throw new Error("The remaining three outcomes must select a purchased stem");
+      throw new Error("The other half must select a purchased stem");
     }
   }
 });

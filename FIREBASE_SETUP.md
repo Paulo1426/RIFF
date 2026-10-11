@@ -173,7 +173,7 @@ el de `bateria`; el campo `precio` antiguo puede eliminarse, ya que el servidor
 no lo consulta.
 
 Despues de la tercera compra, el servidor asigna la melodia con probabilidad
-del 70% al unico instrumento no comprado y con probabilidad del 30% a uno de
+del 50% al unico instrumento no comprado y con probabilidad del 50% a uno de
 los tres comprados. Si queda en un instrumento comprado, se descubre al
 completar las tres compras y se desbloquean los cuatro stems y la mezcla
 instrumental. Si queda en el instrumento no comprado, no se revela por compra;

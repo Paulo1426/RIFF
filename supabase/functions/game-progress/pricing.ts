@@ -89,7 +89,7 @@ export function selectMelodyInstrument(
       checkedRandomIndex(purchasedInstrumentTypes.length, chooseIndex)
     ];
   }
-  return checkedRandomIndex(10, chooseIndex) < 7
+  return checkedRandomIndex(2, chooseIndex) === 0
     ? unpurchased[0]
     : purchasedInstrumentTypes[
       checkedRandomIndex(purchasedInstrumentTypes.length, chooseIndex)

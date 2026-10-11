@@ -63,7 +63,12 @@ class AudioService {
           await player.setFilePath(file.path);
         }
         if (!identical(_cancelPlayback, cancellation)) return;
-        await player.seek(inicio);
+        if (duracion == null) {
+          await player.seek(inicio);
+        } else {
+          // El clip marca el fin del fragmento, así pausar no consume su duración.
+          await player.setClip(start: inicio, end: inicio + duracion);
+        }
       }
       if (!identical(_cancelPlayback, cancellation)) return;
       audioSession = await AudioSession.instance;
@@ -74,12 +79,19 @@ class AudioService {
       }
       if (!identical(_cancelPlayback, cancellation)) return;
       _reproduciendo = true;
-      final playback = Future.wait(
-        _players.map((player) => player.play()),
+      final players = List<AudioPlayer>.from(_players);
+      // play() también termina al pausar; solo se usa para propagar errores.
+      final playErrors = Future.wait(
+        players.map((player) => player.play()),
+      ).then<void>((_) => Completer<void>().future);
+      final completed = Future.wait(
+        players.map(
+          (player) => player.processingStateStream.firstWhere(
+            (state) => state == ProcessingState.completed,
+          ),
+        ),
       ).then<void>((_) {});
-      final events = <Future<void>>[playback, cancellation.future];
-      if (duracion != null) events.add(Future<void>.delayed(duracion));
-      await Future.any<void>(events);
+      await Future.any<void>([completed, playErrors, cancellation.future]);
     } catch (error) {
       if (identical(_cancelPlayback, cancellation)) rethrow;
     } finally {
@@ -89,6 +101,15 @@ class AudioService {
       if (audioSessionActive) {
         await audioSession!.setActive(false);
       }
+    }
+  }
+
+  Future<void> pausar() =>
+      Future.wait(_players.map((player) => player.pause()));
+
+  void reanudar() {
+    for (final player in _players) {
+      unawaited(player.play());
     }
   }
 

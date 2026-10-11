@@ -155,7 +155,7 @@ presupuesto de $1.000.000 y maximo tres instrumentos comprados por partida.
 En cada partida los cuatro instrumentos estan disponibles y se permiten tres
 compras, cuyos precios se asignan al seleccionar y suman exactamente $1.000.000
 ($400.000, $300.000 y $300.000). Tras la tercera compra, la melodia se asigna al
-instrumento no comprado el 70% de las veces, y a uno comprado el 30%; si queda
+instrumento no comprado el 50% de las veces, y a uno comprado el otro 50%; si queda
 en uno comprado, se desbloquean los cuatro stems. La progresion conserva orden
 personal y desbloqueo secuencial de dificultades.
 

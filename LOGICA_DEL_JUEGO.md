@@ -16,7 +16,7 @@ progresion, partidas, precios, audios y las reglas de publicacion de niveles.
   Se compran tres; sus precios se asignan al comprar y suman exactamente el
   presupuesto: $400.000, $300.000 y $300.000.
 - Despues de la tercera compra, la melodia queda en el instrumento no comprado
-  el 70% de las veces, y en uno de los tres comprados el 30% restante.
+  el 50% de las veces, y en uno de los tres comprados el 50% restante.
 - Si la melodia queda en un instrumento comprado, se descubre al completar las
   tres compras. Si queda en el no comprado, no se revela y el jugador puede
   adivinar usando los tres stems comprados.

@@ -12,11 +12,15 @@ import '../providers/providers.dart';
 import '../services/audio_service.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/offline_game_store.dart';
+import '../theme.dart';
+
+enum ResultadoNivel { terminar, siguiente }
 
 class GameScreen extends ConsumerStatefulWidget {
   final Nivel nivel;
   final String gameId;
   final int? numeroVisible;
+  final bool haySiguiente;
   final bool offlineMode;
   final OfflineLevelData? offlineLevel;
   final Future<void> Function(String levelId, String answer)?
@@ -27,6 +31,7 @@ class GameScreen extends ConsumerStatefulWidget {
     required this.nivel,
     required this.gameId,
     this.numeroVisible,
+    this.haySiguiente = false,
     this.offlineMode = false,
     this.offlineLevel,
     this.onOfflineCompleted,
@@ -42,10 +47,13 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   bool _sending = false;
   bool _buying = false;
   bool _playing = false;
+  bool _paused = false;
+  String _nowPlaying = '';
   String? _message;
   bool? _correct;
   int _balance = Nivel.presupuestoTotal;
   final Set<String> _purchased = {};
+  final Map<String, int> _prices = {};
   bool _melodyFound = false;
   bool _won = false;
   late bool _playingOffline;
@@ -112,19 +120,17 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         instrumento: instrumento.id,
       );
       if (!mounted) return;
-      final purchasePrice =
-          'Instrumento comprado por \$${_formatPriceInThousands(result.precioInstrumento)}K.';
       setState(() {
+        if (result.compraRealizada) {
+          _prices[instrumento.id] = result.precioInstrumento;
+        }
         _balance = result.presupuestoRestante;
         _purchased
           ..clear()
           ..addAll(result.instrumentosComprados);
         _melodyFound = result.melodiaDescubierta;
         _message = result.melodiaDescubierta
-            ? '¡Encontraste la melodía! Se desbloquearon todos los instrumentos. '
-                  '$purchasePrice'
-            : result.compraRealizada
-            ? purchasePrice
+            ? '¡Encontraste la melodía! Se desbloquearon todos los instrumentos.'
             : null;
       });
       try {
@@ -132,8 +138,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       } catch (error) {
         if (!mounted) return;
         setState(
-          () => _message =
-              '$purchasePrice No se pudo reproducir el instrumento: $error',
+          () => _message = 'No se pudo reproducir el instrumento: $error',
         );
       }
     } catch (error) {
@@ -164,25 +169,23 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         final unpurchased = widget.nivel.instrumentos
             .where((item) => !partida.comprados.contains(item.tipo))
             .toList(growable: false);
-        final melody = unpurchased.isNotEmpty && random.nextInt(10) < 7
+        final melody = unpurchased.isNotEmpty && random.nextBool()
             ? unpurchased.first.tipo
             : partida.comprados[random.nextInt(partida.comprados.length)];
         partida.descubrirMelodia(melody);
         melodyFound = partida.melodiaDescubierta;
       }
       if (!mounted) return;
-      final purchasePrice =
-          'Instrumento comprado por \$${_formatPriceInThousands(price)}K.';
       setState(() {
+        _prices[instrumento.id] = price;
         _balance = partida.presupuestoRestante;
         _purchased
           ..clear()
           ..addAll(partida.comprados.map((item) => item.id));
         _melodyFound = melodyFound;
         _message = melodyFound
-            ? '¡Encontraste la melodía! Se desbloquearon todos los instrumentos. '
-                  '$purchasePrice'
-            : purchasePrice;
+            ? '¡Encontraste la melodía! Se desbloquearon todos los instrumentos.'
+            : null;
       });
       await _playStems([instrumento]);
     } catch (error) {
@@ -198,11 +201,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
   Future<void> _playPurchased() async {
     if (_playing || _buying) return;
-    final instruments = _melodyFound
-        ? widget.nivel.instrumentos
-        : widget.nivel.instrumentos
-              .where((instrument) => _purchased.contains(instrument.id))
-              .toList(growable: false);
+    final instruments = widget.nivel.instrumentos
+        .where((instrument) => _purchased.contains(instrument.id))
+        .toList(growable: false);
     if (instruments.isEmpty) return;
     try {
       await _playStems(instruments);
@@ -217,7 +218,11 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
   Future<void> _playStems(List<Instrumento> instruments) async {
     final playbackGeneration = ++_playbackGeneration;
-    setState(() => _playing = true);
+    setState(() {
+      _playing = true;
+      _paused = false;
+      _nowPlaying = instruments.map((item) => item.nombre).join(' + ');
+    });
     try {
       final repository = ref.read(firebaseGameRepositoryProvider);
       final audio = await Future.wait(
@@ -252,7 +257,10 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       );
     } finally {
       if (mounted && playbackGeneration == _playbackGeneration) {
-        setState(() => _playing = false);
+        setState(() {
+          _playing = false;
+          _paused = false;
+        });
       }
     }
   }
@@ -267,7 +275,13 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       return;
     }
     final playbackGeneration = ++_playbackGeneration;
-    setState(() => _playing = true);
+    setState(() {
+      _playing = true;
+      _paused = false;
+      _nowPlaying = type == 'instrumentalSong'
+          ? 'Canción sin voz'
+          : 'Canción original';
+    });
     try {
       String url;
       String? cacheKey;
@@ -323,9 +337,71 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       }
     } finally {
       if (mounted && playbackGeneration == _playbackGeneration) {
-        setState(() => _playing = false);
+        setState(() {
+          _playing = false;
+          _paused = false;
+        });
       }
     }
+  }
+
+  Future<void> _togglePause() async {
+    if (_paused) {
+      _audioService.reanudar();
+    } else {
+      await _audioService.pausar();
+    }
+    if (mounted) setState(() => _paused = !_paused);
+  }
+
+  Widget _reproductor() {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHigh,
+        border: Border(top: BorderSide(color: scheme.outlineVariant)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              const ArteSol(size: 40),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _paused ? 'En pausa' : 'Reproduciendo',
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                    Text(
+                      _nowPlaying,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                  ],
+                ),
+              ),
+              IconButton.filled(
+                tooltip: _paused ? 'Reanudar' : 'Pausar',
+                onPressed: _togglePause,
+                icon: Icon(_paused ? Icons.play_arrow : Icons.pause),
+              ),
+              IconButton(
+                tooltip: 'Detener',
+                onPressed: () => _audioService.detener(),
+                icon: const Icon(Icons.stop),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _submitAnswer() async {
@@ -434,140 +510,205 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     await _audioService.detener();
   }
 
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: Text('Nivel ${widget.numeroVisible ?? widget.nivel.numero}'),
-      actions: [
-        if (_playing)
-          IconButton(
-            tooltip: 'Detener audio',
-            onPressed: () => _audioService.detener(),
-            icon: const Icon(Icons.stop),
+  Widget _instrumentoTile(Instrumento instrumento) {
+    final comprado = _purchased.contains(instrumento.id);
+    final limite = !_melodyFound && !comprado && _purchased.length >= 3;
+    final disponible = !(_buying || _playing || _won || limite);
+    final precio = _prices[instrumento.id];
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    return Tooltip(
+      message: limite
+          ? 'Ya compraste el máximo de 3 instrumentos'
+          : comprado || _melodyFound
+          ? 'Escuchar ${instrumento.nombre}'
+          : 'Comprar y escuchar ${instrumento.nombre}',
+      child: Card(
+        margin: EdgeInsets.zero,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(4),
+          side: BorderSide(
+            color: comprado ? scheme.primary : scheme.outlineVariant,
+            width: comprado ? 2 : 1,
           ),
-        if (_won)
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Terminar'),
-          ),
-      ],
-    ),
-    body: ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text(
-          widget.nivel.modoPrueba
-              ? 'Modo de prueba: ${widget.nivel.duracionFragmentoSegundos} segundos por escucha.'
-              : 'Compra un instrumento para escuchar un fragmento de la canción.',
-          style: Theme.of(context).textTheme.titleMedium,
         ),
-        const SizedBox(height: 12),
-        Text('Presupuesto restante: \$$_balance'),
-        const SizedBox(height: 4),
-        Text(
-          'Puedes comprar hasta 3 de los ${widget.nivel.instrumentos.length} instrumentos.',
-        ),
-        const SizedBox(height: 8),
-        for (final instrumento in widget.nivel.instrumentos)
-          ListTile(
-            leading: const Icon(Icons.music_note),
-            title: Text(instrumento.nombre),
-            trailing: IconButton(
-              onPressed:
-                  _buying ||
-                      _playing ||
-                      _won ||
-                      (!_melodyFound &&
-                          !_purchased.contains(instrumento.id) &&
-                          _purchased.length >= 3)
-                  ? null
-                  : () => _buyAndPlay(instrumento),
-              tooltip:
-                  !_melodyFound &&
-                      !_purchased.contains(instrumento.id) &&
-                      _purchased.length >= 3
-                  ? 'Ya compraste el máximo de 3 instrumentos'
-                  : _purchased.contains(instrumento.id) || _melodyFound
-                  ? 'Escuchar ${instrumento.nombre}'
-                  : 'Comprar y escuchar ${instrumento.nombre}',
-              icon: Icon(
-                _purchased.contains(instrumento.id) || _melodyFound
-                    ? Icons.play_arrow
-                    : Icons.shopping_cart,
+        child: InkWell(
+          onTap: disponible ? () => _buyAndPlay(instrumento) : null,
+          child: Opacity(
+            opacity: disponible ? 1 : 0.45,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  Text(
+                    _emojiDe(instrumento.tipo),
+                    style: const TextStyle(fontSize: 40),
+                  ),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(instrumento.nombre, style: text.titleMedium),
+                  ),
+                  if (precio != null)
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '\$${_formatPriceInThousands(precio)}K',
+                        style: text.titleSmall?.copyWith(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  Icon(
+                    comprado || _melodyFound
+                        ? Icons.play_arrow
+                        : Icons.shopping_cart,
+                    size: 26,
+                  ),
+                ],
               ),
             ),
           ),
-        if (_purchased.isNotEmpty || _melodyFound) ...[
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: _buying || _playing ? null : _playPurchased,
-            icon: const Icon(Icons.queue_music),
-            label: Text(
-              _melodyFound
-                  ? 'Escuchar todos los instrumentos'
-                  : 'Escuchar instrumentos comprados',
-            ),
-          ),
-        ],
-        const Divider(height: 32),
-        TextField(
-          controller: _answerController,
-          enabled: !_sending,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (_) => _submitAnswer(),
-          decoration: const InputDecoration(
-            labelText: '¿Qué canción es?',
-            border: OutlineInputBorder(),
-          ),
         ),
-        if (_message != null) ...[
-          const SizedBox(height: 8),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope<ResultadoNivel>(
+    // Al ganar, volver atrás también avisa para recargar el progreso.
+    canPop: !_won,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) Navigator.of(context).pop(ResultadoNivel.terminar);
+    },
+    child: Scaffold(
+      appBar: AppBar(
+        title: Text('Nivel ${widget.numeroVisible ?? widget.nivel.numero}'),
+      ),
+      bottomNavigationBar: _playing ? _reproductor() : null,
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
           Text(
-            _message!,
-            style: TextStyle(
-              color: _correct == false
-                  ? Theme.of(context).colorScheme.error
-                  : null,
+            widget.nivel.modoPrueba
+                ? 'Modo de prueba: ${widget.nivel.duracionFragmentoSegundos} segundos por escucha.'
+                : 'Compra un instrumento para escuchar un fragmento de la canción.',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 12),
+          Text('Presupuesto restante: \$$_balance'),
+          const SizedBox(height: 4),
+          Text(
+            'Puedes comprar hasta 3 de los ${widget.nivel.instrumentos.length} instrumentos.',
+          ),
+          const SizedBox(height: 8),
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 1.25,
+            children: [
+              for (final instrumento in widget.nivel.instrumentos)
+                _instrumentoTile(instrumento),
+            ],
+          ),
+          if (_purchased.isNotEmpty && !_melodyFound) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _buying || _playing ? null : _playPurchased,
+              icon: const Icon(Icons.queue_music),
+              label: const Text('Escuchar instrumentos comprados'),
+            ),
+          ],
+          const Divider(height: 32),
+          TextField(
+            controller: _answerController,
+            enabled: !_sending,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _submitAnswer(),
+            decoration: const InputDecoration(
+              labelText: '¿Qué canción es?',
+              border: OutlineInputBorder(),
             ),
           ),
-        ],
-        const SizedBox(height: 16),
-        if (_melodyFound)
-          FilledButton.icon(
-            onPressed: _playing ? null : () => _playSong('instrumentalSong'),
-            icon: const Icon(Icons.queue_music),
-            label: const Text('Escuchar canción sin voz'),
-          ),
-        if (_won) ...[
-          FilledButton.icon(
-            onPressed: _playing || _playingOffline
-                ? null
-                : () => _playSong('fullSong'),
-            icon: const Icon(Icons.library_music),
-            label: Text(
-              _playingOffline
-                  ? 'Canción original disponible con internet'
-                  : 'Escuchar canción original',
+          if (_message != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _message!,
+              style: TextStyle(
+                color: _correct == false
+                    ? Theme.of(context).colorScheme.error
+                    : null,
+              ),
             ),
-          ),
-          OutlinedButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Terminar nivel'),
+          ],
+          const SizedBox(height: 16),
+          if (_melodyFound)
+            FilledButton.icon(
+              onPressed: _playing ? null : () => _playSong('instrumentalSong'),
+              icon: const Icon(Icons.queue_music),
+              label: const Text('Escuchar canción'),
+            ),
+          if (_won) ...[
+            FilledButton.icon(
+              onPressed: _playing || _playingOffline
+                  ? null
+                  : () => _playSong('fullSong'),
+              icon: const Icon(Icons.library_music),
+              label: Text(
+                _playingOffline
+                    ? 'Canción original disponible con internet'
+                    : 'Escuchar canción original',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () =>
+                        Navigator.of(context).pop(ResultadoNivel.terminar),
+                    child: const Text('Terminar nivel'),
+                  ),
+                ),
+                if (widget.haySiguiente) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: () =>
+                          Navigator.of(context).pop(ResultadoNivel.siguiente),
+                      child: const Text('Siguiente nivel'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+          FilledButton(
+            onPressed: _sending || _won ? null : _submitAnswer,
+            child: _sending
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Comprobar respuesta'),
           ),
         ],
-        FilledButton(
-          onPressed: _sending || _won ? null : _submitAnswer,
-          child: _sending
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Comprobar respuesta'),
-        ),
-      ],
+      ),
     ),
   );
 }
 
 String _formatPriceInThousands(int price) => (price ~/ 1000).toString();
+
+String _emojiDe(TipoInstrumento tipo) => switch (tipo) {
+  TipoInstrumento.bateria => '🥁',
+  TipoInstrumento.acordeon => '🪗',
+  TipoInstrumento.guitarra => '🎸',
+  TipoInstrumento.bajo => '🎵',
+};

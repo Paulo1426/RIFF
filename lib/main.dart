@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_options.dart';
 import 'screens/home_screen.dart';
+import 'theme.dart';
 import 'services/supabase_service.dart';
 
 Future<void> main() async {
@@ -44,7 +45,7 @@ class SongGuessApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
     title: 'Adivina la canción',
     debugShowCheckedModeBanner: false,
-    theme: ThemeData.dark(useMaterial3: true),
+    theme: buildAppTheme(),
     home: home ??
         (firebaseSupported
             ? const HomeScreen()
