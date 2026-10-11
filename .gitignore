@@ -55,3 +55,9 @@ app.*.map.json
 
 # graphify (local only)
 graphify-out/
+
+# Skill local de auditoría de seguridad (no se versiona)
+.agents/
+.claude/skills/
+.continue/
+skills-lock.json

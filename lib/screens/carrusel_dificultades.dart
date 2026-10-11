@@ -147,7 +147,8 @@ class _CarruselGiratorioState extends State<CarruselGiratorio>
       ..scaleByDouble(1 - 0.12 * lejania, 1 - 0.12 * lejania, 1, 1);
     final g = _giro.value;
     final tarjeta = SizedBox(
-      width: lerpDouble(espacio.maxWidth - 16, ancho, g),
+      // A pantalla completa en teléfonos; en tablets con un ancho máximo.
+      width: lerpDouble(min(espacio.maxWidth - 16, 640), ancho, g),
       height: lerpDouble(
         espacio.maxHeight - 8,
         min(espacio.maxHeight - 12, ancho * 1.75),

@@ -1191,9 +1191,18 @@ async function submitAnswer(
     ]),
   ];
   await commitWrites(token, writes);
+  // Al acertar ya se puede revelar la canción para el reproductor.
+  const songId = level.fields.cancionId;
+  const song = typeof songId === "string" && validId(songId)
+    ? await getDocument(token, `songs/${songId}`)
+    : null;
   return {
     correct: true,
     completedDifficulty: currentOrder.every((id) => completedIds.has(id)),
+    titulo: typeof song?.fields.titulo === "string" ? song.fields.titulo : null,
+    artista: typeof song?.fields.artista === "string"
+      ? song.fields.artista
+      : null,
   };
 }
 

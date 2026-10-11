@@ -98,6 +98,25 @@ function validateLevel(level, expectedNumber, config) {
       );
     }
   }
+  // Opcional: por defecto la portada es {songId}/portada.jpg en el bucket
+  // "portadas".
+  if (level.portadaPath !== undefined) {
+    const path = level.portadaPath;
+    if (
+      typeof path !== "string" ||
+      !path.startsWith(`${songId}/`) ||
+      !/\.(jpe?g|png|webp)$/i.test(path) ||
+      path.split("/").some((part) => !part || part === "." || part === "..")
+    ) {
+      throw new Error(
+        `${id}: "portadaPath" debe ser una imagen .jpg, .png o .webp que comience por "${songId}/".`,
+      );
+    }
+  }
+}
+
+function portadaDe(level) {
+  return (level.portadaPath ?? `${level.songId}/portada.jpg`).trim();
 }
 
 function normalizeAnswer(answer) {
@@ -166,14 +185,11 @@ async function getAccessToken(account) {
   return data.access_token;
 }
 
-async function main() {
-  const args = process.argv.slice(2);
-  const apply = args.includes("--apply");
-  const fileArgument = args.find((arg) => !arg.startsWith("--"));
-  const dataPath = resolve(fileArgument ?? "niveles-facil.json");
+// Valida un JSON de cinco niveles y devuelve sus escrituras de Firestore.
+async function prepararArchivo(dataPath) {
   const data = await readJson(dataPath);
   if (!Array.isArray(data.levels) || data.levels.length !== 5) {
-    throw new Error("El JSON debe contener exactamente cinco niveles.");
+    throw new Error(`${dataPath}: el JSON debe contener exactamente cinco niveles.`);
   }
   const firstLevelId = data.levels[0]?.levelId;
   const config = difficultyConfigs.find((item) =>
@@ -182,7 +198,7 @@ async function main() {
   );
   if (!config) {
     throw new Error(
-      "Los levelId deben comenzar por facil-, media- o dificil-.",
+      `${dataPath}: los levelId deben comenzar por facil-, media- o dificil-.`,
     );
   }
   data.levels.forEach((level, index) =>
@@ -192,7 +208,7 @@ async function main() {
     new Set(data.levels.map((level) => level.levelId)).size !== 5 ||
     new Set(data.levels.map((level) => level.songId)).size !== 5
   ) {
-    throw new Error("Los levelId y songId deben ser únicos.");
+    throw new Error(`${dataPath}: los levelId y songId deben ser únicos.`);
   }
 
   const writes = [];
@@ -203,6 +219,7 @@ async function main() {
         artista: level.artista.trim(),
         instrumentalAudioPath: level.instrumentalAudioPath.trim(),
         fullAudioPath: level.fullAudioPath.trim(),
+        portadaPath: portadaDe(level),
         published: true,
       }),
       updateWrite("song-gues-game", "levels", level.levelId, {
@@ -220,18 +237,35 @@ async function main() {
       }),
     );
   }
+  return { config, levels: data.levels, writes };
+}
 
-  console.log(
-    `${apply ? "Se escribirán" : "Vista previa; no se modificará Firestore:"} ${writes.length} documentos para dificultad ${config.label}.`,
-  );
-  for (const level of data.levels) {
+async function main() {
+  const args = process.argv.slice(2);
+  const apply = args.includes("--apply");
+  // Sin archivos carga las tres dificultades de una vez.
+  const files = args.filter((arg) => !arg.startsWith("--"));
+  const paths = (files.length
+    ? files
+    : ["niveles-facil.json", "niveles-media.json", "niveles-dificil.json"])
+    .map((file) => resolve(file));
+  const archivos = [];
+  for (const path of paths) archivos.push(await prepararArchivo(path));
+  const writes = archivos.flatMap((archivo) => archivo.writes);
+
+  for (const { config, levels } of archivos) {
     console.log(
-      `  ${level.levelId} -> ${level.songId}; stems: ${
-        Object.values(createStemPaths(level))
-          .map((item) => item.storagePath)
-          .join(", ")
-      }`,
+      `${apply ? "Se escribirán" : "Vista previa; no se modificará Firestore:"} ${levels.length * 3} documentos para dificultad ${config.label}.`,
     );
+    for (const level of levels) {
+      console.log(
+        `  ${level.levelId} -> ${level.songId} "${level.titulo.trim()}" - ${level.artista.trim()}; portada: portadas/${portadaDe(level)}; stems: ${
+          Object.values(createStemPaths(level))
+            .map((item) => item.storagePath)
+            .join(", ")
+        }`,
+      );
+    }
   }
   if (!apply) {
     console.log("Revisa el JSON. Para guardar, ejecuta otra vez con --apply.");
@@ -274,7 +308,9 @@ async function main() {
     );
   }
   console.log(
-    `Carga terminada: 5 canciones, 5 niveles de dificultad ${config.label} y 5 respuestas privadas.`,
+    `Carga terminada: ${writes.length} documentos (${
+      archivos.map((archivo) => archivo.config.label).join(", ")
+    }).`,
   );
 }
 

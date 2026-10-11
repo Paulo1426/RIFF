@@ -16,21 +16,28 @@ import 'carrusel_dificultades.dart';
 import 'game_screen.dart';
 import 'instrucciones_dialog.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key, this.authStateChanges});
 
   final Stream<User?>? authStateChanges;
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> {
   // La sesión guardada se conserva (progreso offline e invitados), pero cada
   // arranque pasa por el login para confirmarla.
   bool _entered = false;
   late final Stream<User?> _authStateChanges =
       widget.authStateChanges ?? FirebaseAuth.instance.authStateChanges();
+
+  @override
+  void initState() {
+    super.initState();
+    // La música del menú suena desde que se abre la app.
+    ref.read(musicaMenuProvider).iniciar();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -642,6 +649,21 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
                 child: const ListTile(
                   leading: Icon(Icons.insights_rounded),
                   title: Text('Ver progreso'),
+                ),
+              ),
+              PopupMenuItem(
+                value: () => ref.read(musicaMenuProvider).alternarSilencio(),
+                child: ListTile(
+                  leading: Icon(
+                    ref.read(musicaMenuProvider).silenciada
+                        ? Icons.music_off_rounded
+                        : Icons.music_note_rounded,
+                  ),
+                  title: Text(
+                    ref.read(musicaMenuProvider).silenciada
+                        ? 'Activar música'
+                        : 'Silenciar música',
+                  ),
                 ),
               ),
               PopupMenuItem(
@@ -1275,8 +1297,11 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                                         : 'Iniciar sesión',
                                   ),
                                 ),
+                                // El invitado ya tiene "Jugar sin registrarme",
+                                // que retoma la misma sesión anónima.
                                 if (!_registering &&
-                                    widget.savedUser != null) ...[
+                                    widget.savedUser != null &&
+                                    !widget.savedUser!.isAnonymous) ...[
                                   const SizedBox(height: 12),
                                   OutlinedButton.icon(
                                     onPressed: _busy ? null : widget.onSignedIn,
@@ -1405,7 +1430,6 @@ class _GooglePainter extends CustomPainter {
 }
 
 String _nombreSesion(User user) {
-  if (user.isAnonymous) return 'invitado';
   final nombre = user.displayName;
   if (nombre != null && nombre.trim().isNotEmpty) return nombre;
   return user.email ?? 'usuario';

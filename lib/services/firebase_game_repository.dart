@@ -189,7 +189,7 @@ class FirebaseGameRepository {
     await _post({'action': 'startGuestSession'});
   }
 
-  Future<bool> enviarRespuesta({
+  Future<ResultadoRespuesta> enviarRespuesta({
     required String gameId,
     required String respuesta,
   }) async {
@@ -198,7 +198,11 @@ class FirebaseGameRepository {
       'gameId': gameId,
       'answer': respuesta,
     });
-    return response['correct'] as bool;
+    return ResultadoRespuesta(
+      correcta: response['correct'] as bool,
+      titulo: response['titulo'] as String?,
+      artista: response['artista'] as String?,
+    );
   }
 
   Future<ResultadoCompraInstrumento> comprarInstrumento({
@@ -274,4 +278,13 @@ class FirebaseGameRepository {
     }
     return decoded;
   }
+}
+
+/// Resultado de enviar una respuesta; al acertar trae la canción revelada.
+class ResultadoRespuesta {
+  const ResultadoRespuesta({required this.correcta, this.titulo, this.artista});
+
+  final bool correcta;
+  final String? titulo;
+  final String? artista;
 }

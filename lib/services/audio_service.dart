@@ -17,6 +17,14 @@ class AudioService {
 
   bool get reproduciendo => _reproduciendo;
 
+  // Todos los reproductores van sincronizados: el primero marca el tiempo.
+  Duration get posicion =>
+      _players.isEmpty ? Duration.zero : _players.first.position;
+  Duration? get duracion => _players.isEmpty ? null : _players.first.duration;
+
+  Future<void> buscar(Duration posicion) =>
+      Future.wait(_players.map((player) => player.seek(posicion)));
+
   Future<File?> cachedFile(String key) async {
     final file = await _cacheFile(key);
     return await file.exists() ? file : null;

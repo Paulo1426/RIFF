@@ -11,6 +11,7 @@ import '../models/partida.dart';
 import '../providers/providers.dart';
 import '../services/audio_service.dart';
 import '../services/firebase_game_repository.dart';
+import '../services/musica_menu.dart';
 import '../services/offline_game_store.dart';
 import '../theme.dart';
 
@@ -45,6 +46,7 @@ class GameScreen extends ConsumerStatefulWidget {
 class _GameScreenState extends ConsumerState<GameScreen> {
   final _answerController = TextEditingController();
   late final AudioService _audioService;
+  late final MusicaMenu _musicaMenu;
   bool _sending = false;
   bool _buying = false;
   bool _playing = false;
@@ -62,6 +64,11 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   bool _melodyFound = false;
   bool _won = false;
   bool _avanzando = false;
+  // Canción revelada al acertar, para el reproductor final.
+  String? _titulo;
+  String? _artista;
+  String? _portadaUrl;
+  Timer? _reloj;
   late bool _playingOffline;
   int _playbackGeneration = 0;
   late final Partida? _offlinePartida;
@@ -70,6 +77,8 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   void initState() {
     super.initState();
     _audioService = ref.read(audioServiceProvider);
+    // La música del menú se pausa mientras se juega y vuelve al salir.
+    _musicaMenu = ref.read(musicaMenuProvider)..entrarNivel();
     _playingOffline = widget.offlineMode;
     _offlinePartida = widget.offlineLevel != null
         ? Partida(
@@ -81,6 +90,8 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
   @override
   void dispose() {
+    _musicaMenu.salirNivel();
+    _reloj?.cancel();
     _playbackGeneration++;
     _answerController.dispose();
     unawaited(_stopAudioOnDispose());
@@ -216,10 +227,12 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
   Widget _presupuesto() {
     final text = Theme.of(context).textTheme;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
+    // Wrap: en pantallas angostas el monto baja de línea en vez de desbordar.
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.end,
+      spacing: 8,
       children: [
-        const Text('Presupuesto restante: '),
+        const Text('Presupuesto restante:'),
         TweenAnimationBuilder<int>(
           tween: IntTween(end: _balance),
           duration: const Duration(milliseconds: 900),
@@ -227,7 +240,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           builder: (context, value, _) =>
               Text('\$${formatearMiles(value)}', style: text.titleMedium),
         ),
-        const SizedBox(width: 8),
         if (_descuentoId > 0)
           // La clave reinicia la animación en cada compra.
           TweenAnimationBuilder<double>(
@@ -480,17 +492,21 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         await _checkOfflineAnswer(answer);
         return;
       }
-      final correct = await ref
+      final resultado = await ref
           .read(firebaseGameRepositoryProvider)
           .enviarRespuesta(gameId: widget.gameId, respuesta: answer);
       if (!mounted) return;
-      if (correct) {
+      if (resultado.correcta) {
         _playbackGeneration++;
         setState(() {
-          _won = true;
+          _ganar(
+            titulo: resultado.titulo ?? answer,
+            artista: resultado.artista,
+          );
           _correct = true;
           _message = '¡Correcto! Reproduciendo la canción original.';
         });
+        unawaited(_cargarPortada());
         try {
           await _audioService.detener();
         } catch (error) {
@@ -504,7 +520,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           return;
         }
         if (!mounted) return;
-        await _playSong('fullSong', replaceCurrent: true);
+        // Sin await: la canción sigue sonando en el reproductor y la pantalla
+        // queda libre (si no, "Comprobando respuesta" duraba toda la canción).
+        unawaited(_playSong('fullSong', replaceCurrent: true));
       } else {
         setState(() {
           _correct = false;
@@ -565,13 +583,262 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     if (!mounted) return;
     _playbackGeneration++;
     setState(() {
-      _won = true;
+      _ganar(titulo: answer);
       _correct = true;
       _message =
           '¡Correcto! La canción completa se reproducirá cuando tengas conexión a internet.';
     });
     await _audioService.detener();
   }
+
+  // Llamar dentro de setState.
+  void _ganar({required String titulo, String? artista}) {
+    _won = true;
+    _titulo = titulo;
+    _artista = artista;
+    // Refresca la barra de progreso del reproductor mientras suena.
+    _reloj ??= Timer.periodic(const Duration(milliseconds: 300), (_) {
+      if (mounted && _playing && !_paused) setState(() {});
+    });
+  }
+
+  Future<void> _cargarPortada() async {
+    try {
+      final url = await ref
+          .read(firebaseGameRepositoryProvider)
+          .obtenerUrlAudio(gameId: widget.gameId, tipo: 'cover');
+      if (mounted) setState(() => _portadaUrl = url);
+    } catch (error) {
+      // Sin portada subida se muestra el disco; no es un error para el jugador.
+      debugPrint('No se pudo cargar la portada: $error');
+    }
+  }
+
+  Future<void> _playPauseFinal() async {
+    if (_playing) {
+      await _togglePause();
+    } else if (!_playingOffline) {
+      await _playSong('fullSong');
+    }
+  }
+
+  Widget _portada(double lado, Color color) {
+    final disco = ColoredBox(
+      color: color.withValues(alpha: 0.18),
+      child: Center(
+        child: DiscoGirando(size: lado * 0.62, girando: _playing && !_paused),
+      ),
+    );
+    final url = _portadaUrl;
+    if (url == null) return disco;
+    return Image.network(
+      url,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => disco,
+      loadingBuilder: (context, child, progreso) =>
+          progreso == null ? child : disco,
+    );
+  }
+
+  /// Pantalla al acertar: reproductor de la canción con su portada y, debajo,
+  /// los botones para terminar o pasar al siguiente nivel.
+  Widget _vistaGanada() {
+    final text = Theme.of(context).textTheme;
+    final color = colorDificultad(widget.nivel.dificultad);
+    final duracion = _playing
+        ? (_audioService.duracion ?? Duration.zero)
+        : Duration.zero;
+    final posicion = _playing ? _audioService.posicion : Duration.zero;
+    final total = max(duracion.inMilliseconds, 1).toDouble();
+    return LayoutBuilder(
+      builder: (context, espacio) {
+        final lado = min(
+          espacio.maxWidth - 48,
+          espacio.maxHeight * 0.45,
+        ).clamp(160.0, 420.0);
+        return SingleChildScrollView(
+          padding: EdgeInsets.symmetric(
+            horizontal: max(24, (espacio.maxWidth - 520) / 2),
+            vertical: 16,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Vidrio(
+                  radio: 26,
+                  tinte: color,
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: SizedBox.square(
+                        dimension: lado,
+                        child: _portada(lado, color),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _titulo ?? 'Canción descubierta',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: text.headlineMedium,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _artista ?? 'Artista desconocido',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: text.bodyLarge?.copyWith(
+                            color: AppColors.slatePencil,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.check_circle_rounded, color: color, size: 32),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(Icons.music_note_rounded, color: color, size: 18),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      '¡ADIVINASTE! · NIVEL ${widget.numeroVisible ?? widget.nivel.numero}',
+                      style: text.labelMedium?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  activeTrackColor: color,
+                  inactiveTrackColor: AppColors.cloudEdge,
+                  thumbColor: color,
+                  overlayColor: color.withValues(alpha: 0.15),
+                  trackHeight: 4,
+                ),
+                child: Slider(
+                  value: posicion.inMilliseconds.clamp(0, total).toDouble(),
+                  max: total,
+                  onChanged: _playing
+                      ? (valor) => _audioService.buscar(
+                          Duration(milliseconds: valor.round()),
+                        )
+                      : null,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(_tiempo(posicion), style: text.bodySmall),
+                    Text(_tiempo(duracion), style: text.bodySmall),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    tooltip: 'Desde el inicio',
+                    iconSize: 34,
+                    onPressed: _playingOffline
+                        ? null
+                        : () => _playing
+                              ? _audioService.buscar(Duration.zero)
+                              : _playSong('fullSong'),
+                    icon: const Icon(Icons.skip_previous_rounded),
+                  ),
+                  const SizedBox(width: 16),
+                  IconButton.filled(
+                    tooltip: _playing && !_paused ? 'Pausar' : 'Reproducir',
+                    iconSize: 44,
+                    style: IconButton.styleFrom(
+                      backgroundColor: color,
+                      foregroundColor: AppColors.paperWhite,
+                      shape: const CircleBorder(),
+                      padding: const EdgeInsets.all(14),
+                    ),
+                    onPressed: _playingOffline ? null : _playPauseFinal,
+                    icon: Icon(
+                      _playing && !_paused
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  IconButton(
+                    tooltip: 'Detener',
+                    iconSize: 34,
+                    onPressed: _playing ? () => _audioService.detener() : null,
+                    icon: const Icon(Icons.stop_rounded),
+                  ),
+                ],
+              ),
+              if (_playingOffline)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'La canción original se reproducirá cuando tengas conexión a internet.',
+                    textAlign: TextAlign.center,
+                    style: text.bodySmall?.copyWith(
+                      color: AppColors.slatePencil,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 28),
+              _botonesFinales(),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _botonesFinales() => Row(
+    children: [
+      Expanded(
+        child: OutlinedButton(
+          onPressed: _avanzando
+              ? null
+              : () => Navigator.of(context).pop(ResultadoNivel.terminar),
+          child: const Text('Terminar nivel'),
+        ),
+      ),
+      if (widget.onSiguiente != null) ...[
+        const SizedBox(width: 12),
+        Expanded(
+          child: FilledButton(
+            onPressed: _avanzando
+                ? null
+                : () {
+                    setState(() => _avanzando = true);
+                    widget.onSiguiente!();
+                  },
+            child: const Text('Siguiente nivel'),
+          ),
+        ),
+      ],
+    ],
+  );
 
   Widget _instrumentoTile(Instrumento instrumento) {
     final comprado = _purchased.contains(instrumento.id);
@@ -607,35 +874,42 @@ class _GameScreenState extends ConsumerState<GameScreen> {
               opacity: disponible ? 1 : 0.45,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    Text(
-                      _emojiDe(instrumento.tipo),
-                      style: const TextStyle(fontSize: 40),
-                    ),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(instrumento.nombre, style: text.titleMedium),
-                    ),
-                    if (precio != null)
+                // Con letra grande del sistema se encoge en vez de desbordarse.
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _emojiDe(instrumento.tipo),
+                        style: const TextStyle(fontSize: 40),
+                      ),
                       FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(
-                          '\$${formatearMiles(precio)}',
-                          style: text.titleSmall?.copyWith(
-                            color: scheme.primary,
-                            fontWeight: FontWeight.w700,
-                          ),
+                          instrumento.nombre,
+                          style: text.titleMedium,
                         ),
                       ),
-                    Icon(
-                      comprado || _melodyFound
-                          ? Icons.play_arrow
-                          : Icons.shopping_cart,
-                      size: 26,
-                    ),
-                  ],
+                      if (precio != null)
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '\$${formatearMiles(precio)}',
+                            style: text.titleSmall?.copyWith(
+                              color: scheme.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      Icon(
+                        comprado || _melodyFound
+                            ? Icons.play_arrow
+                            : Icons.shopping_cart,
+                        size: 26,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -679,134 +953,106 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           texto: _avanzando
               ? 'Cargando siguiente nivel...'
               : 'Comprobando respuesta...',
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              Text(
-                widget.nivel.modoPrueba
-                    ? 'Modo de prueba: ${widget.nivel.duracionFragmentoSegundos} segundos por escucha.'
-                    : 'Compra un instrumento para escuchar un fragmento de la canción.',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 12),
-              _presupuesto(),
-              const SizedBox(height: 4),
-              Text(
-                'Puedes comprar hasta 3 de los ${widget.nivel.instrumentos.length} instrumentos.',
-              ),
-              const SizedBox(height: 8),
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: 1.25,
-                children: [
-                  for (final instrumento in widget.nivel.instrumentos)
-                    _instrumentoTile(instrumento),
-                ],
-              ),
-              if (_purchased.isNotEmpty && !_melodyFound) ...[
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: _buying || _playing ? null : _playPurchased,
-                  icon: const Icon(Icons.queue_music),
-                  label: const Text('Escuchar instrumentos comprados'),
-                ),
-              ],
-              if (_melodyFound) ...[
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: _playing
-                      ? null
-                      : () => _playSong('instrumentalSong'),
-                  icon: const Icon(Icons.queue_music),
-                  label: const Text('Escuchar canción'),
-                ),
-              ],
-              AnimatedSize(
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeOut,
-                child: _playing
-                    ? Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: _reproductor(),
-                      )
-                    : const SizedBox(width: double.infinity),
-              ),
-              const Divider(height: 32),
-              TextField(
-                controller: _answerController,
-                enabled: !_sending,
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => _submitAnswer(),
-                decoration: const InputDecoration(
-                  labelText: '¿Qué canción es?',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              if (_message != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _message!,
-                  style: TextStyle(
-                    color: _correct == false
-                        ? Theme.of(context).colorScheme.error
-                        : null,
+          child: _won
+              ? _vistaGanada()
+              : ListView(
+                  // En tablets el contenido queda centrado con un ancho máximo.
+                  padding: EdgeInsets.symmetric(
+                    horizontal: max(
+                      16,
+                      (MediaQuery.sizeOf(context).width - 680) / 2,
+                    ),
+                    vertical: 16,
                   ),
-                ),
-              ],
-              const SizedBox(height: 16),
-              if (_won) ...[
-                FilledButton.icon(
-                  onPressed: _playing || _playingOffline
-                      ? null
-                      : () => _playSong('fullSong'),
-                  icon: const Icon(Icons.library_music),
-                  label: Text(
-                    _playingOffline
-                        ? 'Canción original disponible con internet'
-                        : 'Escuchar canción original',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
                   children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: _avanzando
+                    Text(
+                      widget.nivel.modoPrueba
+                          ? 'Modo de prueba: ${widget.nivel.duracionFragmentoSegundos} segundos por escucha.'
+                          : 'Compra un instrumento para escuchar un fragmento de la canción.',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    _presupuesto(),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Puedes comprar hasta 3 de los ${widget.nivel.instrumentos.length} instrumentos.',
+                    ),
+                    const SizedBox(height: 8),
+                    GridView(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      // 2 columnas en teléfonos, 3-4 en tablets; alto fijo para que
+                      // el contenido no dependa del ancho de la pantalla.
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 240,
+                            mainAxisExtent: 150,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                          ),
+                      children: [
+                        for (final instrumento in widget.nivel.instrumentos)
+                          _instrumentoTile(instrumento),
+                      ],
+                    ),
+                    if (_purchased.isNotEmpty && !_melodyFound) ...[
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: _buying || _playing ? null : _playPurchased,
+                        icon: const Icon(Icons.queue_music),
+                        label: const Text('Escuchar instrumentos comprados'),
+                      ),
+                    ],
+                    if (_melodyFound) ...[
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: _playing
                             ? null
-                            : () => Navigator.of(
-                                context,
-                              ).pop(ResultadoNivel.terminar),
-                        child: const Text('Terminar nivel'),
+                            : () => _playSong('instrumentalSong'),
+                        icon: const Icon(Icons.queue_music),
+                        label: const Text('Escuchar canción'),
+                      ),
+                    ],
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeOut,
+                      child: _playing
+                          ? Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: _reproductor(),
+                            )
+                          : const SizedBox(width: double.infinity),
+                    ),
+                    const Divider(height: 32),
+                    TextField(
+                      controller: _answerController,
+                      enabled: !_sending,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => _submitAnswer(),
+                      decoration: const InputDecoration(
+                        labelText: '¿Qué canción es?',
+                        border: OutlineInputBorder(),
                       ),
                     ),
-                    if (widget.onSiguiente != null) ...[
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: _avanzando
-                              ? null
-                              : () {
-                                  setState(() => _avanzando = true);
-                                  widget.onSiguiente!();
-                                },
-                          child: const Text('Siguiente nivel'),
+                    if (_message != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _message!,
+                        style: TextStyle(
+                          color: _correct == false
+                              ? Theme.of(context).colorScheme.error
+                              : null,
                         ),
                       ),
                     ],
+                    const SizedBox(height: 16),
+                    if (!_won)
+                      FilledButton(
+                        onPressed: _sending ? null : _submitAnswer,
+                        child: const Text('Comprobar respuesta'),
+                      ),
                   ],
                 ),
-              ],
-              if (!_won)
-                FilledButton(
-                  onPressed: _sending ? null : _submitAnswer,
-                  child: const Text('Comprobar respuesta'),
-                ),
-            ],
-          ),
         ),
       ),
     ),
@@ -825,3 +1071,6 @@ String _emojiDe(TipoInstrumento tipo) => switch (tipo) {
   TipoInstrumento.guitarra => '🎸',
   TipoInstrumento.bajo => '🎵',
 };
+
+String _tiempo(Duration d) =>
+    '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';

@@ -355,10 +355,13 @@ async function handleRequest(request: Request): Promise<Response> {
     if (!validId(gameId)) {
       throw new HttpError(400, "gameId no es válido");
     }
-    if (type !== "stem" && type !== "instrumentalSong" && type !== "fullSong") {
+    if (
+      type !== "stem" && type !== "instrumentalSong" && type !== "fullSong" &&
+      type !== "cover"
+    ) {
       throw new HttpError(
         400,
-        "type debe ser stem, instrumentalSong o fullSong",
+        "type debe ser stem, instrumentalSong, fullSong o cover",
       );
     }
 
@@ -404,10 +407,13 @@ async function handleRequest(request: Request): Promise<Response> {
     let fallbackObjectPath: string | undefined;
     let expiresIn: number;
 
-    if (type === "fullSong" || type === "instrumentalSong") {
+    if (
+      type === "fullSong" || type === "instrumentalSong" || type === "cover"
+    ) {
       const won = boolField(game, "ganada");
       const melodyFound = boolField(game, "melodiaDescubierta");
-      if (type === "fullSong" && !won) {
+      // La portada revela la canción: igual que la original, solo al acertar.
+      if ((type === "fullSong" || type === "cover") && !won) {
         throw new HttpError(
           403,
           "La canción original se desbloquea al adivinar correctamente",
@@ -439,7 +445,14 @@ async function handleRequest(request: Request): Promise<Response> {
       if (!boolField(song, "published")) {
         throw new HttpError(404, "La canción no está publicada");
       }
-      if (type === "instrumentalSong") {
+      if (type === "cover") {
+        // Ruta por defecto: portadas/{songId}/portada.jpg; `portadaPath` en
+        // songs/{songId} permite otro nombre o formato.
+        bucket = Deno.env.get("SUPABASE_COVERS_BUCKET") ?? "portadas";
+        objectPath = typeof song.portadaPath === "string" && song.portadaPath
+          ? safeObjectPath(song.portadaPath)
+          : `${songId}/portada.jpg`;
+      } else if (type === "instrumentalSong") {
         bucket = Deno.env.get("SUPABASE_INSTRUMENTAL_SONGS_BUCKET") ??
           "canciones-instrumentales";
         objectPath = safeObjectPath(song.instrumentalAudioPath);

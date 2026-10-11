@@ -136,9 +136,18 @@ titulo: string
 artista: string
 instrumentalAudioPath: string
 fullAudioPath: string
+portadaPath: string (opcional)
 published: boolean
 createdAt: timestamp
 ```
+
+`titulo` y `artista` se muestran en el reproductor cuando el jugador acierta.
+La portada vive en el bucket privado `portadas` de Supabase Storage (o el
+definido en `SUPABASE_COVERS_BUCKET`) con la ruta `{songId}/portada.jpg`, por
+ejemplo `portadas/cancion-001/portada.jpg`. Para otro nombre o formato,
+guarda la ruta dentro del bucket en `portadaPath` (p. ej.
+`cancion-001/cover.png`). La función `audio-link` solo entrega el enlace
+temporal de la portada después de acertar.
 
 `instrumentalAudioPath` apunta a la mezcla instrumental sin voz y
 `fullAudioPath` a la grabacion original con voz. Por ejemplo:

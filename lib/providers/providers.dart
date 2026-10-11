@@ -5,11 +5,17 @@ import '../models/usuario.dart';
 import '../services/audio_service.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/game_service.dart';
+import '../services/musica_menu.dart';
 import '../services/nivel_repository.dart';
 import '../services/validation_service.dart';
 
 final gameServiceProvider = Provider((ref) => GameService());
 final audioServiceProvider = Provider((ref) => AudioService());
+final musicaMenuProvider = Provider((ref) {
+  final musica = MusicaMenu(ref.read(audioServiceProvider));
+  ref.onDispose(musica.dispose);
+  return musica;
+});
 final firebaseGameRepositoryProvider = Provider(
   (ref) => FirebaseGameRepository(),
 );
