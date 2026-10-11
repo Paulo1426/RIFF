@@ -9,7 +9,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const cream = Color(0xFFE3F1FE);
+const cream = Color(0xFFF5F5F5);
 
 void main() {
   test('genera el logo de Riff', () async {

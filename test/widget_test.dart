@@ -13,7 +13,8 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    // El fondo líquido se anima sin fin; pumpAndSettle nunca terminaría.
+    await tester.pump(const Duration(seconds: 1));
     expect(find.bySemanticsLabel('Riff'), findsOneWidget);
     expect(find.text('Continuar con Google'), findsOneWidget);
     expect(find.text('Jugar sin registrarme'), findsOneWidget);

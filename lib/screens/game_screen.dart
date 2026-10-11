@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -13,7 +14,14 @@ import '../services/audio_service.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/musica_menu.dart';
 import '../services/offline_game_store.dart';
+import '../widgets/liquid_glass/liquid_background.dart';
+import '../animations/liquid_ripple_effect.dart';
+import '../animations/liquid_shimmer.dart';
+import '../animations/sound_wave_animation.dart';
 import '../theme.dart';
+import '../widgets/liquid_glass/liquid_glass_appbar.dart';
+import '../widgets/liquid_glass/liquid_glass_button.dart';
+import '../widgets/liquid_glass/liquid_glass_card.dart';
 
 enum ResultadoNivel { terminar, siguiente }
 
@@ -69,6 +77,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   String? _artista;
   String? _portadaUrl;
   Timer? _reloj;
+  final _confeti = ConfettiController(duration: const Duration(seconds: 2));
   late bool _playingOffline;
   int _playbackGeneration = 0;
   late final Partida? _offlinePartida;
@@ -92,6 +101,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   void dispose() {
     _musicaMenu.salirNivel();
     _reloj?.cancel();
+    _confeti.dispose();
     _playbackGeneration++;
     _answerController.dispose();
     unawaited(_stopAudioOnDispose());
@@ -423,7 +433,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   }
 
   Widget _reproductor() {
-    return Vidrio(
+    return LiquidGlassCard(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
@@ -447,11 +457,24 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    _paused ? 'En pausa' : 'Reproduciendo',
-                    style: _nowPlaying.isEmpty
-                        ? Theme.of(context).textTheme.titleSmall
-                        : Theme.of(context).textTheme.labelSmall,
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          _paused ? 'En pausa' : 'Reproduciendo',
+                          style: _nowPlaying.isEmpty
+                              ? Theme.of(context).textTheme.titleSmall
+                              : Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SoundWaveAnimation(
+                        activo: !_paused,
+                        color: colorDificultad(widget.nivel.dificultad),
+                        width: 40,
+                        height: 14,
+                      ),
+                    ],
                   ),
                   if (_nowPlaying.isNotEmpty)
                     Text(
@@ -598,6 +621,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     _won = true;
     _titulo = titulo;
     _artista = artista;
+    _confeti.play();
     // Refresca la barra de progreso del reproductor mientras suena.
     _reloj ??= Timer.periodic(const Duration(milliseconds: 300), (_) {
       if (mounted && _playing && !_paused) setState(() {});
@@ -668,7 +692,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           espacio.maxWidth - 48,
           espacio.maxHeight * 0.45,
         ).clamp(160.0, 420.0);
-        return SingleChildScrollView(
+        final vista = SingleChildScrollView(
           padding: EdgeInsets.symmetric(
             horizontal: max(24, (espacio.maxWidth - 520) / 2),
             vertical: 16,
@@ -677,9 +701,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Center(
-                child: Vidrio(
-                  radio: 26,
-                  tinte: color,
+                child: LiquidGlassCard(
+                  borderRadius: 26,
+                  tintColor: color,
                   child: Padding(
                     padding: const EdgeInsets.all(10),
                     child: ClipRRect(
@@ -721,21 +745,43 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Icon(Icons.music_note_rounded, color: color, size: 18),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      '¡ADIVINASTE! · NIVEL ${widget.numeroVisible ?? widget.nivel.numero}',
-                      style: text.labelMedium?.copyWith(
-                        color: color,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.5,
-                      ),
+              // Insignia de acierto con brillo.
+              Align(
+                alignment: Alignment.centerLeft,
+                child: LiquidShimmer(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(99),
+                      border: Border.all(color: color.withValues(alpha: 0.6)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.music_note_rounded,
+                          color: tonoTexto(color),
+                          size: 18,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            '¡ADIVINASTE! · NIVEL ${widget.numeroVisible ?? widget.nivel.numero}',
+                            style: text.labelMedium?.copyWith(
+                              color: tonoTexto(color),
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
+                ),
               ),
               SliderTheme(
                 data: SliderTheme.of(context).copyWith(
@@ -785,7 +831,12 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                     iconSize: 44,
                     style: IconButton.styleFrom(
                       backgroundColor: color,
-                      foregroundColor: AppColors.paperWhite,
+                      // Ícono oscuro sobre colores claros (amarillo, verde).
+                      foregroundColor:
+                          ThemeData.estimateBrightnessForColor(color) ==
+                              Brightness.light
+                          ? AppColors.graphiteInk
+                          : AppColors.paperWhite,
                       shape: const CircleBorder(),
                       padding: const EdgeInsets.all(14),
                     ),
@@ -821,6 +872,29 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             ],
           ),
         );
+        return Stack(
+          children: [
+            vista,
+            // Confeti verde/menta que cae desde arriba al acertar.
+            Align(
+              alignment: Alignment.topCenter,
+              child: ConfettiWidget(
+                confettiController: _confeti,
+                blastDirectionality: BlastDirectionality.explosive,
+                numberOfParticles: 24,
+                maxBlastForce: 18,
+                minBlastForce: 6,
+                gravity: 0.25,
+                colors: const [
+                  AppColors.verde,
+                  Color(0xFFB8F2D0),
+                  Color(0xFF7BE0A6),
+                  AppColors.paperWhite,
+                ],
+              ),
+            ),
+          ],
+        );
       },
     );
   }
@@ -828,24 +902,25 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   Widget _botonesFinales() => Row(
     children: [
       Expanded(
-        child: OutlinedButton(
+        child: LiquidGlassButton(
+          variant: LiquidGlassButtonVariant.secondary,
           onPressed: _avanzando
               ? null
               : () => Navigator.of(context).pop(ResultadoNivel.terminar),
-          child: const Text('Terminar nivel'),
+          label: 'Terminar nivel',
         ),
       ),
       if (widget.onSiguiente != null) ...[
         const SizedBox(width: 12),
         Expanded(
-          child: FilledButton(
+          child: LiquidGlassButton(
             onPressed: _avanzando
                 ? null
                 : () {
                     setState(() => _avanzando = true);
                     widget.onSiguiente!();
                   },
-            child: const Text('Siguiente nivel'),
+            label: 'Siguiente nivel',
           ),
         ),
       ],
@@ -865,59 +940,53 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           : comprado || _melodyFound
           ? 'Escuchar ${instrumento.nombre}'
           : 'Comprar y escuchar ${instrumento.nombre}',
-      child: Vidrio(
-        tinte: colorDificultad(widget.nivel.dificultad),
-        borde: comprado ? scheme.primary : null,
-        // El Stack de Vidrio afloja las restricciones; expandir hace que toda
+      child: LiquidGlassCard(
+        tintColor: colorDificultad(widget.nivel.dificultad),
+        borderColor: comprado ? scheme.primary : null,
+        // Expandir hace que toda
         // la casilla responda al toque y el contenido quede centrado.
         child: SizedBox.expand(
-          child: Material(
-            type: MaterialType.transparency,
-            child: InkWell(
-              onTap: disponible ? () => _buyAndPlay(instrumento) : null,
-              child: Opacity(
-                opacity: disponible ? 1 : 0.45,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 8,
-                  ),
-                  // Con letra grande del sistema se encoge en vez de desbordarse.
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          _emojiDe(instrumento.tipo),
-                          style: const TextStyle(fontSize: 40),
+          child: LiquidRippleEffect(
+            onTap: disponible ? () => _buyAndPlay(instrumento) : null,
+            child: Opacity(
+              opacity: disponible ? 1 : 0.45,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                // Con letra grande del sistema se encoge en vez de desbordarse.
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _emojiDe(instrumento.tipo),
+                        style: const TextStyle(fontSize: 40),
+                      ),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          instrumento.nombre,
+                          style: text.titleMedium,
                         ),
+                      ),
+                      if (precio != null)
                         FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
-                            instrumento.nombre,
-                            style: text.titleMedium,
-                          ),
-                        ),
-                        if (precio != null)
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              '\$${formatearMiles(precio)}',
-                              style: text.titleSmall?.copyWith(
-                                color: scheme.primary,
-                                fontWeight: FontWeight.w700,
-                              ),
+                            '\$${formatearMiles(precio)}',
+                            style: text.titleSmall?.copyWith(
+                              color: scheme.primary,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
-                        Icon(
-                          comprado || _melodyFound
-                              ? Icons.play_arrow
-                              : Icons.shopping_cart,
-                          size: 26,
                         ),
-                      ],
-                    ),
+                      Icon(
+                        comprado || _melodyFound
+                            ? Icons.play_arrow
+                            : Icons.shopping_cart,
+                        size: 26,
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -937,27 +1006,29 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         Navigator.of(context).pop(ResultadoNivel.terminar);
       }
     },
-    child: Scaffold(
-      appBar: AppBar(
-        title: Text('Nivel ${widget.numeroVisible ?? widget.nivel.numero}'),
-        actions: [
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
-            child: _playing
-                ? Padding(
-                    padding: const EdgeInsets.only(right: 16),
-                    child: BarrasSonido(
-                      activo: !_paused,
-                      color: colorDificultad(widget.nivel.dificultad),
-                    ),
-                  )
-                : const SizedBox.shrink(),
-          ),
-        ],
-      ),
-      body: FondoRiff(
-        acento: colorDificultad(widget.nivel.dificultad),
-        child: ConCarga(
+    // El fondo cubre también la barra para que el vidrio tenga qué mostrar.
+    child: LiquidBackground(
+      acento: colorDificultad(widget.nivel.dificultad),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: LiquidGlassAppBar(
+          title: Text('Nivel ${widget.numeroVisible ?? widget.nivel.numero}'),
+          actions: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: _playing
+                  ? Padding(
+                      padding: const EdgeInsets.only(right: 16),
+                      child: SoundWaveAnimation(
+                        activo: !_paused,
+                        color: colorDificultad(widget.nivel.dificultad),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+        body: ConCarga(
           cargando: _sending || _avanzando,
           texto: _avanzando
               ? 'Cargando siguiente nivel...'
@@ -981,10 +1052,23 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 12),
-                    _presupuesto(),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Puedes comprar hasta 3 de los ${widget.nivel.instrumentos.length} instrumentos.',
+                    LiquidGlassCard(
+                      borderRadius: 18,
+                      tintColor: colorDificultad(widget.nivel.dificultad),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _presupuesto(),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Puedes comprar hasta 3 de los ${widget.nivel.instrumentos.length} instrumentos.',
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 8),
                     GridView(
@@ -1006,20 +1090,22 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                     ),
                     if (_purchased.isNotEmpty && !_melodyFound) ...[
                       const SizedBox(height: 8),
-                      OutlinedButton.icon(
+                      LiquidGlassButton(
+                        variant: LiquidGlassButtonVariant.secondary,
                         onPressed: _buying || _playing ? null : _playPurchased,
-                        icon: const Icon(Icons.queue_music),
-                        label: const Text('Escuchar instrumentos comprados'),
+                        icon: Icons.queue_music,
+                        label: 'Escuchar instrumentos comprados',
                       ),
                     ],
                     if (_melodyFound) ...[
                       const SizedBox(height: 8),
-                      OutlinedButton.icon(
+                      LiquidGlassButton(
+                        variant: LiquidGlassButtonVariant.secondary,
                         onPressed: _playing
                             ? null
                             : () => _playSong('instrumentalSong'),
-                        icon: const Icon(Icons.queue_music),
-                        label: const Text('Escuchar canción'),
+                        icon: Icons.queue_music,
+                        label: 'Escuchar canción',
                       ),
                     ],
                     AnimatedSize(
@@ -1040,7 +1126,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                       onSubmitted: (_) => _submitAnswer(),
                       decoration: const InputDecoration(
                         labelText: '¿Qué canción es?',
-                        border: OutlineInputBorder(),
                       ),
                     ),
                     if (_message != null) ...[
@@ -1056,9 +1141,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                     ],
                     const SizedBox(height: 16),
                     if (!_won)
-                      FilledButton(
+                      LiquidGlassButton(
                         onPressed: _sending ? null : _submitAnswer,
-                        child: const Text('Comprobar respuesta'),
+                        label: 'Comprobar respuesta',
                       ),
                   ],
                 ),

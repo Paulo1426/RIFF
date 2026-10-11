@@ -11,7 +11,13 @@ import '../models/nivel.dart';
 import '../providers/providers.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/offline_game_store.dart';
+import '../widgets/liquid_glass/liquid_background.dart';
 import '../theme.dart';
+import '../widgets/liquid_glass/liquid_glass_appbar.dart';
+import '../widgets/liquid_glass/liquid_glass_button.dart';
+import '../widgets/liquid_glass/liquid_glass_card.dart';
+import '../widgets/liquid_glass/liquid_glass_dialog.dart';
+import '../widgets/liquid_glass/liquid_level_card.dart';
 import 'carrusel_dificultades.dart';
 import 'game_screen.dart';
 import 'instrucciones_dialog.dart';
@@ -433,7 +439,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
 
   Future<void> _avisarJuegoTerminado() => showDialog<void>(
     context: context,
-    builder: (context) => AlertDialog(
+    builder: (context) => LiquidGlassDialog(
       icon: const Icon(Icons.workspace_premium_rounded, size: 56),
       title: const Text('¡Juego completado!', textAlign: TextAlign.center),
       content: const Text(
@@ -454,7 +460,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     final completada = Dificultad.values[desbloqueada.index - 1];
     return showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => LiquidGlassDialog(
         icon: const Icon(Icons.emoji_events_rounded, size: 48),
         title: Text(
           '¡Dificultad ${_nombreDificultad(completada)} completada!',
@@ -511,7 +517,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       context: context,
       builder: (context) {
         final text = Theme.of(context).textTheme;
-        return AlertDialog(
+        return LiquidGlassDialog(
           title: const Text('Tu progreso'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -628,61 +634,63 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   @override
   Widget build(BuildContext context) {
     final estado = _estado;
-    return Scaffold(
-      appBar: AppBar(
-        centerTitle: false,
-        titleSpacing: 16,
-        title: Image.asset(
-          'lib/assets/images/logo/riff_logo.png',
-          height: 48,
-          semanticLabel: 'Riff',
-        ),
-        actions: [
-          PopupMenuButton<VoidCallback>(
-            tooltip: 'Menú',
-            icon: const Icon(Icons.menu_rounded),
-            position: PopupMenuPosition.under,
-            onSelected: (accion) => accion(),
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: _verProgreso,
-                child: const ListTile(
-                  leading: Icon(Icons.insights_rounded),
-                  title: Text('Ver progreso'),
-                ),
-              ),
-              PopupMenuItem(
-                value: () => ref.read(musicaMenuProvider).alternarSilencio(),
-                child: ListTile(
-                  leading: Icon(
-                    ref.read(musicaMenuProvider).silenciada
-                        ? Icons.music_off_rounded
-                        : Icons.music_note_rounded,
-                  ),
-                  title: Text(
-                    ref.read(musicaMenuProvider).silenciada
-                        ? 'Activar música'
-                        : 'Silenciar música',
-                  ),
-                ),
-              ),
-              PopupMenuItem(
-                value: _cerrarSesion,
-                child: const ListTile(
-                  leading: Icon(Icons.logout),
-                  title: Text('Cerrar sesión'),
-                ),
-              ),
-            ],
+    // El fondo cubre también la barra para que el vidrio tenga qué mostrar.
+    return LiquidBackground(
+      acento: estado == null
+          ? null
+          : colorDificultad(_seleccionada ?? estado.dificultadActiva),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: LiquidGlassAppBar(
+          centerTitle: false,
+          titleSpacing: 16,
+          title: Image.asset(
+            'lib/assets/images/logo/riff_logo.png',
+            height: 48,
+            semanticLabel: 'Riff',
           ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: FondoRiff(
-        acento: estado == null
-            ? null
-            : colorDificultad(_seleccionada ?? estado.dificultadActiva),
-        child: AnimatedSwitcher(
+          actions: [
+            PopupMenuButton<VoidCallback>(
+              tooltip: 'Menú',
+              icon: const Icon(Icons.menu_rounded),
+              position: PopupMenuPosition.under,
+              onSelected: (accion) => accion(),
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  value: _verProgreso,
+                  child: const ListTile(
+                    leading: Icon(Icons.insights_rounded),
+                    title: Text('Ver progreso'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: () => ref.read(musicaMenuProvider).alternarSilencio(),
+                  child: ListTile(
+                    leading: Icon(
+                      ref.read(musicaMenuProvider).silenciada
+                          ? Icons.music_off_rounded
+                          : Icons.music_note_rounded,
+                    ),
+                    title: Text(
+                      ref.read(musicaMenuProvider).silenciada
+                          ? 'Activar música'
+                          : 'Silenciar música',
+                    ),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: _cerrarSesion,
+                  child: const ListTile(
+                    leading: Icon(Icons.logout),
+                    title: Text('Cerrar sesión'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 8),
+          ],
+        ),
+        body: AnimatedSwitcher(
           duration: const Duration(milliseconds: 350),
           child: _loading
               ? const Cargando(
@@ -826,10 +834,10 @@ class _TarjetaDificultad extends StatelessWidget {
     // la anterior.
     final bloqueada = !progreso.desbloqueada;
     final cantidadBloqueados = progreso.total == 0 ? 5 : progreso.total;
-    return Vidrio(
-      radio: 28,
-      tinte: color,
-      borde: alFrente ? color : null,
+    return LiquidGlassCard(
+      borderRadius: 28,
+      tintColor: color,
+      borderColor: alFrente ? color : null,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
         child: Column(
@@ -841,7 +849,7 @@ class _TarjetaDificultad extends StatelessWidget {
                   child: Text(
                     'DIFICULTAD',
                     style: text.labelMedium?.copyWith(
-                      color: color,
+                      color: tonoTexto(color),
                       fontWeight: FontWeight.w800,
                       letterSpacing: 2,
                     ),
@@ -849,7 +857,7 @@ class _TarjetaDificultad extends StatelessWidget {
                 ),
                 Text(
                   _nombreDificultad(progreso.dificultad),
-                  style: text.displaySmall?.copyWith(color: color),
+                  style: text.displaySmall?.copyWith(color: tonoTexto(color)),
                 ),
               ],
             ),
@@ -887,14 +895,10 @@ class _TarjetaDificultad extends StatelessWidget {
                       bloqueada
                           ? [
                               for (var i = 0; i < cantidadBloqueados; i++)
-                                _TarjetaNivel(
+                                LiquidLevelCard(
                                   numero: i + 1,
-                                  estado: 'Bloqueado',
+                                  estado: EstadoNivel.bloqueado,
                                   color: color,
-                                  accion: const Padding(
-                                    padding: EdgeInsets.all(8),
-                                    child: Icon(Icons.lock_outline),
-                                  ),
                                 ),
                             ]
                           : [
@@ -964,113 +968,15 @@ class _TarjetaDificultad extends StatelessWidget {
 
   Widget _tarjetaNivel(int index, NivelAsignado asignado, Color color) {
     final canStart = asignado.completado || asignado.puedeIniciar;
-    return _TarjetaNivel(
+    return LiquidLevelCard(
       numero: index + 1,
       color: color,
       estado: asignado.completado
-          ? 'Completado'
+          ? EstadoNivel.completado
           : canStart
-          ? 'Canción por descubrir'
-          : 'Bloqueado',
-      accion: asignado.completado
-          ? OutlinedButton(
-              onPressed: () => onJugar(index),
-              child: const Text('Repetir'),
-            )
-          : canStart
-          ? FilledButton(
-              onPressed: () => onJugar(index),
-              child: const Text('Jugar'),
-            )
-          : const Padding(
-              padding: EdgeInsets.all(8),
-              child: Icon(Icons.lock_outline),
-            ),
-    );
-  }
-}
-
-class _TarjetaNivel extends StatelessWidget {
-  const _TarjetaNivel({
-    required this.numero,
-    required this.estado,
-    required this.color,
-    required this.accion,
-  });
-
-  final int numero;
-  final String estado;
-  final Color color;
-  final Widget accion;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    final bloqueado = estado == 'Bloqueado';
-    // Sin desenfoque propio: ya está dentro del vidrio de la tarjeta.
-    return Opacity(
-      opacity: bloqueado ? 0.55 : 1,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-        decoration: BoxDecoration(
-          // Vidrio sin desenfoque propio (ya está dentro del de la tarjeta).
-          gradient: fondoConAcento(color, opacidad: 0.5),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: AppColors.paperWhite.withValues(alpha: 0.95),
-            width: 1.4,
-          ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x140F2234),
-              offset: Offset(0, 4),
-              blurRadius: 10,
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: color, width: 1.5),
-              ),
-              child: Text(
-                '$numero',
-                style: text.headlineSmall?.copyWith(color: color),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Una línea: al encogerse la tarjeta mientras gira no se desborda.
-                  Text(
-                    'Nivel $numero',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: text.titleMedium,
-                  ),
-                  Text(
-                    estado,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: text.bodySmall?.copyWith(
-                      color: AppColors.slatePencil,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            accion,
-          ],
-        ),
-      ),
+          ? EstadoNivel.disponible
+          : EstadoNivel.bloqueado,
+      onJugar: () => onJugar(index),
     );
   }
 }
@@ -1226,7 +1132,7 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            const FondoRiff(child: SizedBox.expand()),
+            const LiquidBackground(child: SizedBox.expand()),
             SafeArea(
               child: Center(
                 child: SingleChildScrollView(
@@ -1255,8 +1161,11 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                             ),
                           ),
                           const SizedBox(height: 24),
-                          Vidrio(
-                            tinte: AppColors.signalOrange,
+                          LiquidGlassCard(
+                            tintColor: AppColors.verde,
+                            // Algo más opaco que el estándar: es un formulario
+                            // y el texto debe leerse bien.
+                            opacity: 0.4,
                             padding: const EdgeInsets.all(24),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1334,13 +1243,12 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                                   ),
                                 ],
                                 const SizedBox(height: 20),
-                                FilledButton(
+                                LiquidGlassButton(
+                                  variant: LiquidGlassButtonVariant.secondary,
                                   onPressed: _busy ? null : _submit,
-                                  child: Text(
-                                    _registering
-                                        ? 'Crear cuenta'
-                                        : 'Iniciar sesión',
-                                  ),
+                                  label: _registering
+                                      ? 'Crear cuenta'
+                                      : 'Iniciar sesión',
                                 ),
                                 // El invitado ya tiene "Jugar sin registrarme",
                                 // que retoma la misma sesión anónima.

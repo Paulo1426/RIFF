@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_options.dart';
 import 'screens/home_screen.dart';
-import 'theme.dart';
+import 'theme/liquid_glass_theme.dart';
 import 'services/supabase_service.dart';
 
 Future<void> main() async {
@@ -44,7 +44,9 @@ class SongGuessApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
     title: 'Riff',
     debugShowCheckedModeBanner: false,
-    theme: buildAppTheme(),
+    theme: buildLiquidGlassTheme(),
+    // Las tarjetas de vidrio comparten una sola captura del fondo.
+    builder: (context, child) => BackdropGroup(child: child!),
     home:
         home ??
         (firebaseSupported

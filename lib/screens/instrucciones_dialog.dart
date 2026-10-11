@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import '../widgets/liquid_glass/liquid_background.dart';
+import '../widgets/liquid_glass/liquid_glass_button.dart';
 
 Future<void> mostrarInstrucciones(BuildContext context) => showDialog<void>(
   context: context,
@@ -43,166 +45,175 @@ class InstruccionesDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+    // Pantalla completa sobre el fondo líquido; en tablets el contenido
+    // queda centrado con un ancho máximo.
+    return Dialog.fullscreen(
+      backgroundColor: Colors.transparent,
+      child: LiquidBackground(
+        child: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
               child: Column(
                 children: [
-                  Image.asset(
-                    'lib/assets/images/logo/riff_logo.png',
-                    height: 120,
-                    semanticLabel: 'Riff',
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '¿Cómo funciona?',
-                    style: text.bodyLarge?.copyWith(
-                      color: AppColors.slatePencil,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Flexible(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                child: Column(
-                  children: [
-                    _Paso(
-                      numero: 1,
-                      titulo: 'Dificultades',
-                      icono: Icons.stairs_rounded,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+                    child: Column(
                       children: [
-                        const Text(
-                          'El juego tiene 3 dificultades, en este orden:',
+                        Image.asset(
+                          'lib/assets/images/logo/riff_logo.png',
+                          height: 120,
+                          semanticLabel: 'Riff',
                         ),
-                        const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: const [
-                            _Etiqueta('Fácil'),
-                            Icon(Icons.chevron_right, size: 18),
-                            _Etiqueta('Media'),
-                            Icon(Icons.chevron_right, size: 18),
-                            _Etiqueta('Avanzada'),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        const _Vineta(
-                          'Cada dificultad usa hasta 5 niveles publicados.',
-                        ),
-                        const _Vineta(
-                          'Completa los 5 niveles de una dificultad para desbloquear la siguiente.',
-                        ),
-                      ],
-                    ),
-                    const _Paso(
-                      numero: 2,
-                      titulo: 'Los niveles',
-                      icono: Icons.queue_music_rounded,
-                      children: [
+                        const SizedBox(height: 4),
                         Text(
-                          'Cada nivel tiene 4 instrumentos con fragmentos de 30 segundos:',
-                        ),
-                        SizedBox(height: 10),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: [
-                            _Etiqueta('🥁 Batería'),
-                            _Etiqueta('🪗 Acordeón'),
-                            _Etiqueta('🎸 Guitarra'),
-                            _Etiqueta('🎵 Bajo'),
-                          ],
-                        ),
-                      ],
-                    ),
-                    _Paso(
-                      numero: 3,
-                      titulo: 'Compra y juega',
-                      icono: Icons.paid_rounded,
-                      children: [
-                        const Text(
-                          'Cada partida empieza con un presupuesto de:',
-                        ),
-                        const SizedBox(height: 10),
-                        Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 24,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(40),
-                              border: Border.all(color: AppColors.graphiteInk),
-                            ),
-                            child: Text(
-                              '\$1.000.000',
-                              style: text.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
+                          '¿Cómo funciona?',
+                          style: text.bodyLarge?.copyWith(
+                            color: AppColors.slatePencil,
                           ),
                         ),
-                        const SizedBox(height: 10),
-                        const _Vineta('Compras 3 de los 4 instrumentos.'),
-                        const _Vineta(
-                          'Cada precio (\$300.000 o \$400.000) se asigna al comprar; las 3 compras suman el presupuesto completo.',
-                        ),
                       ],
                     ),
-                    const _Paso(
-                      numero: 4,
-                      titulo: 'Descubre la melodía',
-                      icono: Icons.hearing_rounded,
+                  ),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                      child: Column(
+                        children: [
+                          _Paso(
+                            numero: 1,
+                            titulo: 'Dificultades',
+                            icono: Icons.stairs_rounded,
+                            children: [
+                              const Text(
+                                'El juego tiene 3 dificultades, en este orden:',
+                              ),
+                              const SizedBox(height: 10),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: const [
+                                  _Etiqueta('Fácil'),
+                                  Icon(Icons.chevron_right, size: 18),
+                                  _Etiqueta('Media'),
+                                  Icon(Icons.chevron_right, size: 18),
+                                  _Etiqueta('Avanzada'),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              const _Vineta(
+                                'Cada dificultad usa hasta 5 niveles publicados.',
+                              ),
+                              const _Vineta(
+                                'Completa los 5 niveles de una dificultad para desbloquear la siguiente.',
+                              ),
+                            ],
+                          ),
+                          const _Paso(
+                            numero: 2,
+                            titulo: 'Los niveles',
+                            icono: Icons.queue_music_rounded,
+                            children: [
+                              Text(
+                                'Cada nivel tiene 4 instrumentos con fragmentos de 30 segundos:',
+                              ),
+                              SizedBox(height: 10),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  _Etiqueta('🥁 Batería'),
+                                  _Etiqueta('🪗 Acordeón'),
+                                  _Etiqueta('🎸 Guitarra'),
+                                  _Etiqueta('🎵 Bajo'),
+                                ],
+                              ),
+                            ],
+                          ),
+                          _Paso(
+                            numero: 3,
+                            titulo: 'Compra y juega',
+                            icono: Icons.paid_rounded,
+                            children: [
+                              const Text(
+                                'Cada partida empieza con un presupuesto de:',
+                              ),
+                              const SizedBox(height: 10),
+                              Center(
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 24,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(40),
+                                    border: Border.all(
+                                      color: AppColors.graphiteInk,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '\$1.000.000',
+                                    style: text.headlineSmall?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              const _Vineta('Compras 3 de los 4 instrumentos.'),
+                              const _Vineta(
+                                'Cada precio (\$300.000 o \$400.000) se asigna al comprar; las 3 compras suman el presupuesto completo.',
+                              ),
+                            ],
+                          ),
+                          const _Paso(
+                            numero: 4,
+                            titulo: 'Descubre la melodía',
+                            icono: Icons.hearing_rounded,
+                            children: [
+                              Text(
+                                'Cada partida esconde la melodía en un instrumento elegido al azar.',
+                              ),
+                              SizedBox(height: 8),
+                              _Vineta(
+                                'Al descubrirla se habilitan los demás instrumentos y la mezcla sin voz.',
+                                icono: Icons.check_circle_rounded,
+                              ),
+                              _Vineta(
+                                'Si adivinas la canción, escuchas la grabación original.',
+                                icono: Icons.check_circle_rounded,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                    child: Column(
                       children: [
                         Text(
-                          'Cada partida esconde la melodía en un instrumento elegido al azar.',
+                          '¡ESCUCHA · COMPRA · ADIVINA!',
+                          textAlign: TextAlign.center,
+                          style: text.titleSmall?.copyWith(letterSpacing: 1.2),
                         ),
-                        SizedBox(height: 8),
-                        _Vineta(
-                          'Al descubrirla se habilitan los demás instrumentos y la mezcla sin voz.',
-                          icono: Icons.check_circle_rounded,
-                        ),
-                        _Vineta(
-                          'Si adivinas la canción, escuchas la grabación original.',
-                          icono: Icons.check_circle_rounded,
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: LiquidGlassButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            label: '¡A jugar!',
+                          ),
                         ),
                       ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-              child: Column(
-                children: [
-                  Text(
-                    '¡ESCUCHA · COMPRA · ADIVINA!',
-                    textAlign: TextAlign.center,
-                    style: text.titleSmall?.copyWith(letterSpacing: 1.2),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('¡A jugar!'),
                     ),
                   ),
                 ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );

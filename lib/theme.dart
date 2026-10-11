@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -9,9 +8,10 @@ import 'models/nivel.dart';
 /// Paleta "arcade 8-bit sobre papel de nubes".
 class AppColors {
   // Único color de acción: botones principales, énfasis, estados activos.
-  static const signalOrange = Color(0xFFFF5E24);
+  static const signalOrange = Color(0xFFFF6B35);
   static const emberCrust = Color(0xFF6C3200);
-  static const cloudMist = Color(0xFFE3F1FE);
+  // Fondo gris claro de la app.
+  static const cloudMist = Color(0xFFF5F5F5);
   static const graphiteInk = Color(0xFF232629);
   static const paperWhite = Color(0xFFFFFFFF);
   static const slatePencil = Color(0xFF5C6066);
@@ -20,11 +20,13 @@ class AppColors {
   static const midnightInk = Color(0xFF101828);
   static const appWindow = Color(0xFFF5F5F7);
   // Borde marcado de tarjetas sobre el cielo.
-  static const cloudEdge = Color(0xFFC6DDF3);
+  static const cloudEdge = Color(0xFFDCE5E0);
   // Acento de cada dificultad.
-  static const facil = Color(0xFF2FB463);
-  static const medio = Color(0xFFFF9A1F);
-  static const avanzado = Color(0xFFE53935);
+  // Verde de la marca; también es el acento de Fácil.
+  static const verde = Color(0xFF2ECC71);
+  static const facil = verde;
+  static const medio = Color(0xFFFFD100);
+  static const avanzado = Color(0xFFCE1126);
 }
 
 Color colorDificultad(Dificultad dificultad) => switch (dificultad) {
@@ -33,13 +35,10 @@ Color colorDificultad(Dificultad dificultad) => switch (dificultad) {
   Dificultad.avanzado => AppColors.avanzado,
 };
 
-/// Sombra suave en capas, tintada de azul noche.
-const sombraTarjeta = [
-  BoxShadow(color: Color(0x050F2234), offset: Offset(0, 27), blurRadius: 11),
-  BoxShadow(color: Color(0x0A0F2234), offset: Offset(0, 15), blurRadius: 9),
-  BoxShadow(color: Color(0x140F2234), offset: Offset(0, 7), blurRadius: 7),
-  BoxShadow(color: Color(0x140F2234), offset: Offset(0, 2), blurRadius: 4),
-];
+/// Versión oscurecida de un color de acento para usarla en textos: el
+/// amarillo de Medio (y en menor medida el verde) no se lee sobre fondo claro.
+Color tonoTexto(Color acento) =>
+    Color.lerp(acento, AppColors.graphiteInk, 0.4)!;
 
 const radioVidrio = 16.0;
 
@@ -226,139 +225,6 @@ Gradient fondoConAcento(Color acento, {double opacidad = 0.8}) {
   );
 }
 
-/// Vidrio líquido: desenfoca lo de atrás bajo un blanco translúcido, con un
-/// brillo arriba (reflejo), borde de luz y sombra suave.
-class Vidrio extends StatelessWidget {
-  const Vidrio({
-    super.key,
-    required this.child,
-    this.radio = radioVidrio,
-    this.tinte,
-    this.borde,
-    this.padding,
-  });
-
-  final Widget child;
-  final double radio;
-  final Color? tinte;
-  final Color? borde;
-  final EdgeInsetsGeometry? padding;
-
-  @override
-  Widget build(BuildContext context) {
-    final forma = BorderRadius.circular(radio);
-    final base = tinte ?? AppColors.paperWhite;
-    return DecoratedBox(
-      decoration: BoxDecoration(borderRadius: forma, boxShadow: sombraTarjeta),
-      child: ClipRRect(
-        borderRadius: forma,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: forma,
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color.alphaBlend(
-                    base.withValues(alpha: 0.22),
-                    AppColors.paperWhite.withValues(alpha: 0.68),
-                  ),
-                  Color.alphaBlend(
-                    base.withValues(alpha: 0.16),
-                    AppColors.paperWhite.withValues(alpha: 0.32),
-                  ),
-                ],
-              ),
-              border: Border.all(
-                color: borde ?? AppColors.paperWhite.withValues(alpha: 0.95),
-                width: borde == null ? 1.4 : 2,
-              ),
-            ),
-            child: Stack(
-              children: [
-                // Reflejo: franja clara que se desvanece hacia abajo.
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: forma,
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          stops: const [0, 0.35],
-                          colors: [
-                            AppColors.paperWhite.withValues(alpha: 0.55),
-                            AppColors.paperWhite.withValues(alpha: 0),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Padding(padding: padding ?? EdgeInsets.zero, child: child),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Cielo de nubes con manchas de color para que el vidrio tenga algo que
-/// desenfocar. [acento] tiñe el fondo (p. ej. con el color de la dificultad)
-/// y cambia con una transición suave.
-class FondoRiff extends StatelessWidget {
-  const FondoRiff({super.key, required this.child, this.acento});
-
-  final Widget child;
-  final Color? acento;
-
-  @override
-  Widget build(BuildContext context) => TweenAnimationBuilder<Color?>(
-    tween: ColorTween(end: acento ?? AppColors.signalOrange),
-    duration: const Duration(milliseconds: 500),
-    curve: Curves.easeInOut,
-    builder: (context, color, child) =>
-        CustomPaint(painter: _FondoPainter(color!), child: child),
-    child: child,
-  );
-}
-
-class _FondoPainter extends CustomPainter {
-  const _FondoPainter(this.acento);
-
-  final Color acento;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    for (final (x, y, r, color, alpha) in [
-      (0.0, 0.05, 0.8, acento, 0.22),
-      (1.0, 0.5, 0.75, AppColors.paperWhite, 0.9),
-      (0.15, 1.0, 0.8, acento, 0.16),
-    ]) {
-      final center = Offset(size.width * x, size.height * y);
-      final radius = size.width * r;
-      canvas.drawCircle(
-        center,
-        radius,
-        Paint()
-          ..shader = RadialGradient(
-            colors: [
-              color.withValues(alpha: alpha),
-              color.withValues(alpha: 0),
-            ],
-          ).createShader(Rect.fromCircle(center: center, radius: radius)),
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_FondoPainter oldDelegate) => oldDelegate.acento != acento;
-}
-
 /// Disco de vinilo estilo rockola; gira mientras [girando] es true.
 class DiscoGirando extends StatefulWidget {
   const DiscoGirando({super.key, this.size = 40, this.girando = true});
@@ -502,103 +368,6 @@ class ConCarga extends StatelessWidget {
       ),
     ],
   );
-}
-
-/// Barras de ecualizador que se mueven mientras [activo] es true.
-class BarrasSonido extends StatefulWidget {
-  const BarrasSonido({
-    super.key,
-    this.activo = true,
-    this.color = AppColors.graphiteInk,
-    this.width = 64,
-    this.height = 26,
-  });
-
-  final bool activo;
-  final Color color;
-  final double width;
-  final double height;
-
-  @override
-  State<BarrasSonido> createState() => _BarrasSonidoState();
-}
-
-class _BarrasSonidoState extends State<BarrasSonido>
-    with SingleTickerProviderStateMixin {
-  late final _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1600),
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.activo) _controller.repeat();
-  }
-
-  @override
-  void didUpdateWidget(BarrasSonido oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.activo && !_controller.isAnimating) {
-      _controller.repeat();
-    } else if (!widget.activo) {
-      _controller.stop();
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    label: widget.activo ? 'Sonando' : 'En pausa',
-    child: AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) => CustomPaint(
-        size: Size(widget.width, widget.height),
-        painter: _BarrasPainter(_controller.value, widget.color),
-      ),
-    ),
-  );
-}
-
-class _BarrasPainter extends CustomPainter {
-  const _BarrasPainter(this.t, this.color);
-
-  final double t;
-  final Color color;
-
-  static const _barras = 9;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final grosor = size.width / (_barras * 2);
-    final base = size.height - grosor / 2;
-    final pincel = Paint()
-      ..color = color
-      ..strokeWidth = grosor
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(Offset(0, base), Offset(size.width, base), pincel);
-    for (var i = 0; i < _barras; i++) {
-      // Cada barra oscila con su propia velocidad y fase; las velocidades
-      // son enteras para que el ciclo empalme sin saltos.
-      final onda = sin(2 * pi * (t * (1 + i % 3) + i * 0.37));
-      final alto = (0.35 + 0.65 * (onda + 1) / 2) * (base - grosor * 1.5);
-      final x = grosor * (1 + 2 * i);
-      canvas.drawLine(
-        Offset(x, base - grosor),
-        Offset(x, base - grosor - alto),
-        pincel,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_BarrasPainter oldDelegate) =>
-      oldDelegate.t != t || oldDelegate.color != color;
 }
 
 /// Banda animada: los instrumentos se mecen al ritmo y sueltan notas que
