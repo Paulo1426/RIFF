@@ -45,9 +45,10 @@ class _LiquidLevelCardState extends State<LiquidLevelCard> {
 
   bool get _bloqueado => widget.estado == EstadoNivel.bloqueado;
 
-  String get _textoEstado => switch (widget.estado) {
+  // El nivel disponible no lleva subtítulo, solo "Nivel X".
+  String? get _textoEstado => switch (widget.estado) {
     EstadoNivel.completado => 'Completado',
-    EstadoNivel.disponible => 'Canción por descubrir',
+    EstadoNivel.disponible => null,
     EstadoNivel.bloqueado => 'Bloqueado',
   };
 
@@ -85,12 +86,13 @@ class _LiquidLevelCardState extends State<LiquidLevelCard> {
                 overflow: TextOverflow.ellipsis,
                 style: text.titleMedium,
               ),
-              Text(
-                _textoEstado,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: text.bodySmall?.copyWith(color: AppColors.slatePencil),
-              ),
+              if (_textoEstado != null)
+                Text(
+                  _textoEstado!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.bodySmall?.copyWith(color: AppColors.slatePencil),
+                ),
             ],
           ),
         ),
@@ -126,7 +128,7 @@ class _LiquidLevelCardState extends State<LiquidLevelCard> {
     };
 
     return Semantics(
-      label: 'Nivel ${widget.numero}, $_textoEstado',
+      label: ['Nivel ${widget.numero}', ?_textoEstado].join(', '),
       child: AnimatedScale(
         // Microanimación al tocar la tarjeta.
         scale: _presionada ? 0.98 : 1,
