@@ -20,7 +20,8 @@ class GameScreen extends ConsumerStatefulWidget {
   final Nivel nivel;
   final String gameId;
   final int? numeroVisible;
-  final bool haySiguiente;
+  // Abre el siguiente nivel en lugar de este; null si no hay siguiente.
+  final VoidCallback? onSiguiente;
   final bool offlineMode;
   final OfflineLevelData? offlineLevel;
   final Future<void> Function(String levelId, String answer)?
@@ -31,7 +32,7 @@ class GameScreen extends ConsumerStatefulWidget {
     required this.nivel,
     required this.gameId,
     this.numeroVisible,
-    this.haySiguiente = false,
+    this.onSiguiente,
     this.offlineMode = false,
     this.offlineLevel,
     this.onOfflineCompleted,
@@ -49,6 +50,10 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   bool _playing = false;
   bool _paused = false;
   String _nowPlaying = '';
+  // Instrumentos sonando; vacío cuando suena la canción completa.
+  List<Instrumento> _nowPlayingInstruments = const [];
+  int _descuento = 0;
+  int _descuentoId = 0;
   String? _message;
   bool? _correct;
   int _balance = Nivel.presupuestoTotal;
@@ -56,6 +61,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   final Map<String, int> _prices = {};
   bool _melodyFound = false;
   bool _won = false;
+  bool _avanzando = false;
   late bool _playingOffline;
   int _playbackGeneration = 0;
   late final Partida? _offlinePartida;
@@ -124,7 +130,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         if (result.compraRealizada) {
           _prices[instrumento.id] = result.precioInstrumento;
         }
-        _balance = result.presupuestoRestante;
+        _setBalance(result.presupuestoRestante);
         _purchased
           ..clear()
           ..addAll(result.instrumentosComprados);
@@ -178,7 +184,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       if (!mounted) return;
       setState(() {
         _prices[instrumento.id] = price;
-        _balance = partida.presupuestoRestante;
+        _setBalance(partida.presupuestoRestante);
         _purchased
           ..clear()
           ..addAll(partida.comprados.map((item) => item.id));
@@ -197,6 +203,54 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     } finally {
       if (mounted) setState(() => _buying = false);
     }
+  }
+
+  // Llamar dentro de setState: guarda el descuento para animarlo.
+  void _setBalance(int nuevo) {
+    if (nuevo < _balance) {
+      _descuento = _balance - nuevo;
+      _descuentoId++;
+    }
+    _balance = nuevo;
+  }
+
+  Widget _presupuesto() {
+    final text = Theme.of(context).textTheme;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        const Text('Presupuesto restante: '),
+        TweenAnimationBuilder<int>(
+          tween: IntTween(end: _balance),
+          duration: const Duration(milliseconds: 900),
+          curve: Curves.easeOutCubic,
+          builder: (context, value, _) =>
+              Text('\$${formatearMiles(value)}', style: text.titleMedium),
+        ),
+        const SizedBox(width: 8),
+        if (_descuentoId > 0)
+          // La clave reinicia la animación en cada compra.
+          TweenAnimationBuilder<double>(
+            key: ValueKey(_descuentoId),
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 1400),
+            curve: Curves.easeOut,
+            builder: (context, t, child) => Opacity(
+              opacity: 1 - t,
+              child: Transform.translate(
+                offset: Offset(0, -18 * t),
+                child: child,
+              ),
+            ),
+            child: Text(
+              '-\$${formatearMiles(_descuento)}',
+              style: text.titleSmall?.copyWith(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
   Future<void> _playPurchased() async {
@@ -222,6 +276,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       _playing = true;
       _paused = false;
       _nowPlaying = instruments.map((item) => item.nombre).join(' + ');
+      _nowPlayingInstruments = instruments;
     });
     try {
       final repository = ref.read(firebaseGameRepositoryProvider);
@@ -281,6 +336,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       _nowPlaying = type == 'instrumentalSong'
           ? 'Canción sin voz'
           : 'Canción original';
+      _nowPlayingInstruments = const [];
     });
     try {
       String url;
@@ -359,46 +415,56 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh,
-        border: Border(top: BorderSide(color: scheme.outlineVariant)),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: scheme.outlineVariant),
       ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            children: [
-              const ArteSol(size: 40),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _paused ? 'En pausa' : 'Reproduciendo',
-                      style: Theme.of(context).textTheme.labelSmall,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          children: [
+            SizedBox.square(
+              dimension: 40,
+              child: _nowPlayingInstruments.isEmpty
+                  ? DiscoGirando(girando: !_paused)
+                  : FittedBox(
+                      child: Text(
+                        _nowPlayingInstruments
+                            .map((item) => _emojiDe(item.tipo))
+                            .join(),
+                        style: const TextStyle(fontSize: 32),
+                      ),
                     ),
-                    Text(
-                      _nowPlaying,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                  ],
-                ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _paused ? 'En pausa' : 'Reproduciendo',
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                  Text(
+                    _nowPlaying,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ],
               ),
-              IconButton.filled(
-                tooltip: _paused ? 'Reanudar' : 'Pausar',
-                onPressed: _togglePause,
-                icon: Icon(_paused ? Icons.play_arrow : Icons.pause),
-              ),
-              IconButton(
-                tooltip: 'Detener',
-                onPressed: () => _audioService.detener(),
-                icon: const Icon(Icons.stop),
-              ),
-            ],
-          ),
+            ),
+            IconButton.filled(
+              tooltip: _paused ? 'Reanudar' : 'Pausar',
+              onPressed: _togglePause,
+              icon: Icon(_paused ? Icons.play_arrow : Icons.pause),
+            ),
+            IconButton(
+              tooltip: 'Detener',
+              onPressed: () => _audioService.detener(),
+              icon: const Icon(Icons.stop),
+            ),
+          ],
         ),
       ),
     );
@@ -554,7 +620,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                     FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Text(
-                        '\$${_formatPriceInThousands(precio)}K',
+                        '\$${formatearMiles(precio)}',
                         style: text.titleSmall?.copyWith(
                           color: scheme.primary,
                           fontWeight: FontWeight.w700,
@@ -581,13 +647,14 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     // Al ganar, volver atrás también avisa para recargar el progreso.
     canPop: !_won,
     onPopInvokedWithResult: (didPop, _) {
-      if (!didPop) Navigator.of(context).pop(ResultadoNivel.terminar);
+      if (!didPop && !_avanzando) {
+        Navigator.of(context).pop(ResultadoNivel.terminar);
+      }
     },
     child: Scaffold(
       appBar: AppBar(
         title: Text('Nivel ${widget.numeroVisible ?? widget.nivel.numero}'),
       ),
-      bottomNavigationBar: _playing ? _reproductor() : null,
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -598,7 +665,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: 12),
-          Text('Presupuesto restante: \$$_balance'),
+          _presupuesto(),
           const SizedBox(height: 4),
           Text(
             'Puedes comprar hasta 3 de los ${widget.nivel.instrumentos.length} instrumentos.',
@@ -624,6 +691,24 @@ class _GameScreenState extends ConsumerState<GameScreen> {
               label: const Text('Escuchar instrumentos comprados'),
             ),
           ],
+          if (_melodyFound) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _playing ? null : () => _playSong('instrumentalSong'),
+              icon: const Icon(Icons.queue_music),
+              label: const Text('Escuchar canción'),
+            ),
+          ],
+          AnimatedSize(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOut,
+            child: _playing
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: _reproductor(),
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
           const Divider(height: 32),
           TextField(
             controller: _answerController,
@@ -647,12 +732,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             ),
           ],
           const SizedBox(height: 16),
-          if (_melodyFound)
-            FilledButton.icon(
-              onPressed: _playing ? null : () => _playSong('instrumentalSong'),
-              icon: const Icon(Icons.queue_music),
-              label: const Text('Escuchar canción'),
-            ),
           if (_won) ...[
             FilledButton.icon(
               onPressed: _playing || _playingOffline
@@ -670,41 +749,59 @@ class _GameScreenState extends ConsumerState<GameScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () =>
-                        Navigator.of(context).pop(ResultadoNivel.terminar),
+                    onPressed: _avanzando
+                        ? null
+                        : () => Navigator.of(
+                            context,
+                          ).pop(ResultadoNivel.terminar),
                     child: const Text('Terminar nivel'),
                   ),
                 ),
-                if (widget.haySiguiente) ...[
+                if (widget.onSiguiente != null) ...[
                   const SizedBox(width: 12),
                   Expanded(
                     child: FilledButton(
-                      onPressed: () =>
-                          Navigator.of(context).pop(ResultadoNivel.siguiente),
-                      child: const Text('Siguiente nivel'),
+                      onPressed: _avanzando
+                          ? null
+                          : () {
+                              setState(() => _avanzando = true);
+                              widget.onSiguiente!();
+                            },
+                      child: _avanzando
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Siguiente nivel'),
                     ),
                   ),
                 ],
               ],
             ),
           ],
-          FilledButton(
-            onPressed: _sending || _won ? null : _submitAnswer,
-            child: _sending
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Comprobar respuesta'),
-          ),
+          if (!_won)
+            FilledButton(
+              onPressed: _sending ? null : _submitAnswer,
+              child: _sending
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Comprobar respuesta'),
+            ),
         ],
       ),
     ),
   );
 }
 
-String _formatPriceInThousands(int price) => (price ~/ 1000).toString();
+/// 1000000 -> 1.000.000
+String formatearMiles(int valor) => valor.toString().replaceAllMapped(
+  RegExp(r'\B(?=(\d{3})+(?!\d))'),
+  (_) => '.',
+);
 
 String _emojiDe(TipoInstrumento tipo) => switch (tipo) {
   TipoInstrumento.bateria => '🥁',

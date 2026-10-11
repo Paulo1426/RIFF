@@ -10,7 +10,7 @@ class SupabaseNivelRepositoryAdapter implements NivelRepository {
   final SupabaseNivelRepository _repository;
 
   SupabaseNivelRepositoryAdapter([SupabaseNivelRepository? repository])
-      : _repository = repository ?? SupabaseNivelRepository();
+    : _repository = repository ?? SupabaseNivelRepository();
 
   @override
   Future<List<Nivel>> nivelesDe(Dificultad dificultad) =>

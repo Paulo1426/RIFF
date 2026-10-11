@@ -7,7 +7,7 @@ class UsuarioRepository {
   final SupabaseClient _client;
 
   UsuarioRepository([SupabaseClient? client])
-      : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client;
 
   Future<Usuario> obtener(String userId) async {
     final perfil = await _client
@@ -48,6 +48,7 @@ class UsuarioRepository {
   }) async {
     await _client
         .from('perfiles')
-        .update({'insignias': insignias.toList()}).eq('id', userId);
+        .update({'insignias': insignias.toList()})
+        .eq('id', userId);
   }
 }

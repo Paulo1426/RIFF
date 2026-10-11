@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -42,9 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const Scaffold(body: Cargando());
         }
         final user = snapshot.data;
         if (user == null || !_entered) {
@@ -280,6 +279,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     Nivel nivel, {
     int? numeroVisible,
     bool haySiguiente = false,
+    bool reemplazar = false,
   }) async {
     if (_startingLevelId != null) return null;
     setState(() => _startingLevelId = nivel.id);
@@ -301,6 +301,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           gameId: 'offline-${DateTime.now().microsecondsSinceEpoch}',
           numeroVisible: numeroVisible,
           haySiguiente: haySiguiente,
+          reemplazar: reemplazar,
           offlineLevel: offlineLevel,
         );
       }
@@ -313,6 +314,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           gameId: partida.gameId,
           numeroVisible: numeroVisible,
           haySiguiente: haySiguiente,
+          reemplazar: reemplazar,
           offlineLevel: offlineLevel,
         );
       } catch (error) {
@@ -325,6 +327,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           gameId: 'offline-${DateTime.now().microsecondsSinceEpoch}',
           numeroVisible: numeroVisible,
           haySiguiente: haySiguiente,
+          reemplazar: reemplazar,
           offlineLevel: offlineLevel,
         );
       }
@@ -333,6 +336,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('No se pudo iniciar el nivel: $error')),
         );
+        // El nivel anterior sigue abierto esperando al siguiente: se cierra.
+        if (reemplazar) Navigator.of(context).pop();
       }
       return null;
     } finally {
@@ -345,30 +350,44 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     required String gameId,
     required int? numeroVisible,
     required bool haySiguiente,
+    required bool reemplazar,
     required OfflineLevelData? offlineLevel,
   }) async {
     if (!mounted) return null;
-    final resultado = await Navigator.of(context).push<ResultadoNivel>(
-      MaterialPageRoute(
-        builder: (_) => GameScreen(
-          nivel: nivel,
-          gameId: gameId,
-          numeroVisible: numeroVisible,
-          haySiguiente: haySiguiente,
-          offlineLevel: offlineLevel,
-          offlineMode: _offlineMode || gameId.startsWith('offline-'),
-          onOfflineCompleted: (levelId, answer) async {
-            final snapshot = _offlineSnapshot;
-            if (snapshot == null) {
-              throw StateError('No existe progreso offline para sincronizar');
-            }
-            final updated = snapshot.completedLocally(levelId, answer);
-            await _offlineStore.save(updated);
-            _offlineSnapshot = updated;
-          },
-        ),
+    final navigator = Navigator.of(context);
+    // "Siguiente nivel" no cierra la pantalla: el próximo nivel la reemplaza.
+    final siguiente = Completer<ResultadoNivel>();
+    final route = MaterialPageRoute<ResultadoNivel>(
+      builder: (_) => GameScreen(
+        nivel: nivel,
+        gameId: gameId,
+        numeroVisible: numeroVisible,
+        onSiguiente: haySiguiente
+            ? () {
+                if (!siguiente.isCompleted) {
+                  siguiente.complete(ResultadoNivel.siguiente);
+                }
+              }
+            : null,
+        offlineLevel: offlineLevel,
+        offlineMode: _offlineMode || gameId.startsWith('offline-'),
+        onOfflineCompleted: (levelId, answer) async {
+          final snapshot = _offlineSnapshot;
+          if (snapshot == null) {
+            throw StateError('No existe progreso offline para sincronizar');
+          }
+          final updated = snapshot.completedLocally(levelId, answer);
+          await _offlineStore.save(updated);
+          _offlineSnapshot = updated;
+        },
       ),
     );
+    if (reemplazar) {
+      unawaited(navigator.pushReplacement(route));
+    } else {
+      unawaited(navigator.push(route));
+    }
+    final resultado = await Future.any([route.popped, siguiente.future]);
     if (resultado != null) {
       final antes = _desbloqueadas();
       final terminadoAntes = _juegoTerminado();
@@ -482,10 +501,11 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           dificultad: dificultad,
           progreso: progreso,
           niveles: () => _nivelesDe(dificultad),
-          onStart: (nivel, numeroVisible, haySiguiente) => _iniciar(
+          onStart: (nivel, numeroVisible, haySiguiente, reemplazar) => _iniciar(
             nivel,
             numeroVisible: numeroVisible,
             haySiguiente: haySiguiente,
+            reemplazar: reemplazar,
           ),
         ),
       ),
@@ -524,19 +544,25 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           ),
         ],
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-          ? _ErrorPanel(error: _error!, onRetry: _cargar)
-          : estado == null
-          ? const Center(child: Text('No se pudo cargar el progreso.'))
-          : _ContenidoProgreso(
-              estado: estado,
-              esInvitado: widget.user.isAnonymous,
-              offlineMode: _offlineMode,
-              onOpenDifficulty: _abrirDificultad,
-              onRefresh: _cargar,
-            ),
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 350),
+        child: _loading
+            ? const Cargando(
+                key: ValueKey('cargando'),
+                texto: 'Cargando progreso...',
+              )
+            : _error != null
+            ? _ErrorPanel(error: _error!, onRetry: _cargar)
+            : estado == null
+            ? const Center(child: Text('No se pudo cargar el progreso.'))
+            : _ContenidoProgreso(
+                estado: estado,
+                esInvitado: widget.user.isAnonymous,
+                offlineMode: _offlineMode,
+                onOpenDifficulty: _abrirDificultad,
+                onRefresh: _cargar,
+              ),
+      ),
     );
   }
 }
@@ -650,6 +676,7 @@ class _DifficultyLevelsScreen extends StatefulWidget {
     Nivel nivel,
     int numeroVisible,
     bool haySiguiente,
+    bool reemplazar,
   )
   onStart;
 
@@ -661,20 +688,28 @@ class _DifficultyLevelsScreen extends StatefulWidget {
 class _DifficultyLevelsScreenState extends State<_DifficultyLevelsScreen> {
   Future<void> _jugar(int index) async {
     var actual = index;
+    var reemplazar = false;
     while (mounted) {
       final niveles = widget.niveles();
-      if (actual >= niveles.length) break;
-      final asignado = niveles[actual];
-      if (!asignado.completado && !asignado.puedeIniciar) break;
+      final puedeJugar =
+          actual < niveles.length &&
+          (niveles[actual].completado || niveles[actual].puedeIniciar);
+      if (!puedeJugar) {
+        // El nivel ganado sigue abierto esperando al siguiente: se cierra.
+        if (reemplazar) Navigator.of(context).pop();
+        break;
+      }
       final resultado = await widget.onStart(
-        asignado.nivel,
+        niveles[actual].nivel,
         actual + 1,
         actual + 1 < niveles.length,
+        reemplazar,
       );
       if (!mounted) return;
       setState(() {});
       if (resultado != ResultadoNivel.siguiente) break;
       actual++;
+      reemplazar = true;
     }
   }
 

@@ -7,22 +7,22 @@ class AudioStorageService {
   final SupabaseClient _client;
 
   AudioStorageService([SupabaseClient? client])
-      : _client = client ?? Supabase.instance.client;
+    : _client = client ?? Supabase.instance.client;
 
-  String publicUrl(String path) => _client.storage.from(bucket).getPublicUrl(path);
+  String publicUrl(String path) =>
+      _client.storage.from(bucket).getPublicUrl(path);
 
   Future<String> subir({
     required String path,
     required Uint8List bytes,
     String contentType = 'audio/mpeg',
   }) async {
-    await _client.storage.from(bucket).uploadBinary(
+    await _client.storage
+        .from(bucket)
+        .uploadBinary(
           path,
           bytes,
-          fileOptions: FileOptions(
-            contentType: contentType,
-            upsert: true,
-          ),
+          fileOptions: FileOptions(contentType: contentType, upsert: true),
         );
     return publicUrl(path);
   }

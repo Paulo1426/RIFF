@@ -9,7 +9,8 @@ import 'services/supabase_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final firebaseSupported = !kIsWeb &&
+  final firebaseSupported =
+      !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
   if (firebaseSupported) {
@@ -29,9 +30,7 @@ Future<void> main() async {
     await SupabaseService.initialize(url: supabaseUrl, anonKey: supabaseKey);
   }
   runApp(
-    ProviderScope(
-      child: SongGuessApp(firebaseSupported: firebaseSupported),
-    ),
+    ProviderScope(child: SongGuessApp(firebaseSupported: firebaseSupported)),
   );
 }
 
@@ -46,7 +45,8 @@ class SongGuessApp extends StatelessWidget {
     title: 'Adivina la canción',
     debugShowCheckedModeBanner: false,
     theme: buildAppTheme(),
-    home: home ??
+    home:
+        home ??
         (firebaseSupported
             ? const HomeScreen()
             : const Scaffold(

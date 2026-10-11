@@ -71,7 +71,8 @@ class DefaultFirebaseOptions {
     projectId: 'song-gues-game',
     databaseURL: 'https://song-gues-game-default-rtdb.firebaseio.com',
     storageBucket: 'song-gues-game.firebasestorage.app',
-    iosClientId: '655179331422-avpse2vcn50b12h13cqorn8u7a5bmp28.apps.googleusercontent.com',
+    iosClientId:
+        '655179331422-avpse2vcn50b12h13cqorn8u7a5bmp28.apps.googleusercontent.com',
     iosBundleId: 'com.example.songGuessGame',
   );
 }

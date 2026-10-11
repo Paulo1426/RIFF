@@ -91,6 +91,13 @@ ThemeData buildAppTheme() {
     colorScheme: scheme,
     scaffoldBackgroundColor: AppColors.warmCanvas,
     textTheme: textTheme,
+    // Transición suave (deslizar + desvanecer) entre pantallas.
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+        TargetPlatform.iOS: FadeForwardsPageTransitionsBuilder(),
+      },
+    ),
     appBarTheme: AppBarTheme(
       backgroundColor: AppColors.warmCanvas,
       foregroundColor: AppColors.charcoal,
@@ -198,4 +205,112 @@ class _SolPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_SolPainter oldDelegate) => false;
+}
+
+/// Disco de vinilo estilo rockola; gira mientras [girando] es true.
+class DiscoGirando extends StatefulWidget {
+  const DiscoGirando({super.key, this.size = 40, this.girando = true});
+
+  final double size;
+  final bool girando;
+
+  @override
+  State<DiscoGirando> createState() => _DiscoGirandoState();
+}
+
+class _DiscoGirandoState extends State<DiscoGirando>
+    with SingleTickerProviderStateMixin {
+  late final _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 2),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.girando) _controller.repeat();
+  }
+
+  @override
+  void didUpdateWidget(DiscoGirando oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.girando && !_controller.isAnimating) {
+      _controller.repeat();
+    } else if (!widget.girando) {
+      _controller.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => RotationTransition(
+    turns: _controller,
+    child: CustomPaint(
+      size: Size.square(widget.size),
+      painter: _DiscoPainter(),
+    ),
+  );
+}
+
+class _DiscoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final r = size.shortestSide / 2;
+    canvas.drawCircle(center, r, Paint()..color = AppColors.inkStone);
+    final surco = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = r * 0.03
+      ..color = AppColors.purePaper.withValues(alpha: 0.12);
+    for (final f in [0.85, 0.7, 0.55]) {
+      canvas.drawCircle(center, r * f, surco);
+    }
+    // Brillo asimétrico: sin él no se notaría que el disco gira.
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: r * 0.95),
+      -pi / 3,
+      pi / 5,
+      true,
+      Paint()..color = AppColors.purePaper.withValues(alpha: 0.18),
+    );
+    canvas.drawCircle(center, r * 0.36, Paint()..color = AppColors.limeSignal);
+    canvas.drawCircle(
+      center + Offset(r * 0.2, 0),
+      r * 0.06,
+      Paint()..color = AppColors.inkStone,
+    );
+    canvas.drawCircle(center, r * 0.07, Paint()..color = AppColors.warmCanvas);
+  }
+
+  @override
+  bool shouldRepaint(_DiscoPainter oldDelegate) => false;
+}
+
+/// Pantalla de carga con el disco girando.
+class Cargando extends StatelessWidget {
+  const Cargando({super.key, this.texto = 'Cargando...'});
+
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const DiscoGirando(size: 72),
+        const SizedBox(height: 16),
+        Text(
+          texto,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: AppColors.ash),
+        ),
+      ],
+    ),
+  );
 }

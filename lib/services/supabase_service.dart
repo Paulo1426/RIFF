@@ -20,7 +20,7 @@ class AuthService {
   final SupabaseClient _client;
 
   AuthService([SupabaseClient? client])
-      : _client = client ?? SupabaseService.client;
+    : _client = client ?? SupabaseService.client;
 
   Stream<AuthState> get authStateChanges => _client.auth.onAuthStateChange;
   User? get currentUser => _client.auth.currentUser;
