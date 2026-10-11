@@ -768,7 +768,6 @@ class _PanelDificultades extends StatelessWidget {
                     colorDificultad(dificultades[index].dificultad),
                 itemBuilder: (context, index, alFrente) => _TarjetaDificultad(
                   progreso: dificultades[index],
-                  numero: index + 1,
                   anterior: index == 0 ? null : dificultades[index - 1],
                   niveles: nivelesDe(dificultades[index].dificultad),
                   alFrente: alFrente,
@@ -805,7 +804,6 @@ class _PanelDificultades extends StatelessWidget {
 class _TarjetaDificultad extends StatelessWidget {
   const _TarjetaDificultad({
     required this.progreso,
-    required this.numero,
     required this.anterior,
     required this.niveles,
     required this.alFrente,
@@ -814,7 +812,6 @@ class _TarjetaDificultad extends StatelessWidget {
   });
 
   final ProgresoDificultadRemoto progreso;
-  final int numero;
   final ProgresoDificultadRemoto? anterior;
   final List<NivelAsignado> niveles;
   final bool alFrente;
@@ -840,27 +837,21 @@ class _TarjetaDificultad extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text(
-                  'DIFICULTAD',
-                  style: text.labelMedium?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2,
+                Expanded(
+                  child: Text(
+                    'DIFICULTAD',
+                    style: text.labelMedium?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2,
+                    ),
                   ),
                 ),
-                const Spacer(),
                 Text(
-                  numero.toString().padLeft(2, '0'),
-                  style: text.labelMedium?.copyWith(
-                    color: AppColors.slatePencil,
-                  ),
+                  _nombreDificultad(progreso.dificultad),
+                  style: text.displaySmall?.copyWith(color: color),
                 ),
               ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _nombreDificultad(progreso.dificultad),
-              style: text.displaySmall?.copyWith(color: color),
             ),
             const SizedBox(height: 4),
             Text(
@@ -886,35 +877,39 @@ class _TarjetaDificultad extends StatelessWidget {
             Expanded(
               child: RefreshIndicator(
                 onRefresh: onRefresh,
-                child: ListView(
-                  padding: EdgeInsets.zero,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  children: [
-                    if (bloqueada)
-                      for (var i = 0; i < cantidadBloqueados; i++)
-                        _TarjetaNivel(
-                          numero: i + 1,
-                          estado: 'Bloqueado',
-                          color: color,
-                          accion: const Padding(
-                            padding: EdgeInsets.all(8),
-                            child: Icon(Icons.lock_outline),
-                          ),
-                        )
-                    else if (niveles.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 24),
-                        child: Text(
-                          progreso.total == 0
-                              ? 'Todavía no hay niveles disponibles para esta dificultad.'
-                              : 'No hay niveles completados para repetir.',
-                          textAlign: TextAlign.center,
-                        ),
-                      )
-                    else
-                      for (var i = 0; i < niveles.length; i++)
-                        _tarjetaNivel(i, niveles[i], color),
-                  ],
+                child: LayoutBuilder(
+                  builder: (context, espacio) => ListView(
+                    padding: EdgeInsets.zero,
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: _llenarEspacio(
+                      espacio.maxHeight,
+                      color,
+                      bloqueada
+                          ? [
+                              for (var i = 0; i < cantidadBloqueados; i++)
+                                _TarjetaNivel(
+                                  numero: i + 1,
+                                  estado: 'Bloqueado',
+                                  color: color,
+                                  accion: const Padding(
+                                    padding: EdgeInsets.all(8),
+                                    child: Icon(Icons.lock_outline),
+                                  ),
+                                ),
+                            ]
+                          : [
+                              for (var i = 0; i < niveles.length; i++)
+                                _tarjetaNivel(i, niveles[i], color),
+                            ],
+                      escalaTexto: MediaQuery.textScalerOf(context).scale(1),
+                      vacio: Text(
+                        progreso.total == 0
+                            ? 'Todavía no hay niveles disponibles para esta dificultad.'
+                            : 'No hay niveles completados para repetir.',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -922,6 +917,49 @@ class _TarjetaDificultad extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Reparte el alto disponible: con pocos niveles las tarjetas crecen y, si
+  /// aún sobra espacio, abajo toca la banda. Con muchos niveles se desplaza.
+  List<Widget> _llenarEspacio(
+    double alto,
+    Color color,
+    List<Widget> tarjetas, {
+    required Widget vacio,
+    required double escalaTexto,
+  }) {
+    const separacion = 10.0;
+    // Alto natural de la casilla, mayor si el sistema usa letra grande.
+    final altoMinimo = max(64.0, 24 + escalaTexto * 44);
+    final altoMaximo = altoMinimo;
+    const altoBanda = 90.0;
+    if (tarjetas.isEmpty) {
+      return [
+        Padding(padding: const EdgeInsets.only(top: 24), child: vacio),
+        SizedBox(
+          height: max(altoBanda, alto - 120),
+          child: BandaMusical(color: color),
+        ),
+      ];
+    }
+    final n = tarjetas.length;
+    final altoTarjeta = ((alto - n * separacion) / n).clamp(
+      altoMinimo,
+      altoMaximo,
+    );
+    final sobrante = alto - n * (altoTarjeta + separacion);
+    return [
+      for (final tarjeta in tarjetas)
+        Padding(
+          padding: const EdgeInsets.only(bottom: separacion),
+          child: SizedBox(height: altoTarjeta, child: tarjeta),
+        ),
+      if (sobrante >= altoBanda)
+        SizedBox(
+          height: sobrante - 1,
+          child: BandaMusical(color: color),
+        ),
+    ];
   }
 
   Widget _tarjetaNivel(int index, NivelAsignado asignado, Color color) {
@@ -973,12 +1011,22 @@ class _TarjetaNivel extends StatelessWidget {
     return Opacity(
       opacity: bloqueado ? 0.55 : 1,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
         decoration: BoxDecoration(
-          gradient: fondoConAcento(color),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.cloudEdge, width: 1.2),
+          // Vidrio sin desenfoque propio (ya está dentro del de la tarjeta).
+          gradient: fondoConAcento(color, opacidad: 0.5),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: AppColors.paperWhite.withValues(alpha: 0.95),
+            width: 1.4,
+          ),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x140F2234),
+              offset: Offset(0, 4),
+              blurRadius: 10,
+            ),
+          ],
         ),
         child: Row(
           children: [
@@ -1001,9 +1049,17 @@ class _TarjetaNivel extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Nivel $numero', style: text.titleMedium),
+                  // Una línea: al encogerse la tarjeta mientras gira no se desborda.
+                  Text(
+                    'Nivel $numero',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: text.titleMedium,
+                  ),
                   Text(
                     estado,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: text.bodySmall?.copyWith(
                       color: AppColors.slatePencil,
                     ),
@@ -1199,20 +1255,9 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                             ),
                           ),
                           const SizedBox(height: 24),
-                          Container(
+                          Vidrio(
+                            tinte: AppColors.signalOrange,
                             padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              gradient: fondoConAcento(
-                                AppColors.signalOrange,
-                                opacidad: 0.75,
-                              ),
-                              borderRadius: BorderRadius.circular(radioVidrio),
-                              border: Border.all(
-                                color: AppColors.paperWhite.withValues(
-                                  alpha: 0.85,
-                                ),
-                              ),
-                            ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
@@ -1220,7 +1265,7 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                                   _registering
                                       ? 'Crea tu cuenta'
                                       : 'Bienvenido',
-                                  style: text.titleLarge,
+                                  style: text.headlineMedium,
                                 ),
                                 const SizedBox(height: 16),
                                 if (_registering) ...[

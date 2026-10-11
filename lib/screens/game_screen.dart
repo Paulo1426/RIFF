@@ -498,15 +498,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       if (!mounted) return;
       if (resultado.correcta) {
         _playbackGeneration++;
-        setState(() {
-          _ganar(
-            titulo: resultado.titulo ?? answer,
-            artista: resultado.artista,
-          );
-          _correct = true;
-          _message = '¡Correcto! Reproduciendo la canción original.';
-        });
-        unawaited(_cargarPortada());
         try {
           await _audioService.detener();
         } catch (error) {
@@ -519,7 +510,18 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           }
           return;
         }
+        // La portada se descarga antes de mostrar el reproductor para que
+        // aparezca junto con la canción.
+        await _cargarPortada();
         if (!mounted) return;
+        setState(() {
+          _ganar(
+            titulo: resultado.titulo ?? answer,
+            artista: resultado.artista,
+          );
+          _correct = true;
+          _message = '¡Correcto! Reproduciendo la canción original.';
+        });
         // Sin await: la canción sigue sonando en el reproductor y la pantalla
         // queda libre (si no, "Comprobando respuesta" duraba toda la canción).
         unawaited(_playSong('fullSong', replaceCurrent: true));
@@ -606,8 +608,18 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     try {
       final url = await ref
           .read(firebaseGameRepositoryProvider)
-          .obtenerUrlAudio(gameId: widget.gameId, tipo: 'cover');
-      if (mounted) setState(() => _portadaUrl = url);
+          .obtenerUrlAudio(gameId: widget.gameId, tipo: 'cover')
+          .timeout(const Duration(seconds: 4));
+      if (!mounted) return;
+      // Se baja a la caché de imágenes antes de mostrarla; si no existe o
+      // tarda más de 4 s se sigue con el disco en su lugar.
+      var cargada = true;
+      await precacheImage(
+        NetworkImage(url),
+        context,
+        onError: (_, _) => cargada = false,
+      ).timeout(const Duration(seconds: 4), onTimeout: () => cargada = false);
+      if (mounted && cargada) _portadaUrl = url;
     } catch (error) {
       // Sin portada subida se muestra el disco; no es un error para el jugador.
       debugPrint('No se pudo cargar la portada: $error');
@@ -853,62 +865,59 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           : comprado || _melodyFound
           ? 'Escuchar ${instrumento.nombre}'
           : 'Comprar y escuchar ${instrumento.nombre}',
-      child: Card(
-        margin: EdgeInsets.zero,
-        clipBehavior: Clip.antiAlias,
-        color: Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(radioVidrio),
-          side: BorderSide(
-            color: comprado ? scheme.primary : AppColors.cloudEdge,
-            width: comprado ? 2 : 1.2,
-          ),
-        ),
-        child: Ink(
-          decoration: BoxDecoration(
-            gradient: fondoConAcento(colorDificultad(widget.nivel.dificultad)),
-          ),
-          child: InkWell(
-            onTap: disponible ? () => _buyAndPlay(instrumento) : null,
-            child: Opacity(
-              opacity: disponible ? 1 : 0.45,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                // Con letra grande del sistema se encoge en vez de desbordarse.
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        _emojiDe(instrumento.tipo),
-                        style: const TextStyle(fontSize: 40),
-                      ),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          instrumento.nombre,
-                          style: text.titleMedium,
+      child: Vidrio(
+        tinte: colorDificultad(widget.nivel.dificultad),
+        borde: comprado ? scheme.primary : null,
+        // El Stack de Vidrio afloja las restricciones; expandir hace que toda
+        // la casilla responda al toque y el contenido quede centrado.
+        child: SizedBox.expand(
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              onTap: disponible ? () => _buyAndPlay(instrumento) : null,
+              child: Opacity(
+                opacity: disponible ? 1 : 0.45,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 8,
+                  ),
+                  // Con letra grande del sistema se encoge en vez de desbordarse.
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _emojiDe(instrumento.tipo),
+                          style: const TextStyle(fontSize: 40),
                         ),
-                      ),
-                      if (precio != null)
                         FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
-                            '\$${formatearMiles(precio)}',
-                            style: text.titleSmall?.copyWith(
-                              color: scheme.primary,
-                              fontWeight: FontWeight.w700,
-                            ),
+                            instrumento.nombre,
+                            style: text.titleMedium,
                           ),
                         ),
-                      Icon(
-                        comprado || _melodyFound
-                            ? Icons.play_arrow
-                            : Icons.shopping_cart,
-                        size: 26,
-                      ),
-                    ],
+                        if (precio != null)
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              '\$${formatearMiles(precio)}',
+                              style: text.titleSmall?.copyWith(
+                                color: scheme.primary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        Icon(
+                          comprado || _melodyFound
+                              ? Icons.play_arrow
+                              : Icons.shopping_cart,
+                          size: 26,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

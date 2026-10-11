@@ -226,8 +226,8 @@ Gradient fondoConAcento(Color acento, {double opacidad = 0.8}) {
   );
 }
 
-/// Vidrio líquido: desenfoca lo de atrás bajo un blanco translúcido, con
-/// borde de luz y sombra suave para que la tarjeta se marque.
+/// Vidrio líquido: desenfoca lo de atrás bajo un blanco translúcido, con un
+/// brillo arriba (reflejo), borde de luz y sombra suave.
 class Vidrio extends StatelessWidget {
   const Vidrio({
     super.key,
@@ -235,12 +235,14 @@ class Vidrio extends StatelessWidget {
     this.radio = radioVidrio,
     this.tinte,
     this.borde,
+    this.padding,
   });
 
   final Widget child;
   final double radio;
   final Color? tinte;
   final Color? borde;
+  final EdgeInsetsGeometry? padding;
 
   @override
   Widget build(BuildContext context) {
@@ -251,7 +253,7 @@ class Vidrio extends StatelessWidget {
       child: ClipRRect(
         borderRadius: forma,
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
           child: DecoratedBox(
             decoration: BoxDecoration(
               borderRadius: forma,
@@ -260,21 +262,44 @@ class Vidrio extends StatelessWidget {
                 end: Alignment.bottomRight,
                 colors: [
                   Color.alphaBlend(
-                    base.withValues(alpha: 0.25),
-                    AppColors.paperWhite.withValues(alpha: 0.85),
+                    base.withValues(alpha: 0.22),
+                    AppColors.paperWhite.withValues(alpha: 0.68),
                   ),
                   Color.alphaBlend(
-                    base.withValues(alpha: 0.2),
-                    AppColors.paperWhite.withValues(alpha: 0.55),
+                    base.withValues(alpha: 0.16),
+                    AppColors.paperWhite.withValues(alpha: 0.32),
                   ),
                 ],
               ),
               border: Border.all(
                 color: borde ?? AppColors.paperWhite.withValues(alpha: 0.95),
-                width: borde == null ? 1.2 : 2,
+                width: borde == null ? 1.4 : 2,
               ),
             ),
-            child: child,
+            child: Stack(
+              children: [
+                // Reflejo: franja clara que se desvanece hacia abajo.
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: forma,
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          stops: const [0, 0.35],
+                          colors: [
+                            AppColors.paperWhite.withValues(alpha: 0.55),
+                            AppColors.paperWhite.withValues(alpha: 0),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(padding: padding ?? EdgeInsets.zero, child: child),
+              ],
+            ),
           ),
         ),
       ),
@@ -574,4 +599,87 @@ class _BarrasPainter extends CustomPainter {
   @override
   bool shouldRepaint(_BarrasPainter oldDelegate) =>
       oldDelegate.t != t || oldDelegate.color != color;
+}
+
+/// Banda animada: los instrumentos se mecen al ritmo y sueltan notas que
+/// suben y se desvanecen. Llena el espacio libre bajo la lista de niveles.
+class BandaMusical extends StatefulWidget {
+  const BandaMusical({super.key, this.color = AppColors.signalOrange});
+
+  final Color color;
+
+  @override
+  State<BandaMusical> createState() => _BandaMusicalState();
+}
+
+class _BandaMusicalState extends State<BandaMusical>
+    with SingleTickerProviderStateMixin {
+  late final _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2400),
+  )..repeat();
+
+  static const _instrumentos = ['🪗', '🥁', '🎸', '🎵'];
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+    child: LayoutBuilder(
+      builder: (context, espacio) {
+        final tamano = min(44.0, espacio.maxHeight * 0.38);
+        return AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            final t = _controller.value;
+            return Stack(
+              children: [
+                for (var i = 0; i < _instrumentos.length; i++) ...[
+                  // Nota que sube desde cada instrumento, desfasada.
+                  for (final desfase in [0.0, 0.5])
+                    _nota(i, (t * 2 + i * 0.27 + desfase) % 1, espacio, tamano),
+                  Align(
+                    alignment: Alignment(-0.75 + i * 0.5, 0.85),
+                    child: Transform.translate(
+                      offset: Offset(
+                        0,
+                        -sin(2 * pi * (t * 2 + i * 0.25)).abs() * tamano * 0.25,
+                      ),
+                      child: Transform.rotate(
+                        angle: sin(2 * pi * (t + i * 0.25)) * 0.12,
+                        child: Text(
+                          _instrumentos[i],
+                          style: TextStyle(fontSize: tamano),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
+        );
+      },
+    ),
+  );
+
+  Widget _nota(int i, double avance, BoxConstraints espacio, double tamano) {
+    final x = -0.75 + i * 0.5 + sin(avance * 2 * pi) * 0.08;
+    final y = 0.6 - avance * 1.6;
+    return Align(
+      alignment: Alignment(x, y),
+      child: Opacity(
+        opacity: (1 - avance).clamp(0.0, 1.0) * 0.8,
+        child: Icon(
+          i.isEven ? Icons.music_note_rounded : Icons.audiotrack_rounded,
+          size: tamano * 0.5,
+          color: widget.color,
+        ),
+      ),
+    );
+  }
 }

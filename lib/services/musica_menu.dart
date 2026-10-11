@@ -14,7 +14,7 @@ class MusicaMenu with WidgetsBindingObserver {
 
   static const _ruta =
       '/storage/v1/object/public/music_menu/music_menu/intro.mp3';
-  static const _volumen = 0.10;
+  static const _volumen = 0.05;
 
   final AudioService _cache;
   AudioPlayer? _player;
@@ -32,8 +32,7 @@ class MusicaMenu with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     try {
       _silenciada = await (await _archivoSilencio()).exists();
-      // shortcut: se descarga una vez y queda en caché; si cambias intro.mp3,
-      // borra los datos de la app o cambia la clave para volver a bajarla.
+
       final file = await _cache.descargarYGuardar(
         '$_supabaseUrl$_ruta',
         'menu:intro',
@@ -95,7 +94,7 @@ class MusicaMenu with WidgetsBindingObserver {
     } else {
       if (!player.playing) {
         unawaited(player.setVolume(0));
-        // play() termina recién al pausar; no se espera.
+
         unawaited(player.play());
       }
       _fundir(player, _volumen);
