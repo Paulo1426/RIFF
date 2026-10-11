@@ -589,50 +589,54 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       child: Card(
         margin: EdgeInsets.zero,
         clipBehavior: Clip.antiAlias,
+        color: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radioVidrio),
           side: BorderSide(
-            color: comprado
-                ? scheme.primary
-                : AppColors.purePaper.withValues(alpha: 0.85),
-            width: comprado ? 2 : 1,
+            color: comprado ? scheme.primary : AppColors.cloudEdge,
+            width: comprado ? 2 : 1.2,
           ),
         ),
-        child: InkWell(
-          onTap: disponible ? () => _buyAndPlay(instrumento) : null,
-          child: Opacity(
-            opacity: disponible ? 1 : 0.45,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  Text(
-                    _emojiDe(instrumento.tipo),
-                    style: const TextStyle(fontSize: 40),
-                  ),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(instrumento.nombre, style: text.titleMedium),
-                  ),
-                  if (precio != null)
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: fondoConAcento(colorDificultad(widget.nivel.dificultad)),
+          ),
+          child: InkWell(
+            onTap: disponible ? () => _buyAndPlay(instrumento) : null,
+            child: Opacity(
+              opacity: disponible ? 1 : 0.45,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Text(
+                      _emojiDe(instrumento.tipo),
+                      style: const TextStyle(fontSize: 40),
+                    ),
                     FittedBox(
                       fit: BoxFit.scaleDown,
-                      child: Text(
-                        '\$${formatearMiles(precio)}',
-                        style: text.titleSmall?.copyWith(
-                          color: scheme.primary,
-                          fontWeight: FontWeight.w700,
+                      child: Text(instrumento.nombre, style: text.titleMedium),
+                    ),
+                    if (precio != null)
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '\$${formatearMiles(precio)}',
+                          style: text.titleSmall?.copyWith(
+                            color: scheme.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
+                    Icon(
+                      comprado || _melodyFound
+                          ? Icons.play_arrow
+                          : Icons.shopping_cart,
+                      size: 26,
                     ),
-                  Icon(
-                    comprado || _melodyFound
-                        ? Icons.play_arrow
-                        : Icons.shopping_cart,
-                    size: 26,
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -653,8 +657,23 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     child: Scaffold(
       appBar: AppBar(
         title: Text('Nivel ${widget.numeroVisible ?? widget.nivel.numero}'),
+        actions: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 250),
+            child: _playing
+                ? Padding(
+                    padding: const EdgeInsets.only(right: 16),
+                    child: BarrasSonido(
+                      activo: !_paused,
+                      color: colorDificultad(widget.nivel.dificultad),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
       ),
       body: FondoRiff(
+        acento: colorDificultad(widget.nivel.dificultad),
         child: ConCarga(
           cargando: _sending || _avanzando,
           texto: _avanzando

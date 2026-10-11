@@ -62,7 +62,9 @@ class InstruccionesDialog extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     '¿Cómo funciona?',
-                    style: text.bodyLarge?.copyWith(color: AppColors.ash),
+                    style: text.bodyLarge?.copyWith(
+                      color: AppColors.slatePencil,
+                    ),
                   ),
                 ],
               ),
@@ -140,7 +142,7 @@ class InstruccionesDialog extends StatelessWidget {
                             ),
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(40),
-                              border: Border.all(color: AppColors.charcoal),
+                              border: Border.all(color: AppColors.graphiteInk),
                             ),
                             child: Text(
                               '\$1.000.000',
@@ -230,7 +232,12 @@ class _Paso extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('$numero', style: text.displaySmall?.copyWith(height: 1)),
+            Text(
+              '$numero',
+              style: text.headlineLarge?.copyWith(
+                color: AppColors.signalOrange,
+              ),
+            ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -247,7 +254,7 @@ class _Paso extends StatelessWidget {
                           ),
                         ),
                       ),
-                      Icon(icono, color: AppColors.ash),
+                      Icon(icono, color: AppColors.slatePencil),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -277,13 +284,14 @@ class _Etiqueta extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
     decoration: BoxDecoration(
-      color: AppColors.khakiPaper,
+      color: AppColors.paperWhite,
+      border: Border.all(color: AppColors.cloudEdge),
       borderRadius: BorderRadius.circular(999),
     ),
     child: Text(
       texto,
       style: Theme.of(context).textTheme.labelLarge?.copyWith(
-        color: AppColors.charcoal,
+        color: AppColors.graphiteInk,
         fontWeight: FontWeight.w700,
       ),
     ),
@@ -307,7 +315,7 @@ class _Vineta extends StatelessWidget {
           child: Icon(
             icono,
             size: icono == Icons.circle ? 8 : 16,
-            color: AppColors.inkStone,
+            color: AppColors.graphiteInk,
           ),
         ),
         const SizedBox(width: 8),

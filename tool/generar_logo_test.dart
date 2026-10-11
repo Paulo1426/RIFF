@@ -9,11 +9,13 @@ import 'dart:ui' as ui;
 import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const cream = Color(0xFFF4F1EC);
+const cream = Color(0xFFE3F1FE);
 
 void main() {
   test('genera el logo de Riff', () async {
-    final fuente = File('tool/riff_logo_fuente.png').readAsBytesSync();
+    final fuente = await quitarFondoNegro(
+      File('tool/riff_logo_fuente.png').readAsBytesSync(),
+    );
 
     // El códec reescala con buen filtrado; dibujar la imagen grande en
     // tamaños chicos (48px) la dejaría pixelada.
@@ -97,6 +99,36 @@ void main() {
       await conLogo('$launch/LaunchImage$sufijo.png', size, size, tamano: 1);
     }
   });
+}
+
+/// El logo viene sobre negro puro: vuelve transparente el negro conectado al
+/// borde. El contorno azul oscuro del dibujo no es (0,0,0) y se conserva.
+Future<Uint8List> quitarFondoNegro(Uint8List bytes) async {
+  final codec = await ui.instantiateImageCodec(bytes);
+  final image = (await codec.getNextFrame()).image;
+  final w = image.width;
+  final h = image.height;
+  final rgba = (await image.toByteData(
+    format: ui.ImageByteFormat.rawRgba,
+  ))!.buffer.asUint8List();
+  bool esFondo(int p) =>
+      rgba[p * 4 + 3] != 0 &&
+      max(rgba[p * 4], max(rgba[p * 4 + 1], rgba[p * 4 + 2])) <= 10;
+  final pendientes = <int>[
+    for (var x = 0; x < w; x++) ...[x, (h - 1) * w + x],
+    for (var y = 0; y < h; y++) ...[y * w, y * w + w - 1],
+  ];
+  while (pendientes.isNotEmpty) {
+    final p = pendientes.removeLast();
+    if (!esFondo(p)) continue;
+    rgba[p * 4 + 3] = 0;
+    final x = p % w;
+    if (x > 0) pendientes.add(p - 1);
+    if (x < w - 1) pendientes.add(p + 1);
+    if (p >= w) pendientes.add(p - w);
+    if (p < (h - 1) * w) pendientes.add(p + w);
+  }
+  return png(rgba, w, h, false);
 }
 
 Future<void> guardar(

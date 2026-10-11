@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -11,6 +12,7 @@ import '../providers/providers.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/offline_game_store.dart';
 import '../theme.dart';
+import 'carrusel_dificultades.dart';
 import 'game_screen.dart';
 import 'instrucciones_dialog.dart';
 
@@ -78,6 +80,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   String? _startingLevelId;
   final _offlineStore = OfflineGameStore();
   OfflineGameSnapshot? _offlineSnapshot;
+  // Dificultad mostrada en el centro; null = la dificultad activa.
+  Dificultad? _seleccionada;
 
   @override
   void initState() {
@@ -488,28 +492,112 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     return niveles;
   }
 
-  Future<void> _abrirDificultad(Dificultad dificultad) async {
-    final estado = _estado;
-    if (estado == null) return;
-    final progreso = estado.dificultades.firstWhere(
-      (item) => item.dificultad == dificultad,
+  Future<void> _verProgreso() {
+    final dificultades = _estado?.dificultades ?? const [];
+    final total = dificultades.fold<int>(0, (sum, item) => sum + item.total);
+    final completados = dificultades.fold<int>(
+      0,
+      (sum, item) => sum + item.completados,
     );
-
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => _DifficultyLevelsScreen(
-          dificultad: dificultad,
-          progreso: progreso,
-          niveles: () => _nivelesDe(dificultad),
-          onStart: (nivel, numeroVisible, haySiguiente, reemplazar) => _iniciar(
-            nivel,
-            numeroVisible: numeroVisible,
-            haySiguiente: haySiguiente,
-            reemplazar: reemplazar,
+    final porcentaje = total == 0 ? 0.0 : completados / total;
+    return showDialog<void>(
+      context: context,
+      builder: (context) {
+        final text = Theme.of(context).textTheme;
+        return AlertDialog(
+          title: const Text('Tu progreso'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '${(porcentaje * 100).round()}%',
+                textAlign: TextAlign.center,
+                style: text.displaySmall?.copyWith(
+                  color: AppColors.signalOrange,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(99),
+                child: LinearProgressIndicator(
+                  value: porcentaje,
+                  minHeight: 12,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '$completados de $total niveles completados',
+                textAlign: TextAlign.center,
+                style: text.bodyMedium?.copyWith(color: AppColors.slatePencil),
+              ),
+              const SizedBox(height: 20),
+              for (final item in dificultades) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _nombreDificultad(item.dificultad),
+                        style: text.titleSmall,
+                      ),
+                    ),
+                    Text(
+                      '${item.completados}/${item.total}',
+                      style: text.bodySmall,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(99),
+                  child: LinearProgressIndicator(
+                    value: item.total == 0 ? 0 : item.completados / item.total,
+                    minHeight: 6,
+                    color: colorDificultad(item.dificultad),
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+            ],
           ),
-        ),
-      ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        );
+      },
     );
+  }
+
+  /// Juega el nivel [index] y sigue con los siguientes mientras el jugador
+  /// elija "Siguiente nivel".
+  Future<void> _jugar(Dificultad dificultad, int index) async {
+    var actual = index;
+    var reemplazar = false;
+    while (mounted) {
+      final niveles = _nivelesDe(dificultad);
+      final puedeJugar =
+          actual < niveles.length &&
+          (niveles[actual].completado || niveles[actual].puedeIniciar);
+      if (!puedeJugar) {
+        // El nivel ganado sigue abierto esperando al siguiente: se cierra.
+        if (reemplazar) Navigator.of(context).pop();
+        break;
+      }
+      final resultado = await _iniciar(
+        niveles[actual].nivel,
+        numeroVisible: actual + 1,
+        haySiguiente: actual + 1 < niveles.length,
+        reemplazar: reemplazar,
+      );
+      if (!mounted) return;
+      setState(() {});
+      if (resultado != ResultadoNivel.siguiente) break;
+      actual++;
+      reemplazar = true;
+    }
   }
 
   Future<void> _cerrarSesion() async {
@@ -535,20 +623,43 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     final estado = _estado;
     return Scaffold(
       appBar: AppBar(
+        centerTitle: false,
+        titleSpacing: 16,
         title: Image.asset(
           'lib/assets/images/logo/riff_logo.png',
           height: 48,
           semanticLabel: 'Riff',
         ),
         actions: [
-          IconButton(
-            tooltip: 'Cerrar sesión',
-            onPressed: _cerrarSesion,
-            icon: const Icon(Icons.logout),
+          PopupMenuButton<VoidCallback>(
+            tooltip: 'Menú',
+            icon: const Icon(Icons.menu_rounded),
+            position: PopupMenuPosition.under,
+            onSelected: (accion) => accion(),
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: _verProgreso,
+                child: const ListTile(
+                  leading: Icon(Icons.insights_rounded),
+                  title: Text('Ver progreso'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _cerrarSesion,
+                child: const ListTile(
+                  leading: Icon(Icons.logout),
+                  title: Text('Cerrar sesión'),
+                ),
+              ),
+            ],
           ),
+          const SizedBox(width: 8),
         ],
       ),
       body: FondoRiff(
+        acento: estado == null
+            ? null
+            : colorDificultad(_seleccionada ?? estado.dificultadActiva),
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 350),
           child: _loading
@@ -560,11 +671,15 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
               ? _ErrorPanel(error: _error!, onRetry: _cargar)
               : estado == null
               ? const Center(child: Text('No se pudo cargar el progreso.'))
-              : _ContenidoProgreso(
+              : _PanelDificultades(
                   estado: estado,
+                  seleccionada: _seleccionada ?? estado.dificultadActiva,
                   esInvitado: widget.user.isAnonymous,
                   offlineMode: _offlineMode,
-                  onOpenDifficulty: _abrirDificultad,
+                  nivelesDe: _nivelesDe,
+                  onCambio: (dificultad) =>
+                      setState(() => _seleccionada = dificultad),
+                  onJugar: _jugar,
                   onRefresh: _cargar,
                 ),
         ),
@@ -573,212 +688,314 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   }
 }
 
-class _ContenidoProgreso extends StatelessWidget {
-  const _ContenidoProgreso({
+class _PanelDificultades extends StatelessWidget {
+  const _PanelDificultades({
     required this.estado,
+    required this.seleccionada,
+    required this.nivelesDe,
     required this.esInvitado,
     required this.offlineMode,
-    required this.onOpenDifficulty,
+    required this.onCambio,
+    required this.onJugar,
     required this.onRefresh,
   });
 
   final EstadoJuegoRemoto estado;
+  final Dificultad seleccionada;
+  final List<NivelAsignado> Function(Dificultad) nivelesDe;
   final bool esInvitado;
   final bool offlineMode;
-  final ValueChanged<Dificultad> onOpenDifficulty;
+  final ValueChanged<Dificultad> onCambio;
+  final void Function(Dificultad dificultad, int index) onJugar;
   final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
-    return RefreshIndicator(
-      onRefresh: onRefresh,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(
-            'Cada dificultad tiene cinco niveles activos. Completa los cinco para desbloquear la siguiente.',
-            style: Theme.of(context).textTheme.bodyLarge,
+    final aviso = offlineMode
+        ? 'Sin conexión: juegas con los niveles descargados; el progreso se '
+              'sincronizará al reconectarte.'
+        : null;
+    final dificultades = estado.dificultades;
+    return Column(
+      children: [
+        if (aviso != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: Text(
+              aviso,
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: AppColors.slatePencil),
+            ),
           ),
-          if (esInvitado) ...[
-            const SizedBox(height: 8),
-            const Text(
-              'Modo invitado: el progreso se guarda en este dispositivo y se sincroniza '
-              'cuando vuelvas a conectarte.',
-            ),
-          ],
-          if (offlineMode) ...[
-            const SizedBox(height: 8),
-            const Text(
-              'Sin conexión: estás jugando con los niveles descargados. '
-              'El progreso se sincronizará cuando vuelvas a conectarte.',
-            ),
-          ],
-          const SizedBox(height: 16),
-          for (final progreso in estado.dificultades)
-            Card(
-              // Vidrio teñido con el color de cada dificultad.
-              color:
-                  (progreso.desbloqueada
-                          ? _panelDe(progreso.dificultad)
-                          : AppColors.paleMist)
-                      .withValues(alpha: 0.6),
-              margin: const EdgeInsets.only(bottom: 12),
-              child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
+        Expanded(
+          child: SafeArea(
+            top: false,
+            // Con el aviso de invitado debajo, el margen inferior lo pone él.
+            bottom: !esInvitado,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: CarruselGiratorio(
+                itemCount: dificultades.length,
+                inicial: dificultades
+                    .indexWhere((item) => item.dificultad == seleccionada)
+                    .clamp(0, dificultades.length - 1),
+                onCambio: (index) => onCambio(dificultades[index].dificultad),
+                colorDe: (index) =>
+                    colorDificultad(dificultades[index].dificultad),
+                itemBuilder: (context, index, alFrente) => _TarjetaDificultad(
+                  progreso: dificultades[index],
+                  numero: index + 1,
+                  anterior: index == 0 ? null : dificultades[index - 1],
+                  niveles: nivelesDe(dificultades[index].dificultad),
+                  alFrente: alFrente,
+                  onJugar: (nivel) =>
+                      onJugar(dificultades[index].dificultad, nivel),
+                  onRefresh: onRefresh,
                 ),
-                titleTextStyle: Theme.of(context).textTheme.titleLarge,
-                subtitleTextStyle: Theme.of(context).textTheme.bodyMedium,
-                leading: Icon(
-                  progreso.desbloqueada ? Icons.lock_open : Icons.lock,
-                ),
-                title: Text(_nombreDificultad(progreso.dificultad)),
-                onTap: progreso.desbloqueada
-                    ? () => onOpenDifficulty(progreso.dificultad)
-                    : null,
-                subtitle: Text(
-                  progreso.desbloqueada
-                      ? progreso.total == 0
-                            ? 'Publica 5 niveles para habilitar esta dificultad'
-                            : '${progreso.completados}/${progreso.total} niveles completados'
-                                  '${progreso.total < 5 ? ' · Se requieren 5 niveles publicados para avanzar' : ''}'
-                      : 'Completa la dificultad anterior para desbloquearla',
-                ),
-                trailing: progreso.total > 0
-                    ? SizedBox(
-                        width: 72,
-                        child: LinearProgressIndicator(
-                          value: progreso.completados / progreso.total,
-                          backgroundColor: AppColors.purePaper.withValues(
-                            alpha: 0.6,
-                          ),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      )
-                    : null,
               ),
             ),
-          const SizedBox(height: 12),
-        ],
-      ),
+          ),
+        ),
+        // Solo los invitados ven el aviso; correo y Google no muestran nada.
+        if (esInvitado)
+          SafeArea(
+            top: false,
+            minimum: const EdgeInsets.only(bottom: 8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                'Modo invitado: el progreso se guarda en este dispositivo.',
+                textAlign: TextAlign.center,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppColors.slatePencil),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
 
-class _DifficultyLevelsScreen extends StatefulWidget {
-  const _DifficultyLevelsScreen({
-    required this.dificultad,
+/// Una "pantalla" del carrusel: la dificultad con su lista de niveles.
+class _TarjetaDificultad extends StatelessWidget {
+  const _TarjetaDificultad({
     required this.progreso,
+    required this.numero,
+    required this.anterior,
     required this.niveles,
-    required this.onStart,
+    required this.alFrente,
+    required this.onJugar,
+    required this.onRefresh,
   });
 
-  final Dificultad dificultad;
   final ProgresoDificultadRemoto progreso;
-  // Se vuelve a leer tras cada nivel para mostrar el progreso recargado.
-  final List<NivelAsignado> Function() niveles;
-  final Future<ResultadoNivel?> Function(
-    Nivel nivel,
-    int numeroVisible,
-    bool haySiguiente,
-    bool reemplazar,
-  )
-  onStart;
-
-  @override
-  State<_DifficultyLevelsScreen> createState() =>
-      _DifficultyLevelsScreenState();
-}
-
-class _DifficultyLevelsScreenState extends State<_DifficultyLevelsScreen> {
-  Future<void> _jugar(int index) async {
-    var actual = index;
-    var reemplazar = false;
-    while (mounted) {
-      final niveles = widget.niveles();
-      final puedeJugar =
-          actual < niveles.length &&
-          (niveles[actual].completado || niveles[actual].puedeIniciar);
-      if (!puedeJugar) {
-        // El nivel ganado sigue abierto esperando al siguiente: se cierra.
-        if (reemplazar) Navigator.of(context).pop();
-        break;
-      }
-      final resultado = await widget.onStart(
-        niveles[actual].nivel,
-        actual + 1,
-        actual + 1 < niveles.length,
-        reemplazar,
-      );
-      if (!mounted) return;
-      setState(() {});
-      if (resultado != ResultadoNivel.siguiente) break;
-      actual++;
-      reemplazar = true;
-    }
-  }
+  final int numero;
+  final ProgresoDificultadRemoto? anterior;
+  final List<NivelAsignado> niveles;
+  final bool alFrente;
+  final ValueChanged<int> onJugar;
+  final Future<void> Function() onRefresh;
 
   @override
   Widget build(BuildContext context) {
-    final dificultad = widget.dificultad;
-    final progreso = widget.progreso;
-    final niveles = widget.niveles();
-    return Scaffold(
-      appBar: AppBar(title: Text(_nombreDificultad(dificultad))),
-      body: FondoRiff(
-        child: niveles.isEmpty
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    progreso.total == 0
-                        ? 'Todavía no hay niveles disponibles para esta dificultad.'
-                        : 'No hay niveles completados para repetir.',
-                    textAlign: TextAlign.center,
+    final text = Theme.of(context).textTheme;
+    final color = colorDificultad(progreso.dificultad);
+    // La dificultad se puede ver siempre; sus niveles se abren al completar
+    // la anterior.
+    final bloqueada = !progreso.desbloqueada;
+    final cantidadBloqueados = progreso.total == 0 ? 5 : progreso.total;
+    return Vidrio(
+      radio: 28,
+      tinte: color,
+      borde: alFrente ? color : null,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Text(
+                  'DIFICULTAD',
+                  style: text.labelMedium?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 2,
                   ),
                 ),
-              )
-            : ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: niveles.length,
-                itemBuilder: (context, index) {
-                  final asignado = niveles[index];
-                  final canStart = asignado.completado || asignado.puedeIniciar;
-                  return Card(
-                    child: ListTile(
-                      title: Text('Nivel ${index + 1}'),
-                      subtitle: Text(
-                        asignado.completado
-                            ? 'Completado'
-                            : 'Canción por descubrir',
-                      ),
-                      trailing: asignado.completado
-                          ? OutlinedButton(
-                              onPressed: canStart ? () => _jugar(index) : null,
-                              child: const Text('Repetir'),
-                            )
-                          : canStart
-                          ? FilledButton(
-                              onPressed: () => _jugar(index),
-                              child: const Text('Jugar'),
-                            )
-                          : const Icon(Icons.lock_outline),
-                    ),
-                  );
-                },
+                const Spacer(),
+                Text(
+                  numero.toString().padLeft(2, '0'),
+                  style: text.labelMedium?.copyWith(
+                    color: AppColors.slatePencil,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _nombreDificultad(progreso.dificultad),
+              style: text.displaySmall?.copyWith(color: color),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              bloqueada
+                  ? 'Completa la dificultad ${_nombreDificultad(anterior?.dificultad ?? progreso.dificultad)} para desbloquear estos niveles'
+                  : progreso.total == 0
+                  ? 'Todavía no hay niveles publicados'
+                  : '${progreso.completados}/${progreso.total} niveles completados',
+              style: text.bodyMedium?.copyWith(color: AppColors.slatePencil),
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(99),
+              child: LinearProgressIndicator(
+                value: progreso.total == 0
+                    ? 0
+                    : progreso.completados / progreso.total,
+                minHeight: 6,
+                color: color,
               ),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: onRefresh,
+                child: ListView(
+                  padding: EdgeInsets.zero,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [
+                    if (bloqueada)
+                      for (var i = 0; i < cantidadBloqueados; i++)
+                        _TarjetaNivel(
+                          numero: i + 1,
+                          estado: 'Bloqueado',
+                          color: color,
+                          accion: const Padding(
+                            padding: EdgeInsets.all(8),
+                            child: Icon(Icons.lock_outline),
+                          ),
+                        )
+                    else if (niveles.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 24),
+                        child: Text(
+                          progreso.total == 0
+                              ? 'Todavía no hay niveles disponibles para esta dificultad.'
+                              : 'No hay niveles completados para repetir.',
+                          textAlign: TextAlign.center,
+                        ),
+                      )
+                    else
+                      for (var i = 0; i < niveles.length; i++)
+                        _tarjetaNivel(i, niveles[i], color),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _tarjetaNivel(int index, NivelAsignado asignado, Color color) {
+    final canStart = asignado.completado || asignado.puedeIniciar;
+    return _TarjetaNivel(
+      numero: index + 1,
+      color: color,
+      estado: asignado.completado
+          ? 'Completado'
+          : canStart
+          ? 'Canción por descubrir'
+          : 'Bloqueado',
+      accion: asignado.completado
+          ? OutlinedButton(
+              onPressed: () => onJugar(index),
+              child: const Text('Repetir'),
+            )
+          : canStart
+          ? FilledButton(
+              onPressed: () => onJugar(index),
+              child: const Text('Jugar'),
+            )
+          : const Padding(
+              padding: EdgeInsets.all(8),
+              child: Icon(Icons.lock_outline),
+            ),
     );
   }
 }
 
-// Cada dificultad tiene su panel de color, como las secciones de la guía.
-Color _panelDe(Dificultad dificultad) => switch (dificultad) {
-  Dificultad.facil => AppColors.sageMist,
-  Dificultad.medio => AppColors.mustardField,
-  Dificultad.avanzado => AppColors.lavenderWash,
-};
+class _TarjetaNivel extends StatelessWidget {
+  const _TarjetaNivel({
+    required this.numero,
+    required this.estado,
+    required this.color,
+    required this.accion,
+  });
+
+  final int numero;
+  final String estado;
+  final Color color;
+  final Widget accion;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final bloqueado = estado == 'Bloqueado';
+    // Sin desenfoque propio: ya está dentro del vidrio de la tarjeta.
+    return Opacity(
+      opacity: bloqueado ? 0.55 : 1,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
+        decoration: BoxDecoration(
+          gradient: fondoConAcento(color),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.cloudEdge, width: 1.2),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: color, width: 1.5),
+              ),
+              child: Text(
+                '$numero',
+                style: text.headlineSmall?.copyWith(color: color),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Nivel $numero', style: text.titleMedium),
+                  Text(
+                    estado,
+                    style: text.bodySmall?.copyWith(
+                      color: AppColors.slatePencil,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            accion,
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 String _nombreDificultad(Dificultad dificultad) {
   switch (dificultad) {
@@ -956,17 +1173,20 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                             'Adivina la canción: pon a prueba tu oído y descubre la melodía',
                             textAlign: TextAlign.center,
                             style: text.bodyLarge?.copyWith(
-                              color: AppColors.ash,
+                              color: AppColors.slatePencil,
                             ),
                           ),
                           const SizedBox(height: 24),
                           Container(
                             padding: const EdgeInsets.all(24),
                             decoration: BoxDecoration(
-                              color: AppColors.purePaper.withValues(alpha: 0.7),
+                              gradient: fondoConAcento(
+                                AppColors.signalOrange,
+                                opacidad: 0.75,
+                              ),
                               borderRadius: BorderRadius.circular(radioVidrio),
                               border: Border.all(
-                                color: AppColors.purePaper.withValues(
+                                color: AppColors.paperWhite.withValues(
                                   alpha: 0.85,
                                 ),
                               ),
@@ -1091,9 +1311,7 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                                         borderRadius: BorderRadius.circular(16),
                                       ),
                                     ),
-                                    icon: const Icon(
-                                      Icons.account_circle_outlined,
-                                    ),
+                                    icon: const _LogoGoogle(),
                                     label: const Text('Continuar con Google'),
                                   ),
                                   const SizedBox(height: 8),
@@ -1134,6 +1352,56 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
       ),
     );
   }
+}
+
+/// "G" de Google en sus cuatro colores, dibujada para no sumar una
+/// dependencia de SVG.
+class _LogoGoogle extends StatelessWidget {
+  const _LogoGoogle();
+
+  @override
+  Widget build(BuildContext context) =>
+      const CustomPaint(size: Size.square(20), painter: _GooglePainter());
+}
+
+class _GooglePainter extends CustomPainter {
+  const _GooglePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final r = size.shortestSide / 2;
+    final centro = size.center(Offset.zero);
+    final grosor = r * 0.38;
+    final aro = Rect.fromCircle(center: centro, radius: r - grosor / 2);
+    double grados(double g) => g * pi / 180;
+    // Ángulos en sentido horario desde las 3 en punto; la abertura de la G
+    // queda arriba a la derecha.
+    for (final (inicio, barrido, color) in [
+      (-40.0, -140.0, const Color(0xFFEA4335)), // rojo, arriba
+      (180.0, -45.0, const Color(0xFFFBBC05)), // amarillo, izquierda
+      (135.0, -95.0, const Color(0xFF34A853)), // verde, abajo
+      (40.0, -40.0, const Color(0xFF4285F4)), // azul, derecha
+    ]) {
+      canvas.drawArc(
+        aro,
+        grados(inicio),
+        grados(barrido),
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = grosor
+          ..color = color,
+      );
+    }
+    // Barra horizontal de la G.
+    canvas.drawRect(
+      Rect.fromLTWH(centro.dx, centro.dy - grosor / 2, r, grosor),
+      Paint()..color = const Color(0xFF4285F4),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_GooglePainter oldDelegate) => false;
 }
 
 String _nombreSesion(User user) {

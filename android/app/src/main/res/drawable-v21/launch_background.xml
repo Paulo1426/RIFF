@@ -2,7 +2,7 @@
 <!-- Splash de Riff: fondo crema y la imagen generada por tool/generar_logo_test.dart -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item>
-        <color android:color="#F4F1EC" />
+        <color android:color="#E3F1FE" />
     </item>
     <item>
         <bitmap
