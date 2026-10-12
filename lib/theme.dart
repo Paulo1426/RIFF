@@ -77,9 +77,14 @@ ThemeData buildAppTheme() {
     textStyle: s,
     fontSize: size,
     height: 1,
-    letterSpacing: -size * 0.025,
+    // Letras pixel separadas: más legibles que juntas.
+    letterSpacing: size * 0.04,
   );
-  TextStyle? peso(TextStyle? s, FontWeight w) => s?.copyWith(fontWeight: w);
+  // Manrope con un poco más de aire entre letras para leer mejor.
+  TextStyle? aire(TextStyle? s) =>
+      s?.copyWith(letterSpacing: (s.letterSpacing ?? 0) + 0.4);
+  TextStyle? peso(TextStyle? s, FontWeight w) =>
+      aire(s)?.copyWith(fontWeight: w);
   final textTheme = base
       .copyWith(
         displayLarge: pixel(base.displayLarge, 96),
@@ -94,6 +99,9 @@ ThemeData buildAppTheme() {
         labelLarge: peso(base.labelLarge, FontWeight.w600),
         bodyLarge: peso(base.bodyLarge, FontWeight.w400),
         bodyMedium: peso(base.bodyMedium, FontWeight.w400),
+        bodySmall: aire(base.bodySmall),
+        labelMedium: aire(base.labelMedium),
+        labelSmall: aire(base.labelSmall),
       )
       .apply(
         bodyColor: AppColors.graphiteInk,

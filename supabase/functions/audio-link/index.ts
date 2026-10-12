@@ -1,4 +1,5 @@
 import { createRemoteJWKSet, jwtVerify } from "https://esm.sh/jose@5.9.6";
+import { objectVersion } from "../_shared/storage_version.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -553,8 +554,15 @@ async function handleRequest(request: Request): Promise<Response> {
         fallbackPath: fallbackObjectPath,
       });
       url = await signedStorageUrl(bucket, fallbackObjectPath, expiresIn);
+      objectPath = fallbackObjectPath;
     }
-    return jsonResponse(200, { url, expiresIn });
+    const version = await objectVersion(
+      requiredEnv("SUPABASE_URL").replace(/\/+$/, ""),
+      requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
+      bucket,
+      objectPath,
+    );
+    return jsonResponse(200, { url, expiresIn, version });
   } catch (error) {
     if (error instanceof HttpError) {
       return jsonResponse(error.status, { error: error.message });

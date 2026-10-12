@@ -10,12 +10,14 @@ class LiquidGlassAppBar extends StatefulWidget implements PreferredSizeWidget {
   const LiquidGlassAppBar({
     super.key,
     this.title,
+    this.leading,
     this.actions,
     this.centerTitle,
     this.titleSpacing,
   });
 
   final Widget? title;
+  final Widget? leading;
   final List<Widget>? actions;
   final bool? centerTitle;
   final double? titleSpacing;
@@ -76,6 +78,7 @@ class _LiquidGlassAppBarState extends State<LiquidGlassAppBar> {
           primary: false,
           backgroundColor: Colors.transparent,
           title: widget.title,
+          leading: widget.leading,
           actions: widget.actions,
           centerTitle: widget.centerTitle,
           titleSpacing: widget.titleSpacing,

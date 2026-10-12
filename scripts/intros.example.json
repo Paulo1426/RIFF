@@ -1,0 +1,19 @@
+{
+  "intros": [
+    {
+      "id": "cancion-01",
+      "titulo": "Nombre de la canción",
+      "artista": "Artista",
+      "respuesta": "Nombre de la canción"
+    },
+    {
+      "id": "cancion-02",
+      "titulo": "Otra canción",
+      "artista": "Otro artista",
+      "respuesta": "Otra canción",
+      "introAudioPath": "cancion-02/mi_intro.mp3",
+      "fullAudioPath": "cancion-02/mi_cancion.mp3",
+      "portadaPath": "cancion-02/portada.png"
+    }
+  ]
+}

@@ -16,12 +16,12 @@ import '../services/musica_menu.dart';
 import '../services/offline_game_store.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
 import '../animations/liquid_ripple_effect.dart';
-import '../animations/liquid_shimmer.dart';
 import '../animations/sound_wave_animation.dart';
 import '../theme.dart';
 import '../widgets/liquid_glass/liquid_glass_appbar.dart';
 import '../widgets/liquid_glass/liquid_glass_button.dart';
 import '../widgets/liquid_glass/liquid_glass_card.dart';
+import '../widgets/reproductor_cancion.dart';
 
 enum ResultadoNivel { terminar, siguiente }
 
@@ -304,7 +304,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       final repository = ref.read(firebaseGameRepositoryProvider);
       final audio = await Future.wait(
         instruments.map((instrument) async {
-          final cacheKey = 'level:${widget.nivel.id}:stem:${instrument.id}';
           final offlinePath = widget.offlineLevel?.audioPaths[instrument.id];
           if (offlinePath != null && await File(offlinePath).exists()) {
             return (Uri.file(offlinePath).toString(), null);
@@ -314,16 +313,17 @@ class _GameScreenState extends ConsumerState<GameScreen> {
               'El audio ${instrument.nombre} no está descargado en este dispositivo',
             );
           }
-          final cachedFile = await _audioService.cachedFile(cacheKey);
-          if (cachedFile != null) {
-            return (Uri.file(cachedFile.path).toString(), null);
-          }
-          final url = await repository.obtenerUrlAudio(
+          final audio = await repository.obtenerAudio(
             gameId: widget.gameId,
             tipo: 'stem',
             instrumento: instrument.id,
           );
-          return (url, cacheKey);
+          // Con la versión en la clave, un archivo reemplazado se vuelve a
+          // bajar; si no cambió, se usa el ya guardado.
+          return (
+            audio.url,
+            'level:${widget.nivel.id}:stem:${instrument.id}:${audio.version}',
+          );
         }),
       );
       if (!mounted) return;
@@ -365,29 +365,24 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         final offlinePath = widget.offlineLevel?.instrumentalAudioPath;
         if (offlinePath != null && await File(offlinePath).exists()) {
           url = Uri.file(offlinePath).toString();
-        } else {
-          final instrumentalCacheKey =
-              'song:${widget.nivel.cancionId}:instrumentalSong';
-          final cachedFile = await _audioService.cachedFile(
-            instrumentalCacheKey,
+        } else if (_playingOffline) {
+          throw StateError(
+            'La pista instrumental no está descargada en este dispositivo',
           );
-          if (cachedFile != null) {
-            url = Uri.file(cachedFile.path).toString();
-          } else if (_playingOffline) {
-            throw StateError(
-              'La pista instrumental no está descargada en este dispositivo',
-            );
-          } else {
-            url = await ref
-                .read(firebaseGameRepositoryProvider)
-                .obtenerUrlAudio(gameId: widget.gameId, tipo: type);
-            cacheKey = instrumentalCacheKey;
-          }
+        } else {
+          final audio = await ref
+              .read(firebaseGameRepositoryProvider)
+              .obtenerAudio(gameId: widget.gameId, tipo: type);
+          url = audio.url;
+          cacheKey =
+              'song:${widget.nivel.cancionId}:instrumentalSong:${audio.version}';
         }
       } else {
-        url = await ref
-            .read(firebaseGameRepositoryProvider)
-            .obtenerUrlAudio(gameId: widget.gameId, tipo: type);
+        url =
+            (await ref
+                    .read(firebaseGameRepositoryProvider)
+                    .obtenerAudio(gameId: widget.gameId, tipo: type))
+                .url;
       }
       if (!mounted) return;
       await _audioService.reproducir(
@@ -530,6 +525,15 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           _correct = true;
           _message = '¡Correcto! Reproduciendo la canción original.';
         });
+        if (resultado.monedas > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '🪙 +${resultado.monedas} monedas para Adivina la intro',
+              ),
+            ),
+          );
+        }
         // Sin await: la canción sigue sonando en el reproductor y la pantalla
         // queda libre (si no, "Comprobando respuesta" duraba toda la canción).
         unawaited(_playSong('fullSong', replaceCurrent: true));
@@ -615,10 +619,12 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
   Future<void> _cargarPortada() async {
     try {
-      final url = await ref
-          .read(firebaseGameRepositoryProvider)
-          .obtenerUrlAudio(gameId: widget.gameId, tipo: 'cover')
-          .timeout(const Duration(seconds: 4));
+      final url =
+          (await ref
+                  .read(firebaseGameRepositoryProvider)
+                  .obtenerAudio(gameId: widget.gameId, tipo: 'cover')
+                  .timeout(const Duration(seconds: 4)))
+              .url;
       if (!mounted) return;
       // Se baja a la caché de imágenes antes de mostrarla; si no existe o
       // tarda más de 4 s se sigue con el disco en su lugar.
@@ -643,246 +649,35 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     }
   }
 
-  Widget _portada(double lado, Color color) {
-    final disco = ColoredBox(
-      color: color.withValues(alpha: 0.18),
-      child: Center(
-        child: DiscoGirando(size: lado * 0.62, girando: _playing && !_paused),
-      ),
-    );
-    final url = _portadaUrl;
-    if (url == null) return disco;
-    return Image.network(
-      url,
-      fit: BoxFit.cover,
-      errorBuilder: (_, _, _) => disco,
-      loadingBuilder: (context, child, progreso) =>
-          progreso == null ? child : disco,
-    );
-  }
-
   /// Pantalla al acertar: reproductor de la canción con su portada y, debajo,
   /// los botones para terminar o pasar al siguiente nivel.
-  Widget _vistaGanada() {
-    final text = Theme.of(context).textTheme;
-    final color = colorDificultad(widget.nivel.dificultad);
-    final duracion = _playing
+  Widget _vistaGanada() => ReproductorCancion(
+    color: colorDificultad(widget.nivel.dificultad),
+    titulo: _titulo,
+    artista: _artista,
+    insignia:
+        '¡ADIVINASTE! · NIVEL ${widget.numeroVisible ?? widget.nivel.numero}',
+    portada: _portadaUrl == null ? null : NetworkImage(_portadaUrl!),
+    reproduciendo: _playing,
+    enPausa: _paused,
+    posicion: _playing ? _audioService.posicion : Duration.zero,
+    duracion: _playing
         ? (_audioService.duracion ?? Duration.zero)
-        : Duration.zero;
-    final posicion = _playing ? _audioService.posicion : Duration.zero;
-    final total = max(duracion.inMilliseconds, 1).toDouble();
-    return LayoutBuilder(
-      builder: (context, espacio) {
-        final lado = min(
-          espacio.maxWidth - 48,
-          espacio.maxHeight * 0.36,
-        ).clamp(160.0, 420.0);
-        final vista = SingleChildScrollView(
-          padding: EdgeInsets.symmetric(
-            horizontal: max(24, (espacio.maxWidth - 520) / 2),
-            vertical: 16,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: LiquidGlassCard(
-                  borderRadius: 26,
-                  tintColor: color,
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(18),
-                      child: SizedBox.square(
-                        dimension: lado,
-                        child: _portada(lado, color),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _titulo ?? 'Canción descubierta',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: text.headlineMedium,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _artista ?? 'Artista desconocido',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: text.bodyLarge?.copyWith(
-                            color: AppColors.slatePencil,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Icon(Icons.check_circle_rounded, color: color, size: 32),
-                ],
-              ),
-              const SizedBox(height: 12),
-              // Insignia de acierto con brillo.
-              Align(
-                alignment: Alignment.centerLeft,
-                child: LiquidShimmer(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(99),
-                      border: Border.all(color: color.withValues(alpha: 0.6)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.music_note_rounded,
-                          color: tonoTexto(color),
-                          size: 18,
-                        ),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Text(
-                            '¡ADIVINASTE! · NIVEL ${widget.numeroVisible ?? widget.nivel.numero}',
-                            style: text.labelMedium?.copyWith(
-                              color: tonoTexto(color),
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.5,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  activeTrackColor: color,
-                  inactiveTrackColor: AppColors.cloudEdge,
-                  thumbColor: color,
-                  overlayColor: color.withValues(alpha: 0.15),
-                  trackHeight: 4,
-                ),
-                child: Slider(
-                  value: posicion.inMilliseconds.clamp(0, total).toDouble(),
-                  max: total,
-                  onChanged: _playing
-                      ? (valor) => _audioService.buscar(
-                          Duration(milliseconds: valor.round()),
-                        )
-                      : null,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(_tiempo(posicion), style: text.bodySmall),
-                    Text(_tiempo(duracion), style: text.bodySmall),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    tooltip: 'Desde el inicio',
-                    iconSize: 34,
-                    onPressed: _playingOffline
-                        ? null
-                        : () => _playing
-                              ? _audioService.buscar(Duration.zero)
-                              : _playSong('fullSong'),
-                    icon: const Icon(Icons.skip_previous_rounded),
-                  ),
-                  const SizedBox(width: 16),
-                  IconButton.filled(
-                    tooltip: _playing && !_paused ? 'Pausar' : 'Reproducir',
-                    iconSize: 44,
-                    style: IconButton.styleFrom(
-                      backgroundColor: color,
-                      // Ícono oscuro sobre colores claros (amarillo, verde).
-                      foregroundColor:
-                          ThemeData.estimateBrightnessForColor(color) ==
-                              Brightness.light
-                          ? AppColors.graphiteInk
-                          : AppColors.paperWhite,
-                      shape: const CircleBorder(),
-                      padding: const EdgeInsets.all(14),
-                    ),
-                    onPressed: _playingOffline ? null : _playPauseFinal,
-                    icon: Icon(
-                      _playing && !_paused
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  IconButton(
-                    tooltip: 'Detener',
-                    iconSize: 34,
-                    onPressed: _playing ? () => _audioService.detener() : null,
-                    icon: const Icon(Icons.stop_rounded),
-                  ),
-                ],
-              ),
-              if (_playingOffline)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    'La canción original se reproducirá cuando tengas conexión a internet.',
-                    textAlign: TextAlign.center,
-                    style: text.bodySmall?.copyWith(
-                      color: AppColors.slatePencil,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 28),
-              _botonesFinales(),
-            ],
-          ),
-        );
-        return Stack(
-          children: [
-            vista,
-            // Confeti verde/menta que cae desde arriba al acertar.
-            Align(
-              alignment: Alignment.topCenter,
-              child: ConfettiWidget(
-                confettiController: _confeti,
-                blastDirectionality: BlastDirectionality.explosive,
-                numberOfParticles: 24,
-                maxBlastForce: 18,
-                minBlastForce: 6,
-                gravity: 0.25,
-                colors: const [
-                  AppColors.verde,
-                  Color(0xFFB8F2D0),
-                  Color(0xFF7BE0A6),
-                  AppColors.paperWhite,
-                ],
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
+        : Duration.zero,
+    onReproducirPausar: _playingOffline ? null : _playPauseFinal,
+    onDesdeInicio: _playingOffline
+        ? null
+        : () => _playing
+              ? _audioService.buscar(Duration.zero)
+              : _playSong('fullSong'),
+    onDetener: _playing ? () => _audioService.detener() : null,
+    onBuscar: _playing ? _audioService.buscar : null,
+    confeti: _confeti,
+    nota: _playingOffline
+        ? 'La canción original se reproducirá cuando tengas conexión a internet.'
+        : null,
+    botones: _botonesFinales(),
+  );
 
   Widget _botonesFinales() => Row(
     children: [
@@ -1171,6 +966,3 @@ String _emojiDe(TipoInstrumento tipo) => switch (tipo) {
   TipoInstrumento.guitarra => '🎸',
   TipoInstrumento.bajo => '🎵',
 };
-
-String _tiempo(Duration d) =>
-    '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';

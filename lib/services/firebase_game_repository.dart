@@ -146,6 +146,9 @@ class FirebaseGameRepository {
   final String _supabaseUrl;
   final String _supabaseAnonKey;
 
+  // Usuario con sesión; null si no hay.
+  String? get uid => _auth.currentUser?.uid;
+
   Future<EstadoJuegoRemoto> cargarEstado() async {
     final response = await _post({'action': 'progress'});
     return EstadoJuegoRemoto.fromJson(
@@ -202,6 +205,7 @@ class FirebaseGameRepository {
       correcta: response['correct'] as bool,
       titulo: response['titulo'] as String?,
       artista: response['artista'] as String?,
+      monedas: (response['monedas'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -217,7 +221,8 @@ class FirebaseGameRepository {
     return ResultadoCompraInstrumento.fromJson(response);
   }
 
-  Future<String> obtenerUrlAudio({
+  /// URL firmada y versión del archivo (cambia si se reemplaza en Storage).
+  Future<({String url, String version})> obtenerAudio({
     required String gameId,
     required String tipo,
     String? instrumento,
@@ -227,6 +232,60 @@ class FirebaseGameRepository {
       'type': tipo,
       'instrument': instrumento,
     }, functionName: 'audio-link');
+    final url = response['url'];
+    if (url is! String || url.isEmpty) {
+      throw const FormatException('El servicio no devolvió una URL de audio');
+    }
+    return (url: url, version: response['version'] as String? ?? '');
+  }
+
+  Future<EstadoIntros> cargarIntros() async =>
+      EstadoIntros.fromJson(await _post({'action': 'introState'}));
+
+  /// Gasta una moneda y saca una intro al azar; `nueva` trae su id.
+  Future<EstadoIntros> sacarIntro() async =>
+      EstadoIntros.fromJson(await _post({'action': 'drawIntro'}));
+
+  Future<ResultadoRespuesta> enviarRespuestaIntro({
+    required String introId,
+    required String respuesta,
+  }) async {
+    final response = await _post({
+      'action': 'submitIntroAnswer',
+      'introId': introId,
+      'answer': respuesta,
+    });
+    return ResultadoRespuesta(
+      correcta: response['correct'] as bool,
+      titulo: response['titulo'] as String?,
+      artista: response['artista'] as String?,
+    );
+  }
+
+  Future<Map<String, dynamic>> descargarPaqueteIntros() =>
+      _post({'action': 'introOfflineBundle'});
+
+  Future<void> sincronizarIntroOffline({
+    required String introId,
+    required String respuesta,
+  }) async {
+    await _post({
+      'action': 'completeOfflineIntro',
+      'introId': introId,
+      'answer': respuesta,
+    });
+  }
+
+  /// [tipo]: 'intro', 'fullSong' o 'cover'.
+  Future<String> obtenerUrlIntro({
+    required String introId,
+    required String tipo,
+  }) async {
+    final response = await _post({
+      'action': 'introAudio',
+      'introId': introId,
+      'type': tipo,
+    });
     final url = response['url'];
     if (url is! String || url.isEmpty) {
       throw const FormatException('El servicio no devolvió una URL de audio');
@@ -282,9 +341,72 @@ class FirebaseGameRepository {
 
 /// Resultado de enviar una respuesta; al acertar trae la canción revelada.
 class ResultadoRespuesta {
-  const ResultadoRespuesta({required this.correcta, this.titulo, this.artista});
+  const ResultadoRespuesta({
+    required this.correcta,
+    this.titulo,
+    this.artista,
+    this.monedas = 0,
+  });
 
   final bool correcta;
   final String? titulo;
   final String? artista;
+  // Monedas ganadas para "Adivina la intro" (0 al repetir un nivel).
+  final int monedas;
+}
+
+enum EstadoIntro { desbloqueada, completada }
+
+/// Una intro ya obtenida, numerada en el orden en que salió.
+class IntroAsignada {
+  const IntroAsignada({
+    required this.id,
+    required this.numero,
+    required this.estado,
+    this.titulo,
+    this.artista,
+  });
+
+  final String id;
+  final int numero;
+  final EstadoIntro estado;
+  // Solo llegan cuando la intro ya fue adivinada.
+  final String? titulo;
+  final String? artista;
+
+  factory IntroAsignada.fromJson(Map<String, dynamic> json) => IntroAsignada(
+    id: json['id'] as String,
+    numero: (json['numero'] as num).toInt(),
+    estado: EstadoIntro.values.byName(json['estado'] as String),
+    titulo: json['titulo'] as String?,
+    artista: json['artista'] as String?,
+  );
+}
+
+class EstadoIntros {
+  const EstadoIntros({
+    required this.monedas,
+    required this.monedasGanadas,
+    required this.restantes,
+    required this.intros,
+    this.nueva,
+  });
+
+  final int monedas;
+  final int monedasGanadas;
+  // Intros que aún no salen.
+  final int restantes;
+  final List<IntroAsignada> intros;
+  // Id de la intro recién sacada.
+  final String? nueva;
+
+  factory EstadoIntros.fromJson(Map<String, dynamic> json) => EstadoIntros(
+    monedas: (json['monedas'] as num).toInt(),
+    monedasGanadas: (json['monedas_ganadas'] as num).toInt(),
+    restantes: (json['restantes'] as num).toInt(),
+    nueva: json['nueva'] as String?,
+    intros: (json['intros'] as List<dynamic>)
+        .map((item) => IntroAsignada.fromJson(item as Map<String, dynamic>))
+        .toList(growable: false),
+  );
 }

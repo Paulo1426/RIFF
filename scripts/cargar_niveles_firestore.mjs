@@ -31,7 +31,7 @@ function base64Url(value) {
   return Buffer.from(value).toString("base64url");
 }
 
-async function readJson(path) {
+export async function readJson(path) {
   const contents = await readFile(path, "utf8");
   return JSON.parse(contents.replace(/^\uFEFF/, ""));
 }
@@ -51,7 +51,7 @@ function encodeValue(value) {
   throw new TypeError(`Tipo de valor Firestore no admitido: ${typeof value}`);
 }
 
-function encodeFields(fields) {
+export function encodeFields(fields) {
   return Object.fromEntries(
     Object.entries(fields).map(([key, value]) => [key, encodeValue(value)]),
   );
@@ -119,7 +119,7 @@ function portadaDe(level) {
   return (level.portadaPath ?? `${level.songId}/portada.jpg`).trim();
 }
 
-function normalizeAnswer(answer) {
+export function normalizeAnswer(answer) {
   return answer
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -148,7 +148,7 @@ function updateWrite(projectId, collection, id, fields) {
   };
 }
 
-async function getAccessToken(account) {
+export async function getAccessToken(account) {
   const now = Math.floor(Date.now() / 1000);
   const header = base64Url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
   const claims = base64Url(

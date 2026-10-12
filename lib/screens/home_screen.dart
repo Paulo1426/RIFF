@@ -11,6 +11,7 @@ import '../models/nivel.dart';
 import '../providers/providers.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/offline_game_store.dart';
+import '../animations/liquid_ripple_effect.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
 import '../theme.dart';
 import '../widgets/liquid_glass/liquid_glass_appbar.dart';
@@ -21,6 +22,7 @@ import '../widgets/liquid_glass/liquid_level_card.dart';
 import 'carrusel_dificultades.dart';
 import 'game_screen.dart';
 import 'instrucciones_dialog.dart';
+import 'intros_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key, this.authStateChanges});
@@ -95,6 +97,12 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   OfflineGameSnapshot? _offlineSnapshot;
   // Dificultad mostrada en el centro; null = la dificultad activa.
   Dificultad? _seleccionada;
+  // false: menú principal; true: juego por instrumentos (dificultades).
+  bool _enInstrumentos = false;
+
+  // "Adivina la intro" se abre al completar el primer nivel.
+  bool get _introsDisponibles =>
+      _estado?.dificultades.any((item) => item.completados > 0) ?? false;
 
   @override
   void initState() {
@@ -159,6 +167,19 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         _offlineMode = false;
         _loading = false;
       });
+      // Deja listas las intros obtenidas por si luego se pierde la conexión.
+      if (_introsDisponibles) {
+        unawaited(
+          ref
+              .read(offlineIntroStoreProvider)
+              .actualizar(widget.user.uid)
+              .then(
+                (_) {},
+                onError: (Object error) =>
+                    debugPrint('No se pudieron descargar las intros: $error'),
+              ),
+        );
+      }
       try {
         final bundle = await repository.descargarPaqueteOffline();
         final refreshed = await _cacheOfflineBundle(
@@ -228,6 +249,10 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         final nivelJson = Map<String, dynamic>.from(entry['nivel'] as Map);
         final nivel = Nivel.fromJson(nivelJson);
         final urls = Map<String, dynamic>.from(data['audioUrls'] as Map);
+        // Versión de cada archivo: si se reemplaza en Storage se baja otra vez.
+        final versiones = Map<String, dynamic>.from(
+          data['audioVersions'] as Map? ?? const {},
+        );
         final paths = <String, String>{};
         for (final instrument in nivel.instrumentos) {
           final url = urls[instrument.id];
@@ -236,7 +261,9 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
               'Falta el enlace offline del instrumento ${instrument.id} en ${nivel.id}',
             );
           }
-          final key = 'level:${nivel.id}:stem:${instrument.id}';
+          final key =
+              'level:${nivel.id}:stem:${instrument.id}:'
+              '${versiones[instrument.id] ?? ''}';
           final file = await audioService.descargarYGuardar(url, key);
           paths[instrument.id] = file.path;
         }
@@ -248,7 +275,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         }
         final instrumentalFile = await audioService.descargarYGuardar(
           instrumentalUrl,
-          'song:${nivel.cancionId}:instrumentalSong',
+          'song:${nivel.cancionId}:instrumentalSong:'
+          '${versiones['instrumental'] ?? ''}',
         );
         return OfflineLevelData(
           nivel: nivel,
@@ -408,7 +436,11 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     if (resultado != null) {
       final antes = _desbloqueadas();
       final terminadoAntes = _juegoTerminado();
+      final introsAntes = _introsDisponibles;
       await _cargar();
+      if (!introsAntes && _introsDisponibles && mounted) {
+        await _avisarIntros();
+      }
       final nuevas = _desbloqueadas().difference(antes);
       for (final dificultad in nuevas) {
         if (!mounted) break;
@@ -445,6 +477,28 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       content: const Text(
         'Superaste las tres dificultades: Fácil, Media y Avanzada. '
         '¡Tienes un oído de campeón! Puedes repetir cualquier nivel cuando quieras.',
+        textAlign: TextAlign.center,
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('¡Genial!'),
+        ),
+      ],
+    ),
+  );
+
+  Future<void> _avisarIntros() => showDialog<void>(
+    context: context,
+    builder: (context) => LiquidGlassDialog(
+      icon: const Icon(Icons.headphones_rounded, size: 48),
+      title: const Text(
+        '¡Desbloqueaste Adivina la intro!',
+        textAlign: TextAlign.center,
+      ),
+      content: const Text(
+        'Cada canción que adivines te da monedas: Fácil 2, Media 3 y '
+        'Avanzada 4. Úsalas en el menú principal para sacar cartas con intros.',
         textAlign: TextAlign.center,
       ),
       actions: [
@@ -505,73 +559,32 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     return niveles;
   }
 
+  /// Intros del jugador: del servidor o, sin conexión, de la copia guardada.
+  Future<EstadoIntros?> _estadoIntros() async {
+    if (!_introsDisponibles) return null;
+    try {
+      return await ref
+          .read(firebaseGameRepositoryProvider)
+          .cargarIntros()
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      return (await ref.read(offlineIntroStoreProvider).load(widget.user.uid))
+          ?.estado;
+    }
+  }
+
   Future<void> _verProgreso() {
-    final dificultades = _estado?.dificultades ?? const [];
-    final total = dificultades.fold<int>(0, (sum, item) => sum + item.total);
-    final completados = dificultades.fold<int>(
-      0,
-      (sum, item) => sum + item.completados,
-    );
-    final porcentaje = total == 0 ? 0.0 : completados / total;
+    final intros = _estadoIntros();
     return showDialog<void>(
       context: context,
-      builder: (context) {
-        final text = Theme.of(context).textTheme;
-        return LiquidGlassDialog(
+      builder: (context) => FutureBuilder<EstadoIntros?>(
+        future: intros,
+        builder: (context, snapshot) => LiquidGlassDialog(
           title: const Text('Tu progreso'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                '${(porcentaje * 100).round()}%',
-                textAlign: TextAlign.center,
-                style: text.displaySmall?.copyWith(
-                  color: AppColors.signalOrange,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(99),
-                child: LinearProgressIndicator(
-                  value: porcentaje,
-                  minHeight: 12,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '$completados de $total niveles completados',
-                textAlign: TextAlign.center,
-                style: text.bodyMedium?.copyWith(color: AppColors.slatePencil),
-              ),
-              const SizedBox(height: 20),
-              for (final item in dificultades) ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _nombreDificultad(item.dificultad),
-                        style: text.titleSmall,
-                      ),
-                    ),
-                    Text(
-                      '${item.completados}/${item.total}',
-                      style: text.bodySmall,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(99),
-                  child: LinearProgressIndicator(
-                    value: item.total == 0 ? 0 : item.completados / item.total,
-                    minHeight: 6,
-                    color: colorDificultad(item.dificultad),
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-            ],
+          content: _ProgresoGeneral(
+            dificultades: _estado?.dificultades ?? const [],
+            intros: snapshot.data,
+            cargandoIntros: snapshot.connectionState != ConnectionState.done,
           ),
           actions: [
             FilledButton(
@@ -579,8 +592,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
               child: const Text('Cerrar'),
             ),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -636,82 +649,377 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     final estado = _estado;
     // El fondo cubre también la barra para que el vidrio tenga qué mostrar.
     return LiquidBackground(
-      acento: estado == null
+      acento: estado == null || !_enInstrumentos
           ? null
           : colorDificultad(_seleccionada ?? estado.dificultadActiva),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: LiquidGlassAppBar(
-          centerTitle: false,
-          titleSpacing: 16,
-          title: Image.asset(
-            'lib/assets/images/logo/riff_logo.png',
-            height: 48,
-            semanticLabel: 'Riff',
-          ),
-          actions: [
-            PopupMenuButton<VoidCallback>(
-              tooltip: 'Menú',
-              icon: const Icon(Icons.menu_rounded),
-              position: PopupMenuPosition.under,
-              onSelected: (accion) => accion(),
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  value: _verProgreso,
-                  child: const ListTile(
-                    leading: Icon(Icons.insights_rounded),
-                    title: Text('Ver progreso'),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: () => ref.read(musicaMenuProvider).alternarSilencio(),
-                  child: ListTile(
-                    leading: Icon(
-                      ref.read(musicaMenuProvider).silenciada
-                          ? Icons.music_off_rounded
-                          : Icons.music_note_rounded,
-                    ),
-                    title: Text(
-                      ref.read(musicaMenuProvider).silenciada
-                          ? 'Activar música'
-                          : 'Silenciar música',
-                    ),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: _cerrarSesion,
-                  child: const ListTile(
-                    leading: Icon(Icons.logout),
-                    title: Text('Cerrar sesión'),
-                  ),
-                ),
-              ],
+      // Atrás desde las dificultades vuelve al menú principal.
+      child: PopScope(
+        canPop: !_enInstrumentos,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) setState(() => _enInstrumentos = false);
+        },
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: LiquidGlassAppBar(
+            centerTitle: false,
+            titleSpacing: _enInstrumentos ? 0 : 16,
+            leading: _enInstrumentos
+                ? IconButton(
+                    tooltip: 'Menú principal',
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    onPressed: () => setState(() => _enInstrumentos = false),
+                  )
+                : null,
+            title: Image.asset(
+              'lib/assets/images/logo/riff_logo.png',
+              height: 48,
+              semanticLabel: 'Riff',
             ),
-            const SizedBox(width: 8),
-          ],
+            actions: [
+              PopupMenuButton<VoidCallback>(
+                tooltip: 'Menú',
+                icon: const Icon(Icons.menu_rounded),
+                position: PopupMenuPosition.under,
+                onSelected: (accion) => accion(),
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: _verProgreso,
+                    child: const ListTile(
+                      leading: Icon(Icons.insights_rounded),
+                      title: Text('Ver progreso'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: () =>
+                        ref.read(musicaMenuProvider).alternarSilencio(),
+                    child: ListTile(
+                      leading: Icon(
+                        ref.read(musicaMenuProvider).silenciada
+                            ? Icons.music_off_rounded
+                            : Icons.music_note_rounded,
+                      ),
+                      title: Text(
+                        ref.read(musicaMenuProvider).silenciada
+                            ? 'Activar música'
+                            : 'Silenciar música',
+                      ),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: _cerrarSesion,
+                    child: const ListTile(
+                      leading: Icon(Icons.logout),
+                      title: Text('Cerrar sesión'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+          body: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 350),
+            child: _loading
+                ? const Cargando(
+                    key: ValueKey('cargando'),
+                    texto: 'Cargando progreso...',
+                  )
+                : _error != null
+                ? _ErrorPanel(error: _error!, onRetry: _cargar)
+                : estado == null
+                ? const Center(child: Text('No se pudo cargar el progreso.'))
+                : !_enInstrumentos
+                ? _MenuPrincipal(
+                    introsDisponibles: _introsDisponibles,
+                    offlineMode: _offlineMode,
+                    onInstrumentos: () =>
+                        setState(() => _enInstrumentos = true),
+                    onIntros: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const IntrosScreen(),
+                      ),
+                    ),
+                  )
+                : _PanelDificultades(
+                    estado: estado,
+                    seleccionada: _seleccionada ?? estado.dificultadActiva,
+                    esInvitado: widget.user.isAnonymous,
+                    offlineMode: _offlineMode,
+                    nivelesDe: _nivelesDe,
+                    onCambio: (dificultad) =>
+                        setState(() => _seleccionada = dificultad),
+                    onJugar: _jugar,
+                    onRefresh: _cargar,
+                  ),
+          ),
         ),
-        body: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 350),
-          child: _loading
-              ? const Cargando(
-                  key: ValueKey('cargando'),
-                  texto: 'Cargando progreso...',
-                )
-              : _error != null
-              ? _ErrorPanel(error: _error!, onRetry: _cargar)
-              : estado == null
-              ? const Center(child: Text('No se pudo cargar el progreso.'))
-              : _PanelDificultades(
-                  estado: estado,
-                  seleccionada: _seleccionada ?? estado.dificultadActiva,
-                  esInvitado: widget.user.isAnonymous,
-                  offlineMode: _offlineMode,
-                  nivelesDe: _nivelesDe,
-                  onCambio: (dificultad) =>
-                      setState(() => _seleccionada = dificultad),
-                  onJugar: _jugar,
-                  onRefresh: _cargar,
+      ),
+    );
+  }
+}
+
+/// Progreso: arriba el general (niveles de las tres dificultades más las
+/// intros adivinadas) y debajo cada dificultad y las intros por separado.
+class _ProgresoGeneral extends StatelessWidget {
+  const _ProgresoGeneral({
+    required this.dificultades,
+    required this.intros,
+    required this.cargandoIntros,
+  });
+
+  // Niveles por dificultad y total de intros publicadas. shortcut: si cambian
+  // en el servidor hay que actualizarlos aquí; las bloqueadas llegan con 0.
+  static const _nivelesPorDificultad = 5;
+  static const _totalIntros = 45;
+
+  final List<ProgresoDificultadRemoto> dificultades;
+  final EstadoIntros? intros;
+  final bool cargandoIntros;
+
+  Widget _fila(
+    BuildContext context, {
+    required String nombre,
+    required int hechos,
+    required int total,
+    required Color color,
+    String? detalle,
+  }) {
+    final text = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(nombre, style: text.titleSmall)),
+              Text('$hechos/$total', style: text.bodySmall),
+            ],
+          ),
+          if (detalle != null)
+            Text(
+              detalle,
+              style: text.bodySmall?.copyWith(color: AppColors.slatePencil),
+            ),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: total == 0 ? 0 : hechos / total,
+              minHeight: 6,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final totalNiveles = dificultades.length * _nivelesPorDificultad;
+    final niveles = dificultades.fold<int>(
+      0,
+      (sum, item) => sum + item.completados,
+    );
+    final intros = this.intros;
+    final totalIntros = intros == null
+        ? _totalIntros
+        : intros.intros.length + intros.restantes;
+    final adivinadas =
+        intros?.intros
+            .where((item) => item.estado == EstadoIntro.completada)
+            .length ??
+        0;
+    final total = totalNiveles + totalIntros;
+    final porcentaje = total == 0 ? 0.0 : (niveles + adivinadas) / total;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '${(porcentaje * 100).round()}%',
+          textAlign: TextAlign.center,
+          style: text.displaySmall?.copyWith(color: AppColors.signalOrange),
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(99),
+          child: LinearProgressIndicator(value: porcentaje, minHeight: 12),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '$niveles de $totalNiveles niveles · $adivinadas de $totalIntros intros',
+          textAlign: TextAlign.center,
+          style: text.bodyMedium?.copyWith(color: AppColors.slatePencil),
+        ),
+        const SizedBox(height: 20),
+        for (final item in dificultades)
+          _fila(
+            context,
+            nombre: _nombreDificultad(item.dificultad),
+            hechos: item.completados,
+            total: max(item.total, _nivelesPorDificultad),
+            color: colorDificultad(item.dificultad),
+          ),
+        cargandoIntros
+            ? const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: LinearProgressIndicator(minHeight: 6),
+              )
+            : _fila(
+                context,
+                nombre: 'Adivina la intro',
+                hechos: adivinadas,
+                total: totalIntros,
+                color: AppColors.signalOrange,
+                detalle: intros == null
+                    ? 'Se desbloquea al completar tu primer nivel.'
+                    : '${intros.intros.length} cartas obtenidas · '
+                          '${intros.monedas} 🪙',
+              ),
+      ],
+    );
+  }
+}
+
+/// Menú principal: dos cuadros para elegir a qué jugar.
+class _MenuPrincipal extends StatelessWidget {
+  const _MenuPrincipal({
+    required this.introsDisponibles,
+    required this.offlineMode,
+    required this.onInstrumentos,
+    required this.onIntros,
+  });
+
+  final bool introsDisponibles;
+  final bool offlineMode;
+  final VoidCallback onInstrumentos;
+  final VoidCallback onIntros;
+
+  @override
+  Widget build(BuildContext context) {
+    final introsBloqueadas = !introsDisponibles;
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Column(
+            children: [
+              Expanded(
+                child: _CuadroModo(
+                  emoji: '🥁🪗🎸',
+                  titulo: 'Adivina por instrumentos',
+                  detalle: 'Compra instrumentos y descubre la canción.',
+                  color: AppColors.verde,
+                  onTap: onInstrumentos,
                 ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: _CuadroModo(
+                  emoji: '🎧',
+                  titulo: 'Adivina la intro',
+                  detalle: !introsDisponibles
+                      ? 'Se desbloquea al completar tu primer nivel.'
+                      : offlineMode
+                      ? 'Sin conexión: juega las intros descargadas.'
+                      : 'Escucha 20 segundos y adivina la canción.',
+                  color: AppColors.signalOrange,
+                  bloqueado: introsBloqueadas,
+                  onTap: introsBloqueadas ? null : onIntros,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CuadroModo extends StatelessWidget {
+  const _CuadroModo({
+    required this.emoji,
+    required this.titulo,
+    required this.detalle,
+    required this.color,
+    required this.onTap,
+    this.bloqueado = false,
+  });
+
+  final String emoji;
+  final String titulo;
+  final String detalle;
+  final Color color;
+  final VoidCallback? onTap;
+  final bool bloqueado;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return LiquidGlassCard(
+      borderRadius: 28,
+      opacity: bloqueado ? 0.35 : 0.6,
+      tintColor: bloqueado ? null : color,
+      child: LiquidRippleEffect(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(28),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Opacity(
+                      opacity: bloqueado ? 0.4 : 1,
+                      child: Text(emoji, style: const TextStyle(fontSize: 48)),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      titulo,
+                      textAlign: TextAlign.center,
+                      style: text.headlineSmall?.copyWith(
+                        color: bloqueado
+                            ? AppColors.slatePencil
+                            : tonoTexto(color),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (bloqueado) ...[
+                          const Icon(
+                            Icons.lock_rounded,
+                            size: 18,
+                            color: AppColors.slatePencil,
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Flexible(
+                          child: Text(
+                            detalle,
+                            textAlign: TextAlign.center,
+                            style: text.bodyMedium?.copyWith(
+                              color: AppColors.slatePencil,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );

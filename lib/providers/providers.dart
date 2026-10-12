@@ -7,6 +7,7 @@ import '../services/firebase_game_repository.dart';
 import '../services/game_service.dart';
 import '../services/musica_menu.dart';
 import '../services/nivel_repository.dart';
+import '../services/offline_intro_store.dart';
 import '../services/validation_service.dart';
 
 final gameServiceProvider = Provider((ref) => GameService());
@@ -18,6 +19,13 @@ final musicaMenuProvider = Provider((ref) {
 });
 final firebaseGameRepositoryProvider = Provider(
   (ref) => FirebaseGameRepository(),
+);
+
+final offlineIntroStoreProvider = Provider(
+  (ref) => OfflineIntroStore(
+    ref.read(firebaseGameRepositoryProvider),
+    ref.read(audioServiceProvider),
+  ),
 );
 
 final nivelRepositoryProvider = Provider<NivelRepository>(

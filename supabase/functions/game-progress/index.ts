@@ -10,6 +10,13 @@ import {
   levelsPerDifficulty,
   selectDifficultyLevels,
 } from "./level_selection.ts";
+import {
+  coinBalance,
+  coinsEarned,
+  introCoinRewards,
+  introPrice,
+} from "./intros.ts";
+import { objectVersion } from "../_shared/storage_version.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -349,6 +356,7 @@ async function clearGuestSession(token: string, uid: string): Promise<void> {
     "games",
     `guestSessions/${uid}/progress`,
     `guestSessions/${uid}/difficultyOrders`,
+    `guestSessions/${uid}/introProgress`,
   ];
   for (const collection of collections) {
     const documents = await listCollection(token, collection);
@@ -820,6 +828,15 @@ async function createOfflineBundle(
       throw new HttpError(404, `Falta la pista instrumental de ${levelId}`);
     }
     const audioUrls: JsonObject = {};
+    const audioVersions: JsonObject = {};
+    const stemsBucket = Deno.env.get("SUPABASE_STEMS_BUCKET") ?? "instrumentos";
+    const versionOf = (bucket: string, path: string) =>
+      objectVersion(
+        requiredEnv("SUPABASE_URL").replace(/\/+$/, ""),
+        requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
+        bucket,
+        path,
+      );
     for (const [instrument, value] of Object.entries(instruments as JsonObject)) {
       if (!instrumentTypes.has(instrument) || !value || typeof value !== "object") {
         throw new HttpError(500, `Instrumentos inválidos en ${levelId}`);
@@ -829,14 +846,20 @@ async function createOfflineBundle(
         throw new HttpError(500, `Falta la ruta del instrumento ${instrument}`);
       }
       audioUrls[instrument] = await createOfflineAudioUrl(storagePath);
+      audioVersions[instrument] = await versionOf(stemsBucket, storagePath);
     }
     const instrumentalBucket =
       Deno.env.get("SUPABASE_INSTRUMENTAL_SONGS_BUCKET") ??
         "canciones-instrumentales";
+    audioVersions.instrumental = await versionOf(
+      instrumentalBucket,
+      instrumentalPath,
+    );
     return {
       entry,
       respuesta: answer.fields.respuestaCancionNormalizada,
       audioUrls,
+      audioVersions,
       instrumentalAudioUrl: await createOfflineAudioUrl(
         instrumentalPath,
         instrumentalBucket,
@@ -1198,12 +1221,302 @@ async function submitAnswer(
     : null;
   return {
     correct: true,
+    // Monedas para "Adivina la intro": solo la primera vez que se gana.
+    monedas: replayingCompletedLevel
+      ? 0
+      : introCoinRewards[difficulty as Difficulty],
     completedDifficulty: currentOrder.every((id) => completedIds.has(id)),
     titulo: typeof song?.fields.titulo === "string" ? song.fields.titulo : null,
     artista: typeof song?.fields.artista === "string"
       ? song.fields.artista
       : null,
   };
+}
+
+// --- Minijuego "Adivina la intro" ---
+// Firestore: intros/{id} (solo servidor: título, artista, respuesta y rutas en
+// el bucket de intros) y {users|guestSessions}/{uid}/introProgress/state con
+// las intros obtenidas (en orden de salida) y las adivinadas.
+// Las monedas no se guardan: salen de los niveles completados.
+
+const introAudioTypes = {
+  intro: { field: "introAudioPath", file: "intro.mp3" },
+  fullSong: { field: "fullAudioPath", file: "original.mp3" },
+  cover: { field: "portadaPath", file: "portada.jpg" },
+} as const;
+
+function introStatePath(uid: string, guest: boolean): string {
+  return `${guest ? "guestSessions" : "users"}/${uid}/introProgress/state`;
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+async function loadIntroState(token: string, uid: string, guest: boolean) {
+  const path = introStatePath(uid, guest);
+  const [documents, state, ...progress] = await Promise.all([
+    listCollection(token, "intros"),
+    getDocument(token, path),
+    ...difficulties.map((difficulty) =>
+      getDocument(token, userPath(uid, "progress", difficulty, guest))
+    ),
+  ]);
+  const intros = new Map<string, JsonObject>();
+  for (const document of documents) {
+    const id = document.name?.split("/").at(-1) ?? "";
+    const fields = fromFields(document.fields ?? {});
+    if (validId(id) && fields.published === true) intros.set(id, fields);
+  }
+  const earned = coinsEarned(
+    Object.fromEntries(
+      difficulties.map((difficulty, index) => [
+        difficulty,
+        stringList(progress[index]?.fields.completedLevelIds),
+      ]),
+    ),
+  );
+  return {
+    path,
+    state,
+    intros,
+    earned,
+    unlocked: [...new Set(stringList(state?.fields.unlockedIds))],
+    completed: new Set(stringList(state?.fields.completedIds)),
+  };
+}
+
+/// Solo se envían las intros ya obtenidas, numeradas en el orden en que
+/// salieron; de las demás basta saber cuántas quedan.
+function introSummary(
+  state: Awaited<ReturnType<typeof loadIntroState>>,
+): JsonObject {
+  const unlocked = new Set(state.unlocked);
+  return {
+    monedas: coinBalance(state.earned, state.unlocked.length),
+    monedas_ganadas: state.earned,
+    restantes: [...state.intros.keys()].filter((id) => !unlocked.has(id))
+      .length,
+    intros: state.unlocked
+      .filter((id) => state.intros.has(id))
+      .map((id, index) => {
+        const done = state.completed.has(id);
+        const fields = state.intros.get(id)!;
+        return {
+          id,
+          numero: index + 1,
+          estado: done ? "completada" : "desbloqueada",
+          // El título solo se revela al adivinarla.
+          titulo: done && typeof fields.titulo === "string"
+            ? fields.titulo
+            : null,
+          artista: done && typeof fields.artista === "string"
+            ? fields.artista
+            : null,
+        };
+      }),
+  };
+}
+
+/// Gasta una moneda y saca al azar una intro que el jugador aún no tiene.
+async function drawIntro(
+  token: string,
+  uid: string,
+  guest: boolean,
+): Promise<JsonObject> {
+  const state = await loadIntroState(token, uid, guest);
+  const locked = [...state.intros.keys()].filter((id) =>
+    !state.unlocked.includes(id)
+  );
+  if (locked.length === 0) {
+    throw new HttpError(409, "Ya descubriste todas las intros");
+  }
+  if (coinBalance(state.earned, state.unlocked.length) < introPrice) {
+    throw new HttpError(
+      409,
+      "No tienes monedas suficientes. Adivina canciones del juego principal para ganar más.",
+    );
+  }
+  const introId = shuffled(locked)[0];
+  const unlocked = [...state.unlocked, introId];
+  const now = new Date().toISOString();
+  await commitWrites(token, [
+    state.state
+      ? updateWrite(
+        state.path,
+        { unlockedIds: unlocked, updatedAt: now },
+        state.state.updateTime!,
+      )
+      : createWrite(state.path, {
+        unlockedIds: unlocked,
+        completedIds: [],
+        failedAnswerAttempts: 0,
+        nextAnswerAt: null,
+        createdAt: now,
+        updatedAt: now,
+      }),
+  ]);
+  return { ...introSummary({ ...state, unlocked }), nueva: introId };
+}
+
+/// Paquete para jugar sin conexión las intros ya obtenidas: enlaces de
+/// descarga (intro, original y portada) y la respuesta normalizada, igual que
+/// el paquete offline de los niveles.
+async function introOfflineBundle(
+  token: string,
+  uid: string,
+  guest: boolean,
+): Promise<JsonObject> {
+  const state = await loadIntroState(token, uid, guest);
+  const bucket = Deno.env.get("SUPABASE_INTRO_BUCKET") ?? "cancion_intro";
+  const intros = await Promise.all(
+    state.unlocked.filter((id) => state.intros.has(id)).map(async (id) => {
+      const fields = state.intros.get(id)!;
+      const pathOf = (type: keyof typeof introAudioTypes) => {
+        const { field, file } = introAudioTypes[type];
+        const custom = fields[field];
+        return typeof custom === "string" && custom ? custom : `${id}/${file}`;
+      };
+      const expected = fields.respuestaCancionNormalizada ?? fields.titulo;
+      if (typeof expected !== "string") {
+        throw new HttpError(500, `La intro ${id} no tiene respuesta`);
+      }
+      const [intro, fullSong, cover] = await Promise.all([
+        createOfflineAudioUrl(pathOf("intro"), bucket),
+        createOfflineAudioUrl(pathOf("fullSong"), bucket),
+        // Sin portada subida se juega igual: el reproductor muestra el disco.
+        createOfflineAudioUrl(pathOf("cover"), bucket).catch(() => null),
+      ]);
+      return {
+        id,
+        titulo: typeof fields.titulo === "string" ? fields.titulo : null,
+        artista: typeof fields.artista === "string" ? fields.artista : null,
+        respuesta: normalizeAnswer(expected),
+        urls: { intro, fullSong, cover },
+      };
+    }),
+  );
+  return { estado: introSummary(state), intros };
+}
+
+async function loadIntroAccess(
+  token: string,
+  uid: string,
+  introId: string,
+  guest: boolean,
+) {
+  const [state, intro] = await Promise.all([
+    getDocument(token, introStatePath(uid, guest)),
+    getDocument(token, `intros/${introId}`),
+  ]);
+  if (!intro || intro.fields.published !== true) {
+    throw new HttpError(404, "Esa intro no está disponible");
+  }
+  if (!state || !stringList(state.fields.unlockedIds).includes(introId)) {
+    throw new HttpError(403, "Desbloquea esta intro con una moneda primero");
+  }
+  return {
+    state,
+    intro: intro.fields,
+    completed: stringList(state.fields.completedIds).includes(introId),
+  };
+}
+
+async function introAudioUrl(
+  token: string,
+  uid: string,
+  introId: string,
+  type: keyof typeof introAudioTypes,
+  guest: boolean,
+): Promise<JsonObject> {
+  const { intro, completed } = await loadIntroAccess(token, uid, introId, guest);
+  // La original y la portada revelan la canción: solo después de adivinarla.
+  if (type !== "intro" && !completed) {
+    throw new HttpError(403, "Adivina la canción para escucharla completa");
+  }
+  const { field, file } = introAudioTypes[type];
+  const custom = intro[field];
+  const path = typeof custom === "string" && custom ? custom : `${introId}/${file}`;
+  if (
+    !path.startsWith(`${introId}/`) ||
+    path.split("/").some((part) => !part || part === "." || part === "..")
+  ) {
+    throw new HttpError(500, `La ruta ${field} de ${introId} no es válida`);
+  }
+  return {
+    url: await createOfflineAudioUrl(
+      path,
+      Deno.env.get("SUPABASE_INTRO_BUCKET") ?? "cancion_intro",
+    ),
+  };
+}
+
+async function submitIntroAnswer(
+  token: string,
+  uid: string,
+  introId: string,
+  answer: string,
+  guest: boolean,
+): Promise<JsonObject> {
+  const { state, intro, completed } = await loadIntroAccess(
+    token,
+    uid,
+    introId,
+    guest,
+  );
+  const reveal = {
+    titulo: typeof intro.titulo === "string" ? intro.titulo : null,
+    artista: typeof intro.artista === "string" ? intro.artista : null,
+  };
+  if (completed) return { correct: true, ...reveal };
+  const nextAnswerAt = state.fields.nextAnswerAt;
+  if (
+    typeof nextAnswerAt === "string" &&
+    Date.parse(nextAnswerAt) > Date.now()
+  ) {
+    throw new HttpError(429, "Espera 30 segundos antes de volver a intentarlo");
+  }
+  const expected = intro.respuestaCancionNormalizada ?? intro.titulo;
+  if (typeof expected !== "string") {
+    throw new HttpError(500, "La intro no tiene una respuesta configurada");
+  }
+  const now = new Date().toISOString();
+  if (normalizeAnswer(answer) !== normalizeAnswer(expected)) {
+    // Igual que en los niveles: tras 3 fallos seguidos, 30 s de espera.
+    const failed = typeof state.fields.failedAnswerAttempts === "number"
+      ? state.fields.failedAnswerAttempts
+      : 0;
+    const rateLimited = failed >= 2;
+    await commitWrites(token, [
+      updateWrite(
+        introStatePath(uid, guest),
+        {
+          failedAnswerAttempts: rateLimited ? 0 : failed + 1,
+          nextAnswerAt: rateLimited
+            ? new Date(Date.now() + 30_000).toISOString()
+            : null,
+          updatedAt: now,
+        },
+        state.updateTime!,
+      ),
+    ]);
+    return { correct: false };
+  }
+  await commitWrites(token, [
+    updateWrite(
+      introStatePath(uid, guest),
+      {
+        completedIds: [...stringList(state.fields.completedIds), introId],
+        failedAnswerAttempts: 0,
+        nextAnswerAt: null,
+        updatedAt: now,
+      },
+      state.updateTime!,
+    ),
+  ]);
+  return { correct: true, ...reveal };
 }
 
 async function handle(request: Request): Promise<Response> {
@@ -1336,6 +1649,72 @@ async function handle(request: Request): Promise<Response> {
       return response(
         200,
         await submitAnswer(token, uid, body.gameId, body.answer, guest),
+      );
+    }
+    if (action === "introState") {
+      return response(
+        200,
+        introSummary(await loadIntroState(token, uid, guest)),
+      );
+    }
+    if (action === "drawIntro") {
+      return response(200, await drawIntro(token, uid, guest));
+    }
+    if (action === "introOfflineBundle") {
+      return response(200, await introOfflineBundle(token, uid, guest));
+    }
+    if (action === "completeOfflineIntro") {
+      if (
+        !validId(body.introId) ||
+        typeof body.answer !== "string" ||
+        body.answer.trim().length === 0 ||
+        body.answer.length > 200
+      ) {
+        throw new HttpError(400, "introId o respuesta no son válidos");
+      }
+      const result = await submitIntroAnswer(
+        token,
+        uid,
+        body.introId,
+        body.answer,
+        guest,
+      );
+      if (result.correct !== true) {
+        throw new HttpError(400, "La respuesta offline no coincide");
+      }
+      return response(200, result);
+    }
+    if (action === "introAudio") {
+      if (
+        !validId(body.introId) ||
+        typeof body.type !== "string" ||
+        !Object.hasOwn(introAudioTypes, body.type)
+      ) {
+        throw new HttpError(400, "introId o type no son válidos");
+      }
+      return response(
+        200,
+        await introAudioUrl(
+          token,
+          uid,
+          body.introId,
+          body.type as keyof typeof introAudioTypes,
+          guest,
+        ),
+      );
+    }
+    if (action === "submitIntroAnswer") {
+      if (
+        !validId(body.introId) ||
+        typeof body.answer !== "string" ||
+        body.answer.trim().length === 0 ||
+        body.answer.length > 200
+      ) {
+        throw new HttpError(400, "introId o respuesta no son válidos");
+      }
+      return response(
+        200,
+        await submitIntroAnswer(token, uid, body.introId, body.answer, guest),
       );
     }
     if (action === "endGuestSession") {
