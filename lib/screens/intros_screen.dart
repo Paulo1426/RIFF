@@ -18,6 +18,7 @@ import '../widgets/liquid_glass/liquid_background.dart';
 import '../widgets/liquid_glass/liquid_glass_appbar.dart';
 import '../widgets/liquid_glass/liquid_glass_button.dart';
 import '../widgets/liquid_glass/liquid_glass_card.dart';
+import '../widgets/recorrido.dart';
 import '../widgets/reproductor_cancion.dart';
 
 const _colorIntros = AppColors.signalOrange;
@@ -38,12 +39,42 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
   bool _sinConexion = false;
   Object? _error;
   bool _sacando = false;
+  final _claveMonedas = GlobalKey();
+  final _claveColeccion = GlobalKey();
+  final _claveSacar = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    _cargar();
+    _cargar().then((_) {
+      if (mounted && _estado != null) {
+        const RecorridoInicial('intros').mostrarSiEsNuevo(context, _pasos);
+      }
+    });
   }
+
+  List<PasoRecorrido> _pasos() => [
+    PasoRecorrido(
+      clave: _claveMonedas,
+      titulo: '🪙 Tus monedas',
+      texto:
+          'Las ganas al completar por primera vez un nivel de Adivina por '
+          'instrumentos: Fácil 2, Media 3 y Avanzada 4.',
+    ),
+    PasoRecorrido(
+      clave: _claveSacar,
+      titulo: '🃏 Sacar carta',
+      texto: 'Gasta 1 moneda para sacar una intro al azar que aún no tengas.',
+    ),
+    PasoRecorrido(
+      clave: _claveColeccion,
+      titulo: '🎧 Tu colección',
+      texto:
+          'Toca una carta, escucha la intro y escribe el nombre de la '
+          'canción. Si aciertas, suena la original. Tras 3 fallos seguidos '
+          'hay que esperar 30 segundos.',
+    ),
+  ];
 
   OfflineIntroStore get _store => ref.read(offlineIntroStoreProvider);
 
@@ -149,6 +180,7 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         LiquidGlassButton(
+          key: _claveSacar,
           onPressed:
               _sacando || _sinConexion || sinMonedas || estado.restantes == 0
               ? null
@@ -186,8 +218,16 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
         appBar: LiquidGlassAppBar(
           title: const Text('Adivina la intro'),
           actions: [
+            IconButton(
+              tooltip: 'Ver ayuda',
+              icon: const Icon(Icons.help_outline_rounded),
+              onPressed: estado == null
+                  ? null
+                  : () => mostrarRecorrido(context, _pasos()),
+            ),
             if (estado != null)
               Padding(
+                key: _claveMonedas,
                 padding: const EdgeInsets.only(right: 12),
                 child: Semantics(
                   label: '${estado.monedas} monedas',
@@ -222,6 +262,7 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
             : Column(
                 children: [
                   Expanded(
+                    key: _claveColeccion,
                     child: RefreshIndicator(
                       onRefresh: _cargar,
                       child: CustomScrollView(
@@ -229,12 +270,21 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
                           if (estado.intros.isEmpty)
                             SliverFillRemaining(
                               hasScrollBody: false,
-                              child: Center(
-                                child: Text(
-                                  'Tu colección está vacía.\nSaca tu primera carta.',
-                                  textAlign: TextAlign.center,
-                                  style: Theme.of(context).textTheme.bodyLarge,
-                                ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const SizedBox(
+                                    height: 160,
+                                    child: BandaMusical(color: _colorIntros),
+                                  ),
+                                  Text(
+                                    'Tu colección está vacía.\nSaca tu primera carta.',
+                                    textAlign: TextAlign.center,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodyLarge,
+                                  ),
+                                ],
                               ),
                             )
                           else

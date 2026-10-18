@@ -18,6 +18,7 @@ import '../widgets/liquid_glass/liquid_glass_appbar.dart';
 import '../widgets/liquid_glass/liquid_glass_button.dart';
 import '../widgets/liquid_glass/liquid_glass_card.dart';
 import '../widgets/liquid_glass/liquid_glass_dialog.dart';
+import '../widgets/recorrido.dart';
 import 'game_screen.dart';
 import 'intros_screen.dart';
 
@@ -70,10 +71,51 @@ class _SalasScreenState extends ConsumerState<SalasScreen> {
   bool _ocupado = false;
   int _fichas = 0;
   StreamSubscription<int>? _suscripcionFichas;
+  final _claveFichas = GlobalKey();
+  final _claveCrear = GlobalKey();
+  final _claveUnirse = GlobalKey();
+  final _claveAbiertas = GlobalKey();
+
+  List<PasoRecorrido> _pasos() => [
+    PasoRecorrido(
+      clave: _claveFichas,
+      titulo: '🎟️ Tus fichas',
+      texto:
+          'Moneda de las salas, distinta de las monedas 🪙. Al terminar una '
+          'sala de instrumentos el 1.º gana 10, el 2.º 7 y el 3.º 3 (si '
+          'acertaron al menos una canción y no abandonaron).',
+    ),
+    PasoRecorrido(
+      clave: _claveCrear,
+      titulo: '➕ Crear sala',
+      texto:
+          'Elige qué se juega (🥁 instrumentos gratis o 🎧 intros por '
+          '$precioSalaIntros fichas), el reto, la dificultad y si es pública '
+          'o cerrada. Hasta 5 jugadores; tú la inicias con 2 o más.',
+    ),
+    PasoRecorrido(
+      clave: _claveUnirse,
+      titulo: '🔑 Unirse',
+      texto:
+          'Escribe el código de 6 letras o escanea el QR que muestra la '
+          'sala de tu amigo.',
+    ),
+    PasoRecorrido(
+      clave: _claveAbiertas,
+      titulo: '🌍 Salas abiertas',
+      texto:
+          'Salas públicas esperando jugadores. Toca una para entrar. '
+          'Contrarreloj: 5 minutos, gana quien sume más puntos. '
+          'Eliminación: sale el último en adivinar cada canción.',
+    ),
+  ];
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => const RecorridoInicial('salas').mostrarSiEsNuevo(context, _pasos),
+    );
     _suscripcionFichas = _repo.fichas().listen(
       (fichas) => setState(() => _fichas = fichas),
       onError: (Object error) => debugPrint('No se pudo leer fichas: $error'),
@@ -138,7 +180,16 @@ class _SalasScreenState extends ConsumerState<SalasScreen> {
       acento: _colorSalas,
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        appBar: const LiquidGlassAppBar(title: Text('Desafía a tus amigos')),
+        appBar: LiquidGlassAppBar(
+          title: const Text('Sala RIFF'),
+          actions: [
+            IconButton(
+              tooltip: 'Ver ayuda',
+              icon: const Icon(Icons.help_outline_rounded),
+              onPressed: () => mostrarRecorrido(context, _pasos()),
+            ),
+          ],
+        ),
         body: ConCarga(
           cargando: _ocupado,
           texto: 'Entrando a la sala...',
@@ -146,6 +197,7 @@ class _SalasScreenState extends ConsumerState<SalasScreen> {
             padding: _margenLista(context),
             children: [
               LiquidGlassCard(
+                key: _claveFichas,
                 borderRadius: 18,
                 tintColor: AppColors.signalOrange,
                 child: ListTile(
@@ -154,20 +206,18 @@ class _SalasScreenState extends ConsumerState<SalasScreen> {
                     '$_fichas ${_fichas == 1 ? 'ficha' : 'fichas'}',
                     style: text.titleMedium,
                   ),
-                  subtitle: const Text(
-                    'Gánalas en salas de instrumentos (1.º 10, 2.º 7, 3.º 3). '
-                    'Una sala de intros cuesta $precioSalaIntros.',
-                  ),
                 ),
               ),
               const SizedBox(height: 16),
               LiquidGlassButton(
+                key: _claveCrear,
                 onPressed: _crear,
                 icon: Icons.add_rounded,
                 label: 'Crear sala',
               ),
               const SizedBox(height: 16),
               LiquidGlassCard(
+                key: _claveUnirse,
                 tintColor: _colorSalas,
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -211,7 +261,11 @@ class _SalasScreenState extends ConsumerState<SalasScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              Text('Salas abiertas', style: text.titleMedium),
+              Text(
+                'Salas abiertas',
+                key: _claveAbiertas,
+                style: text.titleMedium,
+              ),
               const SizedBox(height: 8),
               StreamBuilder<List<Sala>>(
                 stream: _repo.salasPublicas(),

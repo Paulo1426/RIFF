@@ -23,6 +23,7 @@ import '../widgets/liquid_glass/liquid_level_card.dart';
 import 'carrusel_dificultades.dart';
 import 'game_screen.dart';
 import 'instrucciones_dialog.dart';
+import '../widgets/recorrido.dart';
 import 'intros_screen.dart';
 import 'salas_screen.dart';
 
@@ -71,10 +72,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             onSignedIn: () => setState(() => _entered = true),
           );
         }
-        return InstruccionesAlAbrir(
-          key: ValueKey(user.uid),
-          child: _AuthenticatedHome(key: ValueKey(user.uid), user: user),
-        );
+        return _AuthenticatedHome(key: ValueKey(user.uid), user: user);
       },
     );
   }
@@ -101,6 +99,73 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   Dificultad? _seleccionada;
   // false: menú principal; true: juego por instrumentos (dificultades).
   bool _enInstrumentos = false;
+  // Elementos que resalta el recorrido guiado.
+  final _claveMenu = GlobalKey();
+  final _claveInstrumentos = GlobalKey();
+  final _claveSalas = GlobalKey();
+  final _claveIntros = GlobalKey();
+  bool _recorridoRevisado = false;
+
+  Future<void> _verRecorrido() => mostrarRecorrido(context, _pasosMenu());
+
+  List<PasoRecorrido> _pasosMenu() => [
+    PasoRecorrido(
+      clave: _claveInstrumentos,
+      titulo: '🥁 Adivina por instrumentos',
+      texto:
+          'El juego principal. Tienes \$1.000.000 para comprar 3 '
+          'instrumentos, escúchalos y adivina la canción. Completa los 5 '
+          'niveles de una dificultad para desbloquear la siguiente.',
+    ),
+    PasoRecorrido(
+      clave: _claveSalas,
+      titulo: '🏆 Desafía a tus amigos',
+      texto:
+          'Crea una sala o únete con código o QR. Compite contra reloj o por '
+          'eliminación. Los 3 primeros ganan fichas 🎟️ para salas de intros.',
+    ),
+    PasoRecorrido(
+      clave: _claveIntros,
+      titulo: '🎧 Adivina la intro',
+      texto:
+          'Escucha los primeros segundos y adivina la canción. Cada nivel '
+          'que completas te da monedas para sacar intros nuevas.',
+    ),
+    PasoRecorrido(
+      clave: _claveMenu,
+      titulo: '☰ Menú',
+      texto:
+          'Aquí ves tu progreso, silencias la música, cambias a modo oscuro, '
+          'repasas las instrucciones o cierras sesión.',
+    ),
+  ];
+
+  /// La primera vez que se abre la app, al ver el menú, empieza el recorrido.
+  Future<void> _recorridoSiEsNuevo() async {
+    if (_recorridoRevisado) return;
+    _recorridoRevisado = true;
+    await const RecorridoInicial('menu').mostrarSiEsNuevo(context, _pasosMenu);
+  }
+
+  final _claveDificultades = GlobalKey();
+
+  void _abrirDificultades() {
+    setState(() => _enInstrumentos = true);
+    const RecorridoInicial('dificultades').mostrarSiEsNuevo(
+      context,
+      () => [
+        PasoRecorrido(
+          clave: _claveDificultades,
+          titulo: '🎚️ Dificultades y niveles',
+          texto:
+              'Desliza para ver Fácil, Media y Avanzada. Completa sus 5 '
+              'niveles para desbloquear la siguiente. Cada nivel que ganas '
+              'por primera vez te da monedas 🪙 para Adivina la intro: '
+              'Fácil 2, Media 3 y Avanzada 4.',
+        ),
+      ],
+    );
+  }
 
   // "Adivina la intro" se abre al completar el primer nivel.
   bool get _introsDisponibles =>
@@ -679,11 +744,26 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
             ),
             actions: [
               PopupMenuButton<VoidCallback>(
+                key: _claveMenu,
                 tooltip: 'Menú',
                 icon: const Icon(Icons.menu_rounded),
                 position: PopupMenuPosition.under,
                 onSelected: (accion) => accion(),
                 itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: () => mostrarInstrucciones(context),
+                    child: const ListTile(
+                      leading: Icon(Icons.menu_book_rounded),
+                      title: Text('Instrucciones'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: _verRecorrido,
+                    child: const ListTile(
+                      leading: Icon(Icons.tour_rounded),
+                      title: Text('Recorrido guiado'),
+                    ),
+                  ),
                   PopupMenuItem(
                     value: _verProgreso,
                     child: const ListTile(
@@ -751,11 +831,14 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
                 ? const Center(child: Text('No se pudo cargar el progreso.'))
                 : !_enInstrumentos
                 ? _MenuPrincipal(
+                    claveInstrumentos: _claveInstrumentos,
+                    claveSalas: _claveSalas,
+                    claveIntros: _claveIntros,
+                    onVisible: _recorridoSiEsNuevo,
                     introsDisponibles: _introsDisponibles,
                     offlineMode: _offlineMode,
                     esInvitado: widget.user.isAnonymous,
-                    onInstrumentos: () =>
-                        setState(() => _enInstrumentos = true),
+                    onInstrumentos: _abrirDificultades,
                     onSalas: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => const SalasScreen(),
@@ -768,6 +851,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
                     ),
                   )
                 : _PanelDificultades(
+                    key: _claveDificultades,
                     estado: estado,
                     seleccionada: _seleccionada ?? estado.dificultadActiva,
                     esInvitado: widget.user.isAnonymous,
@@ -914,6 +998,10 @@ class _ProgresoGeneral extends StatelessWidget {
 /// Menú principal: dos cuadros para elegir a qué jugar.
 class _MenuPrincipal extends StatelessWidget {
   const _MenuPrincipal({
+    required this.claveInstrumentos,
+    required this.claveSalas,
+    required this.claveIntros,
+    required this.onVisible,
     required this.introsDisponibles,
     required this.offlineMode,
     required this.esInvitado,
@@ -922,6 +1010,11 @@ class _MenuPrincipal extends StatelessWidget {
     required this.onIntros,
   });
 
+  final GlobalKey claveInstrumentos;
+  final GlobalKey claveSalas;
+  final GlobalKey claveIntros;
+  // Avisa cuando el menú ya está en pantalla (para el recorrido inicial).
+  final VoidCallback onVisible;
   final bool introsDisponibles;
   final bool offlineMode;
   final bool esInvitado;
@@ -932,6 +1025,7 @@ class _MenuPrincipal extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final introsBloqueadas = !introsDisponibles;
+    WidgetsBinding.instance.addPostFrameCallback((_) => onVisible());
     return SafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -941,6 +1035,7 @@ class _MenuPrincipal extends StatelessWidget {
           child: Column(
             children: [
               Expanded(
+                key: claveInstrumentos,
                 child: _CuadroModo(
                   emoji: '🥁🪗🎸',
                   titulo: 'Adivina por instrumentos',
@@ -951,6 +1046,7 @@ class _MenuPrincipal extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Expanded(
+                key: claveSalas,
                 child: _CuadroModo(
                   emoji: '🏆',
                   titulo: 'Desafía a tus amigos',
@@ -966,6 +1062,7 @@ class _MenuPrincipal extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Expanded(
+                key: claveIntros,
                 child: _CuadroModo(
                   emoji: '🎧',
                   titulo: 'Adivina la intro',
@@ -1074,6 +1171,7 @@ class _CuadroModo extends StatelessWidget {
 
 class _PanelDificultades extends StatelessWidget {
   const _PanelDificultades({
+    super.key,
     required this.estado,
     required this.seleccionada,
     required this.nivelesDe,

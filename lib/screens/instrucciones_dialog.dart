@@ -9,36 +9,6 @@ Future<void> mostrarInstrucciones(BuildContext context) => showDialog<void>(
   builder: (_) => const InstruccionesDialog(),
 );
 
-// Una vez por apertura de la app; cerrar sesión y volver a entrar no las repite.
-var _instruccionesMostradas = false;
-
-/// Muestra las instrucciones una vez cada vez que se abre la app.
-class InstruccionesAlAbrir extends StatefulWidget {
-  const InstruccionesAlAbrir({super.key, required this.child});
-
-  final Widget child;
-
-  @override
-  State<InstruccionesAlAbrir> createState() => _InstruccionesAlAbrirState();
-}
-
-class _InstruccionesAlAbrirState extends State<InstruccionesAlAbrir> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _mostrarSiEsNueva());
-  }
-
-  void _mostrarSiEsNueva() {
-    if (_instruccionesMostradas || !mounted) return;
-    _instruccionesMostradas = true;
-    mostrarInstrucciones(context);
-  }
-
-  @override
-  Widget build(BuildContext context) => widget.child;
-}
-
 class InstruccionesDialog extends StatelessWidget {
   const InstruccionesDialog({super.key});
 
@@ -183,6 +153,119 @@ class InstruccionesDialog extends StatelessWidget {
                               _Vineta(
                                 'Si adivinas la canción, escuchas la grabación original.',
                                 icono: Icons.check_circle_rounded,
+                              ),
+                            ],
+                          ),
+                          const _Paso(
+                            numero: 5,
+                            titulo: 'Monedas y Adivina la intro',
+                            icono: Icons.headphones_rounded,
+                            children: [
+                              Text(
+                                'Cada nivel que ganas por primera vez te da monedas 🪙:',
+                              ),
+                              SizedBox(height: 10),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  _Etiqueta('Fácil · 2'),
+                                  _Etiqueta('Media · 3'),
+                                  _Etiqueta('Avanzada · 4'),
+                                ],
+                              ),
+                              SizedBox(height: 10),
+                              _Vineta(
+                                'Repetir un nivel ya ganado no da monedas.',
+                              ),
+                              _Vineta(
+                                'En Adivina la intro, 1 moneda saca una carta con una intro al azar.',
+                              ),
+                              _Vineta(
+                                'Escucha los primeros segundos y escribe la canción; si aciertas suena la original.',
+                              ),
+                              _Vineta(
+                                'Tras 3 fallos seguidos debes esperar 30 segundos.',
+                              ),
+                              _Vineta(
+                                'Las intros que ya tienes se pueden jugar sin conexión.',
+                              ),
+                            ],
+                          ),
+                          const _Paso(
+                            numero: 6,
+                            titulo: 'Desafía a tus amigos',
+                            icono: Icons.groups_rounded,
+                            children: [
+                              Text(
+                                'Juega en una sala de hasta 5 personas. Necesitas una cuenta registrada.',
+                              ),
+                              SizedBox(height: 10),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  _Etiqueta('🥁 Instrumentos · gratis'),
+                                  _Etiqueta('🎧 Intros · 🎟️ 5'),
+                                ],
+                              ),
+                              SizedBox(height: 10),
+                              _Vineta(
+                                'Al crearla eliges el reto, la dificultad y si es pública o cerrada.',
+                              ),
+                              _Vineta(
+                                'Únete con el código de 6 letras, escaneando el QR o desde Salas abiertas.',
+                              ),
+                              _Vineta(
+                                'Quien crea la sala la inicia cuando hay al menos 2 jugadores.',
+                              ),
+                              _Vineta(
+                                'Todos juegan las mismas canciones; si sales en plena partida dejas de competir.',
+                              ),
+                            ],
+                          ),
+                          const _Paso(
+                            numero: 7,
+                            titulo: 'Retos de las salas',
+                            icono: Icons.emoji_events_rounded,
+                            children: [
+                              _Vineta(
+                                'Contrarreloj ⏱️: 5 minutos para adivinar todas las canciones que puedas. Cada acierto da 100 puntos, hasta 50 más por rapidez y 1 por cada \$10.000 sin gastar. Puedes saltar una canción sin puntos.',
+                                icono: Icons.timer_outlined,
+                              ),
+                              _Vineta(
+                                'Eliminación 🥊: sin tiempo. Cuando todos menos uno adivinan la canción, ese uno queda eliminado. Gana el último que queda.',
+                                icono: Icons.person_remove_outlined,
+                              ),
+                            ],
+                          ),
+                          const _Paso(
+                            numero: 8,
+                            titulo: 'Fichas',
+                            icono: Icons.confirmation_number_rounded,
+                            children: [
+                              Text(
+                                'Las fichas 🎟️ son la moneda de las salas, distintas de las monedas 🪙.',
+                              ),
+                              SizedBox(height: 10),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  _Etiqueta('🥇 10'),
+                                  _Etiqueta('🥈 7'),
+                                  _Etiqueta('🥉 3'),
+                                ],
+                              ),
+                              SizedBox(height: 10),
+                              _Vineta(
+                                'Se ganan al terminar una sala de instrumentos, en los 3 primeros puestos.',
+                              ),
+                              _Vineta(
+                                'No cobra quien abandonó ni quien no acertó ninguna canción.',
+                              ),
+                              _Vineta(
+                                'Crear o entrar a una sala de intros cuesta 5; si sales antes de que empiece, te las devuelve.',
                               ),
                             ],
                           ),
