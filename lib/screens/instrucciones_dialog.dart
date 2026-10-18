@@ -205,7 +205,7 @@ class InstruccionesDialog extends StatelessWidget {
                                 spacing: 6,
                                 runSpacing: 6,
                                 children: [
-                                  _Etiqueta('🥁 Instrumentos · gratis'),
+                                  _Etiqueta('🥁 Adivina la canción · gratis'),
                                   _Etiqueta('🎧 Intros · 🎟️ 5'),
                                 ],
                               ),
@@ -259,7 +259,7 @@ class InstruccionesDialog extends StatelessWidget {
                               ),
                               SizedBox(height: 10),
                               _Vineta(
-                                'Se ganan al terminar una sala de instrumentos, en los 3 primeros puestos.',
+                                'Se ganan al terminar una sala de Adivina la canción, en los 3 primeros puestos.',
                               ),
                               _Vineta(
                                 'No cobra quien abandonó ni quien no acertó ninguna canción.',

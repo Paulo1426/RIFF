@@ -58,8 +58,8 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
       clave: _claveMonedas,
       titulo: '🪙 Tus monedas',
       texto:
-          'Las ganas al completar por primera vez un nivel de Adivina por '
-          'instrumentos: Fácil 2, Media 3 y Avanzada 4.',
+          'Las ganas al completar por primera vez un nivel de Adivina la '
+          'canción: Fácil 2, Media 3 y Avanzada 4.',
     ),
     PasoRecorrido(
       clave: _claveSacar,

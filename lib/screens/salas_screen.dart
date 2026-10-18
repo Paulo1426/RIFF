@@ -45,7 +45,7 @@ Color _colorDe(Sala sala) => sala.tipo == TipoSala.intros
 
 String _descripcion(Sala sala) => sala.tipo == TipoSala.intros
     ? '🎧 Intros · ${_nombreModo(sala.modo)}'
-    : '🥁 Instrumentos · ${_nombreModo(sala.modo)} · '
+    : '🥁 Adivina la canción · ${_nombreModo(sala.modo)} · '
           '${_nombreDificultad(sala.dificultad)}';
 
 String _mensajeError(Object error) =>
@@ -82,14 +82,14 @@ class _SalasScreenState extends ConsumerState<SalasScreen> {
       titulo: '🎟️ Tus fichas',
       texto:
           'Moneda de las salas, distinta de las monedas 🪙. Al terminar una '
-          'sala de instrumentos el 1.º gana 10, el 2.º 7 y el 3.º 3 (si '
+          'sala de Adivina la canción el 1.º gana 10, el 2.º 7 y el 3.º 3 (si '
           'acertaron al menos una canción y no abandonaron).',
     ),
     PasoRecorrido(
       clave: _claveCrear,
       titulo: '➕ Crear sala',
       texto:
-          'Elige qué se juega (🥁 instrumentos gratis o 🎧 intros por '
+          'Elige qué se juega (🥁 Adivina la canción gratis o 🎧 intros por '
           '$precioSalaIntros fichas), el reto, la dificultad y si es pública '
           'o cerrada. Hasta 5 jugadores; tú la inicias con 2 o más.',
     ),
@@ -492,7 +492,7 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
                   Expanded(
                     child: _Opcion(
                       emoji: '🥁',
-                      titulo: 'Instrumentos',
+                      titulo: 'Adivina la canción',
                       detalle: 'Gratis. Los 3 primeros ganan fichas.',
                       color: acento,
                       elegida: !intros,
@@ -575,7 +575,7 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
                 Padding(
                   padding: const EdgeInsets.only(top: 16),
                   child: Text(
-                    'Te faltan fichas: gana en salas de instrumentos para '
+                    'Te faltan fichas: gana en salas de Adivina la canción para '
                     'jugar intros con tus amigos.',
                     textAlign: TextAlign.center,
                     style: text.bodySmall?.copyWith(

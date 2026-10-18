@@ -111,7 +111,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   List<PasoRecorrido> _pasosMenu() => [
     PasoRecorrido(
       clave: _claveInstrumentos,
-      titulo: '🥁 Adivina por instrumentos',
+      titulo: '🥁 Adivina la canción',
       texto:
           'El juego principal. Tienes \$1.000.000 para comprar 3 '
           'instrumentos, escúchalos y adivina la canción. Completa los 5 '
@@ -1038,7 +1038,8 @@ class _MenuPrincipal extends StatelessWidget {
                 key: claveInstrumentos,
                 child: _CuadroModo(
                   emoji: '🥁🪗🎸',
-                  titulo: 'Adivina por instrumentos',
+                  animacion: _Animacion.tocar,
+                  titulo: 'Adivina la canción',
                   detalle: 'Compra instrumentos y descubre la canción.',
                   color: AppColors.verde,
                   onTap: onInstrumentos,
@@ -1049,6 +1050,7 @@ class _MenuPrincipal extends StatelessWidget {
                 key: claveSalas,
                 child: _CuadroModo(
                   emoji: '🏆',
+                  animacion: _Animacion.saltar,
                   titulo: 'Desafía a tus amigos',
                   detalle: esInvitado
                       ? 'Crea una cuenta para jugar en salas.'
@@ -1065,6 +1067,7 @@ class _MenuPrincipal extends StatelessWidget {
                 key: claveIntros,
                 child: _CuadroModo(
                   emoji: '🎧',
+                  animacion: _Animacion.mecer,
                   titulo: 'Adivina la intro',
                   detalle: !introsDisponibles
                       ? 'Se desbloquea al completar tu primer nivel.'
@@ -1087,6 +1090,7 @@ class _MenuPrincipal extends StatelessWidget {
 class _CuadroModo extends StatelessWidget {
   const _CuadroModo({
     required this.emoji,
+    required this.animacion,
     required this.titulo,
     required this.detalle,
     required this.color,
@@ -1095,6 +1099,7 @@ class _CuadroModo extends StatelessWidget {
   });
 
   final String emoji;
+  final _Animacion animacion;
   final String titulo;
   final String detalle;
   final Color color;
@@ -1123,7 +1128,12 @@ class _CuadroModo extends StatelessWidget {
                   children: [
                     Opacity(
                       opacity: bloqueado ? 0.4 : 1,
-                      child: Text(emoji, style: const TextStyle(fontSize: 48)),
+                      child: _EmojiAnimado(
+                        emoji: emoji,
+                        animacion: animacion,
+                        // Bloqueado se queda quieto: no invita a tocarlo.
+                        activo: !bloqueado,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -1164,6 +1174,102 @@ class _CuadroModo extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+enum _Animacion { tocar, saltar, mecer }
+
+/// Emojis de las tarjetas del menú en movimiento: los instrumentos se mecen
+/// por turnos como si tocaran, la copa salta y los audífonos se balancean.
+class _EmojiAnimado extends StatefulWidget {
+  const _EmojiAnimado({
+    required this.emoji,
+    required this.animacion,
+    required this.activo,
+  });
+
+  final String emoji;
+  final _Animacion animacion;
+  final bool activo;
+
+  @override
+  State<_EmojiAnimado> createState() => _EmojiAnimadoState();
+}
+
+class _EmojiAnimadoState extends State<_EmojiAnimado>
+    with SingleTickerProviderStateMixin {
+  late final _ciclo = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1600),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _actualizar();
+  }
+
+  @override
+  void didUpdateWidget(_EmojiAnimado oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _actualizar();
+  }
+
+  // Con "reducir movimiento" del sistema o bloqueado, quieto.
+  void _actualizar() {
+    if (!widget.activo || MediaQuery.disableAnimationsOf(context)) {
+      _ciclo
+        ..stop()
+        ..value = 0;
+    } else if (!_ciclo.isAnimating) {
+      _ciclo.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ciclo.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final emojis = widget.emoji.characters.toList();
+    return ExcludeSemantics(
+      child: AnimatedBuilder(
+        animation: _ciclo,
+        builder: (context, _) {
+          final t = _ciclo.value * 2 * pi;
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final (i, emoji) in emojis.indexed)
+                Transform.translate(
+                  offset: Offset(0, switch (widget.animacion) {
+                    // Cada instrumento rebota desfasado, como una banda.
+                    _Animacion.tocar => -sin(t + i * 2).abs() * 6,
+                    _Animacion.saltar => -sin(t).abs() * 10,
+                    _Animacion.mecer => 0,
+                  }),
+                  child: Transform.rotate(
+                    angle: switch (widget.animacion) {
+                      _Animacion.tocar => sin(t + i * 2) * 0.15,
+                      _Animacion.saltar => sin(t * 2) * 0.05,
+                      _Animacion.mecer => sin(t) * 0.25,
+                    },
+                    child: Transform.scale(
+                      scale: widget.animacion == _Animacion.saltar
+                          ? 1 + sin(t).abs() * 0.08
+                          : 1,
+                      child: Text(emoji, style: const TextStyle(fontSize: 48)),
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
