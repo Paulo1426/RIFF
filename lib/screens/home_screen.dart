@@ -12,6 +12,7 @@ import '../providers/providers.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/offline_game_store.dart';
 import '../animations/liquid_ripple_effect.dart';
+import '../widgets/boton_tema.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
 import '../theme.dart';
 import '../widgets/liquid_glass/liquid_glass_appbar.dart';
@@ -1680,6 +1681,14 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                     ),
                   ),
                 ),
+              ),
+            ),
+            // Al final del Stack: encima del formulario, que ocupa toda la
+            // pantalla y si no se quedaría con los toques.
+            const SafeArea(
+              child: Align(
+                alignment: Alignment.topRight,
+                child: Padding(padding: EdgeInsets.all(8), child: BotonTema()),
               ),
             ),
           ],

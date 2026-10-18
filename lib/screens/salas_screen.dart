@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../animations/liquid_ripple_effect.dart';
 import '../models/nivel.dart';
 import '../models/sala.dart';
 import '../providers/providers.dart';
@@ -173,21 +174,32 @@ class _SalasScreenState extends ConsumerState<SalasScreen> {
               StreamBuilder<List<Sala>>(
                 stream: _repo.salasPublicas(),
                 builder: (context, snapshot) {
+                  // Un error al listar no le sirve al jugador: se registra y
+                  // se muestra igual que "no hay salas".
                   if (snapshot.hasError) {
-                    return Text(
-                      'No se pudieron cargar las salas: ${snapshot.error}',
+                    debugPrint(
+                      'No se pudieron listar salas: ${snapshot.error}',
                     );
                   }
                   final salas = snapshot.data;
-                  if (salas == null) {
+                  if (salas == null && !snapshot.hasError) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  if (salas.isEmpty) {
-                    return Text(
-                      'No hay salas abiertas ahora. ¡Crea una!',
-                      style: text.bodyMedium?.copyWith(
-                        color: context.paleta.tintaSuave,
-                      ),
+                  if (salas == null || salas.isEmpty) {
+                    return Column(
+                      children: [
+                        const SizedBox(
+                          height: 140,
+                          child: BandaMusical(color: _colorSalas),
+                        ),
+                        Text(
+                          'No hay salas abiertas ahora. ¡Crea una!',
+                          textAlign: TextAlign.center,
+                          style: text.bodyMedium?.copyWith(
+                            color: context.paleta.tintaSuave,
+                          ),
+                        ),
+                      ],
                     );
                   }
                   return Column(
@@ -336,77 +348,205 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final acento = colorDificultad(_dificultad);
+    Widget titulo(String texto) => Padding(
+      padding: const EdgeInsets.only(top: 16, bottom: 8),
+      child: Text(texto, style: text.titleMedium),
+    );
     return LiquidGlassDialog(
-      title: const Text('Nueva sala'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Reto', style: text.titleSmall),
-          const SizedBox(height: 8),
-          SegmentedButton<ModoSala>(
-            segments: const [
-              ButtonSegment(
-                value: ModoSala.contrarreloj,
-                label: Text('Contrarreloj'),
-                icon: Icon(Icons.timer_outlined),
+      child: ConstrainedBox(
+        // Desplazable en teléfonos bajos o con letra grande.
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                '🏆',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 40),
               ),
-              ButtonSegment(
-                value: ModoSala.eliminacion,
-                label: Text('Eliminación'),
-                icon: Icon(Icons.person_remove_outlined),
+              Text(
+                'Nueva sala',
+                textAlign: TextAlign.center,
+                style: text.headlineMedium,
               ),
-            ],
-            selected: {_modo},
-            onSelectionChanged: (valor) => setState(() => _modo = valor.first),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _modo == ModoSala.contrarreloj
-                ? '5 minutos para adivinar todas las canciones que puedas. Gana quien sume más puntos.'
-                : 'Sin tiempo. En cada canción sale el último en adivinarla, hasta que quede uno.',
-            style: text.bodySmall?.copyWith(color: context.paleta.tintaSuave),
-          ),
-          const SizedBox(height: 16),
-          Text('Dificultad', style: text.titleSmall),
-          const SizedBox(height: 8),
-          SegmentedButton<Dificultad>(
-            segments: [
-              for (final dificultad in Dificultad.values)
-                ButtonSegment(
-                  value: dificultad,
-                  label: Text(_nombreDificultad(dificultad)),
+              Text(
+                'Hasta 5 jugadores · todos escuchan las mismas canciones',
+                textAlign: TextAlign.center,
+                style: text.bodySmall?.copyWith(
+                  color: context.paleta.tintaSuave,
                 ),
+              ),
+              titulo('Elige el reto'),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _Opcion(
+                      emoji: '⏱️',
+                      titulo: 'Contrarreloj',
+                      detalle: '5 minutos. Gana quien sume más puntos.',
+                      color: acento,
+                      elegida: _modo == ModoSala.contrarreloj,
+                      onTap: () =>
+                          setState(() => _modo = ModoSala.contrarreloj),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _Opcion(
+                      emoji: '🥊',
+                      titulo: 'Eliminación',
+                      detalle: 'Sin tiempo. Sale el último en adivinar.',
+                      color: acento,
+                      elegida: _modo == ModoSala.eliminacion,
+                      onTap: () => setState(() => _modo = ModoSala.eliminacion),
+                    ),
+                  ),
+                ],
+              ),
+              titulo('Dificultad'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: [
+                  for (final dificultad in Dificultad.values)
+                    ChoiceChip(
+                      label: Text(_nombreDificultad(dificultad)),
+                      selected: _dificultad == dificultad,
+                      showCheckmark: false,
+                      avatar: CircleAvatar(
+                        backgroundColor: colorDificultad(dificultad),
+                        radius: 6,
+                      ),
+                      selectedColor: colorDificultad(
+                        dificultad,
+                      ).withValues(alpha: 0.3),
+                      side: BorderSide(
+                        color: _dificultad == dificultad
+                            ? colorDificultad(dificultad)
+                            : context.paleta.borde,
+                      ),
+                      onSelected: (_) =>
+                          setState(() => _dificultad = dificultad),
+                    ),
+                ],
+              ),
+              titulo('¿Quién puede entrar?'),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _Opcion(
+                      emoji: '🌍',
+                      titulo: 'Pública',
+                      detalle: 'Aparece en salas abiertas.',
+                      color: acento,
+                      elegida: _publica,
+                      onTap: () => setState(() => _publica = true),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _Opcion(
+                      emoji: '🔒',
+                      titulo: 'Cerrada',
+                      detalle: 'Solo con código o QR.',
+                      color: acento,
+                      elegida: !_publica,
+                      onTap: () => setState(() => _publica = false),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              LiquidGlassButton(
+                onPressed: () =>
+                    Navigator.of(context).pop((_modo, _dificultad, _publica)),
+                icon: Icons.add_rounded,
+                label: 'Crear sala',
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancelar'),
+              ),
             ],
-            selected: {_dificultad},
-            onSelectionChanged: (valor) =>
-                setState(() => _dificultad = valor.first),
           ),
-          const SizedBox(height: 8),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            value: _publica,
-            onChanged: (valor) => setState(() => _publica = valor),
-            title: const Text('Sala pública'),
-            subtitle: Text(
-              _publica
-                  ? 'Cualquiera puede verla y unirse.'
-                  : 'Cerrada: solo se entra con el código.',
+        ),
+      ),
+    );
+  }
+}
+
+/// Tarjeta seleccionable del diálogo de nueva sala; la elegida se tiñe y
+/// lleva borde del color de acento.
+class _Opcion extends StatelessWidget {
+  const _Opcion({
+    required this.emoji,
+    required this.titulo,
+    required this.detalle,
+    required this.color,
+    required this.elegida,
+    required this.onTap,
+  });
+
+  final String emoji;
+  final String titulo;
+  final String detalle;
+  final Color color;
+  final bool elegida;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Semantics(
+      selected: elegida,
+      button: true,
+      child: AnimatedScale(
+        scale: elegida ? 1 : 0.96,
+        duration: const Duration(milliseconds: 150),
+        child: LiquidGlassCard(
+          borderRadius: 18,
+          blur: 0,
+          opacity: elegida ? 0.7 : 0.35,
+          tintColor: elegida ? color : null,
+          borderColor: elegida ? color : null,
+          child: LiquidRippleEffect(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(18),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                children: [
+                  Text(emoji, style: const TextStyle(fontSize: 28)),
+                  const SizedBox(height: 4),
+                  Text(
+                    titulo,
+                    style: text.titleSmall?.copyWith(
+                      color: elegida ? context.paleta.tonoTexto(color) : null,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    detalle,
+                    textAlign: TextAlign.center,
+                    style: text.bodySmall?.copyWith(
+                      color: context.paleta.tintaSuave,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ],
+        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancelar'),
-        ),
-        FilledButton(
-          onPressed: () =>
-              Navigator.of(context).pop((_modo, _dificultad, _publica)),
-          child: const Text('Crear'),
-        ),
-      ],
     );
   }
 }
