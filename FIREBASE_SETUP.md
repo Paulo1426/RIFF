@@ -426,6 +426,8 @@ espera.
 codigo: string              # 6 caracteres, también es el id del documento
 creadorUid: string
 publica: boolean            # false: solo se entra con el código
+tipo: "instrumentos" | "intros"
+premios: map<uid, number>   # fichas repartidas al terminar (instrumentos)
 modo: "contrarreloj" | "eliminacion"
 dificultad: "facil" | "medio" | "avanzado"
 maxJugadores: number        # 5; ampliable cambiando maxJugadoresSala en salas.ts
@@ -444,6 +446,18 @@ ganadorUid: string | null
   por cada $10.000 sin gastar. Se puede saltar una canción sin puntos.
 - Eliminación: cuando todos menos uno adivinaron la canción, ese uno queda
   eliminado y empieza otra ronda, hasta que queda un ganador.
+- Salas de intros: usan las intros publicadas en `intros`, con los mismos dos
+  retos. Acciones propias: `audioIntroSala` y `responderIntroSala`.
+
+### `users/{uid}/fichas/saldo`
+
+Fichas de salas (`fichas: number`), distintas de las monedas de "Adivina la
+intro". Solo `game-progress` las escribe y el jugador puede leer su saldo.
+
+- Al terminar una sala de instrumentos, el 1.º gana 10, el 2.º 7 y el 3.º 3.
+  No cobra quien abandonó ni quien no acertó ninguna canción.
+- Crear o entrar a una sala de intros cuesta 5; se devuelven si sales antes
+  de que empiece.
 
 ## 5. Reglas incluidas en este repositorio
 

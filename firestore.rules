@@ -19,6 +19,12 @@ service cloud.firestore {
       match /difficultyOrders/{difficulty} {
         allow read, write: if false;
       }
+
+      // Fichas de salas: el jugador ve su saldo; solo game-progress lo cambia.
+      match /fichas/{documento} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
     }
 
     match /songs/{songId} {

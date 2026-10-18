@@ -15,7 +15,10 @@ Map<String, dynamic> _jugador(
   'eliminadoEnRonda': ronda,
 };
 
-Sala _sala(String modo, Map<String, dynamic> jugadores) => Sala.fromMap({
+Sala _sala(String modo, Map<String, dynamic> jugadores) =>
+    Sala.fromMap(_mapa(modo, jugadores));
+
+Map<String, dynamic> _mapa(String modo, Map<String, dynamic> jugadores) => {
   'codigo': 'ABC234',
   'creadorUid': 'a',
   'publica': true,
@@ -28,7 +31,7 @@ Sala _sala(String modo, Map<String, dynamic> jugadores) => Sala.fromMap({
   'ronda': 3,
   'acertaronRonda': ['b'],
   'finEn': '2026-10-18T12:05:00.000Z',
-});
+};
 
 void main() {
   test('lee la sala en orden de llegada', () {
@@ -40,6 +43,19 @@ void main() {
     expect(sala.jugadores.map((j) => j.nombre), ['Ana', 'Beto']);
     expect(sala.finEn, DateTime.utc(2026, 10, 18, 12, 5));
     expect(sala.llena, isFalse);
+  });
+
+  test('las salas viejas son de instrumentos y los premios se leen', () {
+    final vieja = _sala('contrarreloj', {'a': _jugador('Ana')});
+    expect(vieja.tipo, TipoSala.instrumentos);
+    expect(vieja.premios, isEmpty);
+    final intros = Sala.fromMap({
+      ..._mapa('eliminacion', {'a': _jugador('Ana')}),
+      'tipo': 'intros',
+      'premios': {'a': 10},
+    });
+    expect(intros.tipo, TipoSala.intros);
+    expect(intros.premios, {'a': 10});
   });
 
   test('contrarreloj ordena por puntos', () {

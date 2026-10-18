@@ -19,6 +19,7 @@ import '../widgets/liquid_glass/liquid_glass_button.dart';
 import '../widgets/liquid_glass/liquid_glass_card.dart';
 import '../widgets/liquid_glass/liquid_glass_dialog.dart';
 import 'game_screen.dart';
+import 'intros_screen.dart';
 
 const _colorSalas = AppColors.medio;
 
@@ -36,6 +37,15 @@ String _nombreDificultad(Dificultad dificultad) => switch (dificultad) {
 // Contenido del QR de una sala; el prefijo evita unirse con cualquier QR.
 String _qrDeSala(String codigo) => 'riff:sala:$codigo';
 final _patronQr = RegExp(r'^riff:sala:([A-Z0-9]{6})$');
+
+Color _colorDe(Sala sala) => sala.tipo == TipoSala.intros
+    ? AppColors.signalOrange
+    : colorDificultad(sala.dificultad);
+
+String _descripcion(Sala sala) => sala.tipo == TipoSala.intros
+    ? '🎧 Intros · ${_nombreModo(sala.modo)}'
+    : '🥁 Instrumentos · ${_nombreModo(sala.modo)} · '
+          '${_nombreDificultad(sala.dificultad)}';
 
 String _mensajeError(Object error) =>
     error is GameRepositoryException ? error.message : '$error';
@@ -58,11 +68,23 @@ class SalasScreen extends ConsumerStatefulWidget {
 class _SalasScreenState extends ConsumerState<SalasScreen> {
   final _codigo = TextEditingController();
   bool _ocupado = false;
+  int _fichas = 0;
+  StreamSubscription<int>? _suscripcionFichas;
+
+  @override
+  void initState() {
+    super.initState();
+    _suscripcionFichas = _repo.fichas().listen(
+      (fichas) => setState(() => _fichas = fichas),
+      onError: (Object error) => debugPrint('No se pudo leer fichas: $error'),
+    );
+  }
 
   FirebaseGameRepository get _repo => ref.read(firebaseGameRepositoryProvider);
 
   @override
   void dispose() {
+    _suscripcionFichas?.cancel();
     _codigo.dispose();
     super.dispose();
   }
@@ -88,15 +110,19 @@ class _SalasScreenState extends ConsumerState<SalasScreen> {
   }
 
   Future<void> _crear() async {
-    final opciones = await showDialog<(ModoSala, Dificultad, bool)>(
+    final opciones = await showDialog<(TipoSala, ModoSala, Dificultad, bool)>(
       context: context,
-      builder: (_) => const _DialogoCrearSala(),
+      builder: (_) => _DialogoCrearSala(fichas: _fichas),
     );
     if (opciones == null) return;
-    final (modo, dificultad, publica) = opciones;
+    final (tipo, modo, dificultad, publica) = opciones;
     await _ejecutar(
-      () =>
-          _repo.crearSala(modo: modo, dificultad: dificultad, publica: publica),
+      () => _repo.crearSala(
+        tipo: tipo,
+        modo: modo,
+        dificultad: dificultad,
+        publica: publica,
+      ),
     );
   }
 
@@ -119,6 +145,22 @@ class _SalasScreenState extends ConsumerState<SalasScreen> {
           child: ListView(
             padding: _margenLista(context),
             children: [
+              LiquidGlassCard(
+                borderRadius: 18,
+                tintColor: AppColors.signalOrange,
+                child: ListTile(
+                  leading: const Text('🎟️', style: TextStyle(fontSize: 28)),
+                  title: Text(
+                    '$_fichas ${_fichas == 1 ? 'ficha' : 'fichas'}',
+                    style: text.titleMedium,
+                  ),
+                  subtitle: const Text(
+                    'Gánalas en salas de instrumentos (1.º 10, 2.º 7, 3.º 3). '
+                    'Una sala de intros cuesta $precioSalaIntros.',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               LiquidGlassButton(
                 onPressed: _crear,
                 icon: Icons.add_rounded,
@@ -316,16 +358,16 @@ class _TarjetaSalaPublica extends StatelessWidget {
     final creador = sala.jugador(sala.creadorUid)?.nombre ?? 'Alguien';
     return LiquidGlassCard(
       borderRadius: 18,
-      tintColor: colorDificultad(sala.dificultad),
+      tintColor: _colorDe(sala),
       child: ListTile(
         onTap: onUnirse,
         leading: const Text('🏆', style: TextStyle(fontSize: 28)),
         title: Text('Sala de $creador'),
-        subtitle: Text(
-          '${_nombreModo(sala.modo)} · ${_nombreDificultad(sala.dificultad)}',
-        ),
+        subtitle: Text(_descripcion(sala)),
         trailing: Text(
-          '${sala.jugadores.length}/${sala.maxJugadores}',
+          '${sala.jugadores.length}/${sala.maxJugadores}'
+          '${sala.tipo == TipoSala.intros ? '\n🎟️ $precioSalaIntros' : ''}',
+          textAlign: TextAlign.end,
           style: Theme.of(context).textTheme.titleMedium,
         ),
       ),
@@ -334,13 +376,16 @@ class _TarjetaSalaPublica extends StatelessWidget {
 }
 
 class _DialogoCrearSala extends StatefulWidget {
-  const _DialogoCrearSala();
+  const _DialogoCrearSala({required this.fichas});
+
+  final int fichas;
 
   @override
   State<_DialogoCrearSala> createState() => _DialogoCrearSalaState();
 }
 
 class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
+  var _tipo = TipoSala.instrumentos;
   var _modo = ModoSala.contrarreloj;
   var _dificultad = Dificultad.facil;
   var _publica = true;
@@ -348,7 +393,11 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final acento = colorDificultad(_dificultad);
+    final intros = _tipo == TipoSala.intros;
+    final sinFichas = intros && widget.fichas < precioSalaIntros;
+    final acento = intros
+        ? AppColors.signalOrange
+        : colorDificultad(_dificultad);
     Widget titulo(String texto) => Padding(
       padding: const EdgeInsets.only(top: 16, bottom: 8),
       child: Text(texto, style: text.titleMedium),
@@ -382,6 +431,35 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
                   color: context.paleta.tintaSuave,
                 ),
               ),
+              titulo('¿Qué se juega?'),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _Opcion(
+                      emoji: '🥁',
+                      titulo: 'Instrumentos',
+                      detalle: 'Gratis. Los 3 primeros ganan fichas.',
+                      color: acento,
+                      elegida: !intros,
+                      onTap: () =>
+                          setState(() => _tipo = TipoSala.instrumentos),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _Opcion(
+                      emoji: '🎧',
+                      titulo: 'Intros',
+                      detalle:
+                          'Cuesta 🎟️ $precioSalaIntros. Tienes ${widget.fichas}.',
+                      color: acento,
+                      elegida: intros,
+                      onTap: () => setState(() => _tipo = TipoSala.intros),
+                    ),
+                  ),
+                ],
+              ),
               titulo('Elige el reto'),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -410,34 +488,47 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
                   ),
                 ],
               ),
-              titulo('Dificultad'),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                alignment: WrapAlignment.center,
-                children: [
-                  for (final dificultad in Dificultad.values)
-                    ChoiceChip(
-                      label: Text(_nombreDificultad(dificultad)),
-                      selected: _dificultad == dificultad,
-                      showCheckmark: false,
-                      avatar: CircleAvatar(
-                        backgroundColor: colorDificultad(dificultad),
-                        radius: 6,
+              if (!intros) titulo('Dificultad'),
+              if (!intros)
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    for (final dificultad in Dificultad.values)
+                      ChoiceChip(
+                        label: Text(_nombreDificultad(dificultad)),
+                        selected: _dificultad == dificultad,
+                        showCheckmark: false,
+                        avatar: CircleAvatar(
+                          backgroundColor: colorDificultad(dificultad),
+                          radius: 6,
+                        ),
+                        selectedColor: colorDificultad(
+                          dificultad,
+                        ).withValues(alpha: 0.3),
+                        side: BorderSide(
+                          color: _dificultad == dificultad
+                              ? colorDificultad(dificultad)
+                              : context.paleta.borde,
+                        ),
+                        onSelected: (_) =>
+                            setState(() => _dificultad = dificultad),
                       ),
-                      selectedColor: colorDificultad(
-                        dificultad,
-                      ).withValues(alpha: 0.3),
-                      side: BorderSide(
-                        color: _dificultad == dificultad
-                            ? colorDificultad(dificultad)
-                            : context.paleta.borde,
-                      ),
-                      onSelected: (_) =>
-                          setState(() => _dificultad = dificultad),
+                  ],
+                ),
+              if (sinFichas)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Text(
+                    'Te faltan fichas: gana en salas de instrumentos para '
+                    'jugar intros con tus amigos.',
+                    textAlign: TextAlign.center,
+                    style: text.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.error,
                     ),
-                ],
-              ),
+                  ),
+                ),
               titulo('¿Quién puede entrar?'),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -467,10 +558,15 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
               ),
               const SizedBox(height: 24),
               LiquidGlassButton(
-                onPressed: () =>
-                    Navigator.of(context).pop((_modo, _dificultad, _publica)),
+                onPressed: sinFichas
+                    ? null
+                    : () => Navigator.of(
+                        context,
+                      ).pop((_tipo, _modo, _dificultad, _publica)),
                 icon: Icons.add_rounded,
-                label: 'Crear sala',
+                label: intros
+                    ? 'Crear sala · 🎟️ $precioSalaIntros'
+                    : 'Crear sala',
               ),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
@@ -671,41 +767,61 @@ class _SalaScreenState extends ConsumerState<SalaScreen> {
     PartidaSala? partida;
     await _accion(() async => partida = await _repo.partidaSala(widget.codigo));
     final actual = partida;
-    if (!mounted || actual?.gameId == null || actual?.nivel == null) return;
+    if (!mounted || actual == null) return;
     final contrarreloj = sala.modo == ModoSala.contrarreloj;
+    final titulo = contrarreloj
+        ? 'Canción ${actual.indice + 1}'
+        : 'Ronda ${sala.ronda}';
     var siguiente = false;
-    _jugando = true;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) => GameScreen(
-          nivel: actual!.nivel!,
-          gameId: actual.gameId!,
-          titulo: contrarreloj
-              ? 'Canción ${actual.indice + 1}'
-              : 'Ronda ${sala.ronda}',
-          cabecera: _CabeceraPartida(sala: sala),
-          comprasPrevias: actual.compras,
-          melodiaDescubierta: actual.melodiaDescubierta,
-          onSiguiente: contrarreloj
-              ? () {
-                  siguiente = true;
-                  Navigator.of(context).pop();
-                }
-              : null,
-          onSaltar: contrarreloj
-              ? () async {
-                  try {
-                    await _repo.saltarCancionSala(widget.codigo);
-                    siguiente = true;
-                  } catch (error) {
-                    debugPrint('No se pudo saltar la canción: $error');
-                  }
-                  if (context.mounted) Navigator.of(context).pop();
-                }
-              : null,
+    Future<void> saltar(BuildContext context) async {
+      try {
+        await _repo.saltarCancionSala(widget.codigo);
+        siguiente = true;
+      } catch (error) {
+        debugPrint('No se pudo saltar la canción: $error');
+      }
+      if (context.mounted) Navigator.of(context).pop();
+    }
+
+    void pasar(BuildContext context) {
+      siguiente = true;
+      Navigator.of(context).pop();
+    }
+
+    final Widget Function(BuildContext) pantalla;
+    if (actual.introId case final introId?) {
+      pantalla = (context) => IntroGameScreen(
+        intro: IntroAsignada(
+          id: introId,
+          numero: actual.indice + 1,
+          estado: EstadoIntro.desbloqueada,
         ),
-      ),
-    );
+        sala: IntroEnSala(
+          codigo: widget.codigo,
+          titulo: titulo,
+          cabecera: _CabeceraPartida(sala: sala),
+          onSaltar: contrarreloj ? () => saltar(context) : null,
+          onSiguiente: contrarreloj ? () => pasar(context) : null,
+        ),
+      );
+    } else if (actual.gameId != null && actual.nivel != null) {
+      pantalla = (context) => GameScreen(
+        nivel: actual.nivel!,
+        gameId: actual.gameId!,
+        titulo: titulo,
+        cabecera: _CabeceraPartida(sala: sala),
+        comprasPrevias: actual.compras,
+        melodiaDescubierta: actual.melodiaDescubierta,
+        onSiguiente: contrarreloj ? () => pasar(context) : null,
+        onSaltar: contrarreloj ? () => saltar(context) : null,
+      );
+    } else {
+      return;
+    }
+    _jugando = true;
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: pantalla));
     _jugando = false;
     if (siguiente && mounted && _sala?.estado == EstadoSala.jugando) {
       await _jugar();
@@ -721,7 +837,7 @@ class _SalaScreenState extends ConsumerState<SalaScreen> {
         if (!didPop) _salir();
       },
       child: LiquidBackground(
-        acento: sala == null ? _colorSalas : colorDificultad(sala.dificultad),
+        acento: sala == null ? _colorSalas : _colorDe(sala),
         child: Scaffold(
           backgroundColor: Colors.transparent,
           appBar: LiquidGlassAppBar(
@@ -838,6 +954,12 @@ class _SalaScreenState extends ConsumerState<SalaScreen> {
                   textAlign: TextAlign.center,
                   style: text.headlineMedium,
                 ),
+                if (sala.premios[_uid] case final fichas?)
+                  Text(
+                    '+$fichas fichas 🎟️ para salas de intros',
+                    textAlign: TextAlign.center,
+                    style: text.titleMedium,
+                  ),
               ],
             ),
           ),
@@ -863,7 +985,7 @@ class _Resumen extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return LiquidGlassCard(
-      tintColor: colorDificultad(sala.dificultad),
+      tintColor: _colorDe(sala),
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
@@ -909,8 +1031,7 @@ class _Resumen extends StatelessWidget {
             const SizedBox(height: 8),
           ],
           Text(
-            '${_nombreModo(sala.modo)} · ${_nombreDificultad(sala.dificultad)}'
-            ' · ${sala.publica ? 'Pública' : 'Cerrada'}',
+            '${_descripcion(sala)} · ${sala.publica ? 'Pública' : 'Cerrada'}',
             textAlign: TextAlign.center,
           ),
           if (sala.estado == EstadoSala.jugando &&
@@ -956,9 +1077,7 @@ class _Clasificacion extends StatelessWidget {
             ListTile(
               dense: true,
               leading: CircleAvatar(
-                backgroundColor: colorDificultad(
-                  sala.dificultad,
-                ).withValues(alpha: 0.25),
+                backgroundColor: _colorDe(sala).withValues(alpha: 0.25),
                 child: Text(
                   sala.estado == EstadoSala.esperando
                       ? jugador.nombre.characters.first.toUpperCase()
@@ -975,7 +1094,12 @@ class _Clasificacion extends StatelessWidget {
                     : null,
               ),
               subtitle: _detalle(jugador),
-              trailing: jugador.uid == sala.creadorUid
+              trailing: sala.premios[jugador.uid] != null
+                  ? Text(
+                      '+${sala.premios[jugador.uid]} 🎟️',
+                      style: text.titleMedium,
+                    )
+                  : jugador.uid == sala.creadorUid
                   ? const Tooltip(
                       message: 'Creador de la sala',
                       child: Text('👑', style: TextStyle(fontSize: 20)),

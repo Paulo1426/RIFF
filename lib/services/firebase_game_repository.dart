@@ -215,12 +215,14 @@ class FirebaseGameRepository {
   // --- Salas de "Desafía a tus amigos" ---
 
   Future<String> crearSala({
+    required TipoSala tipo,
     required ModoSala modo,
     required Dificultad dificultad,
     required bool publica,
   }) async {
     final response = await _post({
       'action': 'crearSala',
+      'tipo': tipo.name,
       'modo': modo.name,
       'dificultad': dificultad.id,
       'publica': publica,
@@ -243,6 +245,52 @@ class FirebaseGameRepository {
   /// Cierra la sala si ya se acabó el tiempo de contrarreloj.
   Future<void> revisarSala(String codigo) =>
       _post({'action': 'revisarSala', 'codigo': codigo});
+
+  /// [tipo]: 'intro', o 'fullSong' y 'cover' cuando ya se adivinó.
+  Future<String> audioIntroSala({
+    required String codigo,
+    required String introId,
+    required String tipo,
+  }) async {
+    final response = await _post({
+      'action': 'audioIntroSala',
+      'codigo': codigo,
+      'introId': introId,
+      'type': tipo,
+    });
+    final url = response['url'];
+    if (url is! String || url.isEmpty) {
+      throw const FormatException('El servicio no devolvió una URL de audio');
+    }
+    return url;
+  }
+
+  Future<ResultadoRespuesta> responderIntroSala({
+    required String codigo,
+    required String respuesta,
+  }) async {
+    final response = await _post({
+      'action': 'responderIntroSala',
+      'codigo': codigo,
+      'answer': respuesta,
+    });
+    return ResultadoRespuesta(
+      correcta: response['correct'] as bool,
+      titulo: response['titulo'] as String?,
+      artista: response['artista'] as String?,
+      puntos: (response['puntos'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  /// Fichas del jugador en tiempo real (0 si aún no ha ganado ninguna).
+  Stream<int> fichas() {
+    final uid = this.uid;
+    if (uid == null) return Stream.value(0);
+    return FirebaseFirestore.instance
+        .doc('users/$uid/fichas/saldo')
+        .snapshots()
+        .map((doc) => (doc.data()?['fichas'] as num?)?.toInt() ?? 0);
+  }
 
   Future<PartidaSala> partidaSala(String codigo) async => PartidaSala.fromJson(
     await _post({'action': 'partidaSala', 'codigo': codigo}),

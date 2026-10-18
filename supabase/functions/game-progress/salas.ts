@@ -5,6 +5,30 @@
 export const modosSala = ["contrarreloj", "eliminacion"] as const;
 export type ModoSala = typeof modosSala[number];
 
+// Instrumentos: el juego principal. Intros: las de "Adivina la intro".
+export const tiposSala = ["instrumentos", "intros"] as const;
+export type TipoSala = typeof tiposSala[number];
+
+// Fichas: moneda propia de las salas, distinta de las monedas de intros.
+// Se ganan en salas de instrumentos y se gastan para crear o entrar a una de
+// intros (se devuelven si sales antes de que empiece).
+export const precioSalaIntros = 5;
+export const premiosPorPuesto = [10, 7, 3] as const;
+
+/// Fichas para los tres primeros de [clasificados] (ya ordenados). No cobra
+/// premio quien abandonó ni quien no acertó ninguna canción, para que no se
+/// puedan ganar fichas entrando y saliendo con otra cuenta.
+export function premiosSala(
+  clasificados: readonly { uid: string; aciertos: number; abandono: boolean }[],
+): Record<string, number> {
+  return Object.fromEntries(
+    clasificados
+      .filter((jugador) => !jugador.abandono && jugador.aciertos > 0)
+      .slice(0, premiosPorPuesto.length)
+      .map((jugador, puesto) => [jugador.uid, premiosPorPuesto[puesto]]),
+  );
+}
+
 // Se guarda en cada sala (maxJugadores) para poder ampliarlo sin migrar.
 export const maxJugadoresSala = 5;
 export const duracionContrarrelojMs = 5 * 60_000;

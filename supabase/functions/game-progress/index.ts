@@ -20,7 +20,11 @@ import {
   type ModoSala,
   modosSala,
   nivelDeIndice,
+  precioSalaIntros,
+  premiosSala,
   puntosAcierto,
+  type TipoSala,
+  tiposSala,
 } from "./salas.ts";
 import {
   coinBalance,
@@ -1287,7 +1291,9 @@ async function submitAnswer(
 // dejan leerla a sus jugadores y listar las públicas en espera) y solo esta
 // función la modifica. Cada canción de un jugador es una partida normal en
 // games/{gameId} con salaId y salaIndice, así compras y audios (audio-link)
-// funcionan igual que en el juego principal.
+// funcionan igual que en el juego principal. En las salas de intros no hay
+// partidas: el avance y los fallos de cada jugador viven en la propia sala.
+// Fichas: users/{uid}/fichas/saldo, solo las escribe esta función.
 
 interface Jugador extends JsonObject {
   nombre: string;
@@ -1300,6 +1306,12 @@ interface Jugador extends JsonObject {
   eliminado: boolean;
   eliminadoEnRonda: number | null;
   abandono: boolean;
+  // Solo salas de intros: intros adivinadas (dan acceso a la original), qué
+  // canción tiene el reloj en marcha y los fallos para la espera de 30 s.
+  acertadas?: string[];
+  indiceIniciado?: number | null;
+  failedAnswerAttempts?: number;
+  nextAnswerAt?: string | null;
 }
 
 function newPlayer(nombre: string): Jugador {
@@ -1353,16 +1365,69 @@ function roomExpired(sala: JsonObject): boolean {
     Date.parse(sala.finEn) <= Date.now();
 }
 
-/// Fin de contrarreloj: gana más puntos; a igualdad, más aciertos y luego
-/// quien entró primero.
-function finishTimedRoom(sala: JsonObject): JsonObject {
+/// Posiciones: en contrarreloj por puntos y luego aciertos; en eliminación,
+/// los que siguen vivos y después quien cayó más tarde. A igualdad, quien
+/// entró primero.
+function roomRanking(sala: JsonObject): (Jugador & { uid: string })[] {
   const jugadores = roomPlayers(sala);
-  const [ganador] = roomOrder(sala).filter((uid) => jugadores[uid])
+  const caida = (j: Jugador) =>
+    j.eliminado ? j.eliminadoEnRonda ?? 0 : Number.MAX_SAFE_INTEGER;
+  return roomOrder(sala)
+    .filter((uid) => jugadores[uid])
+    .map((uid) => ({ ...jugadores[uid], uid }))
     .sort((a, b) =>
-      jugadores[b].puntos - jugadores[a].puntos ||
-      jugadores[b].aciertos - jugadores[a].aciertos
+      sala.modo === "eliminacion"
+        ? caida(b) - caida(a)
+        : b.puntos - a.puntos || b.aciertos - a.aciertos
     );
-  return { estado: "terminada", ganadorUid: ganador ?? null };
+}
+
+/// Fin de contrarreloj: gana el primero de la tabla.
+function finishTimedRoom(sala: JsonObject): JsonObject {
+  return {
+    estado: "terminada",
+    ganadorUid: roomRanking(sala)[0]?.uid ?? null,
+  };
+}
+
+function walletPath(uid: string): string {
+  return `users/${uid}/fichas/saldo`;
+}
+
+/// Suma (o resta) fichas; crea el saldo si no existe. Con [updateTime] solo
+/// se aplica si el saldo no cambió desde que se leyó.
+function walletWrite(
+  uid: string,
+  cantidad: number,
+  updateTime?: string,
+): JsonObject {
+  return {
+    update: { name: documentName(walletPath(uid)), fields: {} },
+    updateMask: { fieldPaths: [] },
+    updateTransforms: [{
+      fieldPath: "fichas",
+      increment: { integerValue: String(cantidad) },
+    }],
+    ...(updateTime ? { currentDocument: { updateTime } } : {}),
+  };
+}
+
+/// Cobra la entrada a una sala de intros o explica por qué no alcanza.
+async function chargeIntroRoom(
+  token: string,
+  uid: string,
+): Promise<JsonObject> {
+  const saldo = await getDocument(token, walletPath(uid));
+  const fichas = typeof saldo?.fields.fichas === "number"
+    ? saldo.fields.fichas
+    : 0;
+  if (!saldo?.updateTime || fichas < precioSalaIntros) {
+    throw new HttpError(
+      409,
+      `Necesitas ${precioSalaIntros} fichas para una sala de intros y tienes ${fichas}. Gánalas en salas de instrumentos.`,
+    );
+  }
+  return walletWrite(uid, -precioSalaIntros, saldo.updateTime);
 }
 
 /// Eliminación: saca al último en adivinar y abre la siguiente ronda, o
@@ -1421,8 +1486,22 @@ async function updateRoom<T>(
     if (!sala?.updateTime) {
       throw new HttpError(404, "No existe una sala con ese código");
     }
-    const { campos, borrar, extra = [], resultado } = await cambio(sala.fields);
+    const cambiado = await cambio(sala.fields);
+    const { borrar, extra = [], resultado } = cambiado;
+    let campos = cambiado.campos;
     const writes = [...extra];
+    // Al terminar una sala de instrumentos se reparten las fichas, en el
+    // mismo guardado que la cierra para que no se paguen dos veces.
+    if (
+      campos?.estado === "terminada" && sala.fields.estado !== "terminada" &&
+      sala.fields.tipo !== "intros"
+    ) {
+      const premios = premiosSala(roomRanking({ ...sala.fields, ...campos }));
+      writes.push(
+        ...Object.entries(premios).map(([id, n]) => walletWrite(id, n)),
+      );
+      campos = { ...campos, premios };
+    }
     if (borrar) {
       writes.push({
         delete: documentName(roomPath(codigo)),
@@ -1455,12 +1534,14 @@ async function createRoom(
   body: JsonObject,
 ): Promise<JsonObject> {
   const dificultad = normalizeDifficulty(body.dificultad);
+  const tipo = body.tipo ?? "instrumentos";
   if (
     !modosSala.includes(body.modo as ModoSala) ||
+    !tiposSala.includes(tipo as TipoSala) ||
     !difficulties.includes(dificultad as Difficulty) ||
     typeof body.publica !== "boolean"
   ) {
-    throw new HttpError(400, "modo, dificultad o publica no son válidos");
+    throw new HttpError(400, "tipo, modo, dificultad o publica no son válidos");
   }
   const now = new Date().toISOString();
   for (let intento = 0; intento < 5; intento++) {
@@ -1471,11 +1552,14 @@ async function createRoom(
     });
     try {
       await commitWrites(token, [
+        ...(tipo === "intros" ? [await chargeIntroRoom(token, uid)] : []),
         createWrite(roomPath(codigo), {
           codigo,
           creadorUid: uid,
           publica: body.publica,
+          tipo,
           modo: body.modo,
+          // Las intros no tienen dificultad; se guarda igual para la tabla.
           dificultad,
           maxJugadores: maxJugadoresSala,
           estado: "esperando",
@@ -1506,7 +1590,7 @@ function joinRoom(
   nombre: string,
   codigo: string,
 ): Promise<JsonObject> {
-  return updateRoom(token, codigo, (sala) => {
+  return updateRoom(token, codigo, async (sala) => {
     const jugadores = roomPlayers(sala);
     if (jugadores[uid]) return { resultado: { codigo } };
     if (sala.estado !== "esperando") {
@@ -1523,6 +1607,7 @@ function joinRoom(
         jugadores: { ...jugadores, [uid]: newPlayer(nombre) },
         orden: [...roomOrder(sala), uid],
       },
+      extra: sala.tipo === "intros" ? [await chargeIntroRoom(token, uid)] : [],
       resultado: { codigo },
     };
   });
@@ -1542,7 +1627,13 @@ function leaveRoom(
     if (sala.estado === "esperando") {
       delete jugadores[uid];
       const orden = roomOrder(sala).filter((id) => id !== uid);
-      if (orden.length === 0) return { borrar: true, resultado: { salio: true } };
+      // Salir antes de empezar devuelve la entrada de una sala de intros.
+      const extra = sala.tipo === "intros"
+        ? [walletWrite(uid, precioSalaIntros)]
+        : [];
+      if (orden.length === 0) {
+        return { borrar: true, extra, resultado: { salio: true } };
+      }
       return {
         campos: {
           jugadores,
@@ -1550,6 +1641,7 @@ function leaveRoom(
           // Si sale quien la creó, la sala pasa al siguiente en llegar.
           creadorUid: sala.creadorUid === uid ? orden[0] : sala.creadorUid,
         },
+        extra,
         resultado: { salio: true },
       };
     }
@@ -1593,14 +1685,24 @@ function startRoom(
     if (roomOrder(sala).length < 2) {
       throw new HttpError(409, "Se necesitan al menos 2 jugadores");
     }
-    const levelIds = (await publishedLevels(token))
-      .filter((level) =>
-        level.published && level.dificultad === sala.dificultad &&
-        validId(level.id)
-      )
-      .map((level) => level.id);
+    const levelIds = sala.tipo === "intros"
+      ? (await listCollection(token, "intros"))
+        .filter((document) => fromFields(document.fields ?? {}).published === true)
+        .map((document) => document.name?.split("/").at(-1) ?? "")
+        .filter(validId)
+      : (await publishedLevels(token))
+        .filter((level) =>
+          level.published && level.dificultad === sala.dificultad &&
+          validId(level.id)
+        )
+        .map((level) => level.id);
     if (levelIds.length === 0) {
-      throw new HttpError(409, "No hay canciones publicadas en esa dificultad");
+      throw new HttpError(
+        409,
+        sala.tipo === "intros"
+          ? "No hay intros publicadas"
+          : "No hay canciones publicadas en esa dificultad",
+      );
     }
     const now = Date.now();
     return {
@@ -1643,6 +1745,24 @@ function roomGame(
     }
     const indice = roomSongIndex(sala, jugador);
     const levelId = nivelDeIndice(sala.levelIds as string[], indice);
+    if (sala.tipo === "intros") {
+      // El reloj de la intro arranca la primera vez que el jugador la abre.
+      const resultado = { estado: "jugando", introId: levelId, indice };
+      if (jugador.indiceIniciado === indice) return { resultado };
+      return {
+        campos: {
+          jugadores: {
+            ...roomPlayers(sala),
+            [uid]: {
+              ...jugador,
+              indiceIniciado: indice,
+              inicioCancion: new Date().toISOString(),
+            },
+          },
+        },
+        resultado,
+      };
+    }
     const entry = await buildLevelEntry(
       token,
       levelId,
@@ -1816,6 +1936,154 @@ async function answerRoomGame(
     puntos,
     ...await revealedSong(token, level),
   };
+}
+
+/// Audio de una sala de intros: la intro que le toca al jugador o, si ya la
+/// adivinó, la canción original y la portada.
+async function roomIntroAudio(
+  token: string,
+  uid: string,
+  codigo: string,
+  introId: unknown,
+  type: unknown,
+): Promise<JsonObject> {
+  if (
+    !validId(introId) || typeof type !== "string" ||
+    !Object.hasOwn(introAudioTypes, type)
+  ) {
+    throw new HttpError(400, "introId o type no son válidos");
+  }
+  const sala = await getDocument(token, roomPath(codigo));
+  if (!sala) throw new HttpError(404, "No existe una sala con ese código");
+  const jugador = roomMember(sala.fields, uid);
+  const acertada = stringList(jugador.acertadas).includes(introId);
+  const actual = sala.fields.estado === "jugando" && !jugador.eliminado &&
+    nivelDeIndice(
+        sala.fields.levelIds as string[],
+        roomSongIndex(sala.fields, jugador),
+      ) === introId;
+  if (type === "intro" ? !actual && !acertada : !acertada) {
+    throw new HttpError(403, "Esa canción no está disponible para ti");
+  }
+  const intro = await getDocument(token, `intros/${introId}`);
+  if (!intro || intro.fields.published !== true) {
+    throw new HttpError(404, "Esa intro no está disponible");
+  }
+  return {
+    url: await signedIntroUrl(
+      introId,
+      intro.fields,
+      type as keyof typeof introAudioTypes,
+    ),
+  };
+}
+
+/// Respuesta en una sala de intros: mismas reglas de puntos, eliminación y
+/// espera de 30 s tras 3 fallos que en las salas de instrumentos.
+async function answerRoomIntro(
+  token: string,
+  uid: string,
+  codigo: string,
+  answer: unknown,
+): Promise<JsonObject> {
+  if (
+    typeof answer !== "string" || answer.trim().length === 0 ||
+    answer.length > 200
+  ) {
+    throw new HttpError(400, "La respuesta no es válida");
+  }
+  const resultado = await updateRoom<JsonObject | null>(
+    token,
+    codigo,
+    async (sala) => {
+      const jugador = roomMember(sala, uid);
+      if (sala.tipo !== "intros" || sala.estado !== "jugando") {
+        throw new HttpError(409, "La sala ya terminó");
+      }
+      if (roomExpired(sala)) {
+        return { campos: finishTimedRoom(sala), resultado: null };
+      }
+      if (
+        jugador.eliminado ||
+        (sala.acertaronRonda as string[] ?? []).includes(uid)
+      ) {
+        throw new HttpError(409, "Esta canción ya no es la actual de la sala");
+      }
+      if (
+        typeof jugador.nextAnswerAt === "string" &&
+        Date.parse(jugador.nextAnswerAt) > Date.now()
+      ) {
+        throw new HttpError(
+          429,
+          "Espera 30 segundos antes de volver a intentarlo",
+        );
+      }
+      const introId = nivelDeIndice(
+        sala.levelIds as string[],
+        roomSongIndex(sala, jugador),
+      );
+      const intro = await getDocument(token, `intros/${introId}`);
+      const expected = intro?.fields.respuestaCancionNormalizada ??
+        intro?.fields.titulo;
+      if (typeof expected !== "string") {
+        throw new HttpError(500, "La intro no tiene una respuesta configurada");
+      }
+      const jugadores = roomPlayers(sala);
+      if (normalizeAnswer(answer) !== normalizeAnswer(expected)) {
+        const fallos = jugador.failedAnswerAttempts ?? 0;
+        jugadores[uid] = {
+          ...jugador,
+          failedAnswerAttempts: fallos >= 2 ? 0 : fallos + 1,
+          nextAnswerAt: fallos >= 2
+            ? new Date(Date.now() + 30_000).toISOString()
+            : null,
+        };
+        return { campos: { jugadores }, resultado: { correct: false } };
+      }
+      const acierto = {
+        ...jugador,
+        aciertos: jugador.aciertos + 1,
+        acertadas: [...stringList(jugador.acertadas), introId],
+        failedAnswerAttempts: 0,
+        nextAnswerAt: null,
+      };
+      const reveal = {
+        correct: true,
+        titulo: typeof intro!.fields.titulo === "string"
+          ? intro!.fields.titulo
+          : null,
+        artista: typeof intro!.fields.artista === "string"
+          ? intro!.fields.artista
+          : null,
+      };
+      if (sala.modo === "eliminacion") {
+        jugadores[uid] = acierto;
+        return {
+          campos: advanceElimination(sala, jugadores, [
+            ...(sala.acertaronRonda as string[] ?? []),
+            uid,
+          ]),
+          resultado: { ...reveal, puntos: 0 },
+        };
+      }
+      const segundos =
+        (Date.now() - Date.parse(jugador.inicioCancion ?? "")) / 1000;
+      // Sin compras: solo cuentan los 100 base y la rapidez.
+      const ganados = puntosAcierto(Number.isFinite(segundos) ? segundos : 0, 0);
+      jugadores[uid] = {
+        ...acierto,
+        puntos: jugador.puntos + ganados,
+        indice: jugador.indice + 1,
+        indiceIniciado: null,
+        inicioCancion: null,
+      };
+      return { campos: { jugadores }, resultado: { ...reveal, puntos: ganados } };
+    },
+  );
+  if (resultado === null) {
+    throw new HttpError(409, "Se acabó el tiempo de la sala");
+  }
+  return resultado;
 }
 
 // --- Minijuego "Adivina la intro" ---
@@ -2021,6 +2289,15 @@ async function introAudioUrl(
   if (type !== "intro" && !completed) {
     throw new HttpError(403, "Adivina la canción para escucharla completa");
   }
+  return { url: await signedIntroUrl(introId, intro, type) };
+}
+
+/// URL firmada de un archivo de la intro en su bucket.
+async function signedIntroUrl(
+  introId: string,
+  intro: JsonObject,
+  type: keyof typeof introAudioTypes,
+): Promise<string> {
   const { field, file } = introAudioTypes[type];
   const custom = intro[field];
   const path = typeof custom === "string" && custom ? custom : `${introId}/${file}`;
@@ -2030,12 +2307,10 @@ async function introAudioUrl(
   ) {
     throw new HttpError(500, `La ruta ${field} de ${introId} no es válida`);
   }
-  return {
-    url: await createOfflineAudioUrl(
-      path,
-      Deno.env.get("SUPABASE_INTRO_BUCKET") ?? "cancion_intro",
-    ),
-  };
+  return await createOfflineAudioUrl(
+    path,
+    Deno.env.get("SUPABASE_INTRO_BUCKET") ?? "cancion_intro",
+  );
 }
 
 async function submitIntroAnswer(
@@ -2319,6 +2594,10 @@ async function handle(request: Request): Promise<Response> {
       partidaSala: (codigo) => roomGame(token, uid, codigo),
       saltarCancionSala: (codigo) => skipRoomSong(token, uid, codigo),
       revisarSala: (codigo) => checkRoom(token, uid, codigo),
+      audioIntroSala: (codigo) =>
+        roomIntroAudio(token, uid, codigo, body.introId, body.type),
+      responderIntroSala: (codigo) =>
+        answerRoomIntro(token, uid, codigo, body.answer),
     };
     if (action === "crearSala" || Object.hasOwn(roomActions, String(action))) {
       if (guest) {

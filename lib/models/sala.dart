@@ -6,6 +6,12 @@ enum ModoSala { contrarreloj, eliminacion }
 
 enum EstadoSala { esperando, jugando, terminada }
 
+/// Instrumentos: juego principal (gratis, reparte fichas). Intros: cuesta
+/// [precioSalaIntros] fichas crearla o entrar.
+enum TipoSala { instrumentos, intros }
+
+const precioSalaIntros = 5;
+
 class JugadorSala {
   const JugadorSala({
     required this.uid,
@@ -43,6 +49,7 @@ class Sala {
     required this.codigo,
     required this.creadorUid,
     required this.publica,
+    required this.tipo,
     required this.modo,
     required this.dificultad,
     required this.maxJugadores,
@@ -52,11 +59,13 @@ class Sala {
     required this.acertaronRonda,
     this.finEn,
     this.ganadorUid,
+    this.premios = const {},
   });
 
   final String codigo;
   final String creadorUid;
   final bool publica;
+  final TipoSala tipo;
   final ModoSala modo;
   final Dificultad dificultad;
   final int maxJugadores;
@@ -67,6 +76,8 @@ class Sala {
   final List<String> acertaronRonda;
   final DateTime? finEn;
   final String? ganadorUid;
+  // Fichas repartidas al terminar una sala de instrumentos, por uid.
+  final Map<String, int> premios;
 
   bool get llena => jugadores.length >= maxJugadores;
 
@@ -98,6 +109,7 @@ class Sala {
       codigo: map['codigo'] as String,
       creadorUid: map['creadorUid'] as String,
       publica: map['publica'] as bool? ?? false,
+      tipo: TipoSala.values.byName(map['tipo'] as String? ?? 'instrumentos'),
       modo: ModoSala.values.byName(map['modo'] as String),
       dificultad: DificultadExtension.fromId(map['dificultad'] as String),
       maxJugadores: (map['maxJugadores'] as num?)?.toInt() ?? 5,
@@ -112,6 +124,9 @@ class Sala {
           .cast<String>(),
       finEn: DateTime.tryParse(map['finEn'] as String? ?? ''),
       ganadorUid: map['ganadorUid'] as String?,
+      premios: (map['premios'] as Map? ?? {}).map(
+        (uid, fichas) => MapEntry(uid as String, (fichas as num).toInt()),
+      ),
     );
   }
 }
@@ -122,6 +137,7 @@ class PartidaSala {
     required this.estado,
     this.gameId,
     this.nivel,
+    this.introId,
     this.indice = 0,
     this.compras = const {},
     this.melodiaDescubierta = false,
@@ -132,6 +148,8 @@ class PartidaSala {
   final EstadoSala estado;
   final String? gameId;
   final Nivel? nivel;
+  // Salas de intros: la intro que toca en lugar de un nivel.
+  final String? introId;
   final int indice;
   // Instrumentos ya comprados y su precio, al retomar la canción.
   final Map<String, int> compras;
@@ -146,6 +164,7 @@ class PartidaSala {
     nivel: json['nivel'] == null
         ? null
         : Nivel.fromJson(json['nivel'] as Map<String, dynamic>),
+    introId: json['introId'] as String?,
     indice: (json['indice'] as num?)?.toInt() ?? 0,
     compras: (json['compras'] as Map<String, dynamic>? ?? {}).map(
       (tipo, precio) => MapEntry(tipo, (precio as num).toInt()),

@@ -532,6 +532,24 @@ class _CartaReveladaState extends State<_CartaRevelada>
 /// Una intro: se escucha el fragmento y se escribe el nombre de la canción.
 /// Al acertar aparece el mismo reproductor del juego principal con la
 /// canción original y su portada.
+/// Lo que cambia al jugar una intro dentro de una sala: audio y respuestas
+/// van por la sala, con su título, aviso (reloj o ronda) y botones propios.
+class IntroEnSala {
+  const IntroEnSala({
+    required this.codigo,
+    required this.titulo,
+    this.cabecera,
+    this.onSaltar,
+    this.onSiguiente,
+  });
+
+  final String codigo;
+  final String titulo;
+  final Widget? cabecera;
+  final VoidCallback? onSaltar;
+  final VoidCallback? onSiguiente;
+}
+
 class IntroGameScreen extends ConsumerStatefulWidget {
   const IntroGameScreen({
     super.key,
@@ -539,9 +557,11 @@ class IntroGameScreen extends ConsumerStatefulWidget {
     this.sinConexion = false,
     this.offline,
     this.onOfflineCompletada,
+    this.sala,
   });
 
   final IntroAsignada intro;
+  final IntroEnSala? sala;
   final bool sinConexion;
   // Datos descargados; permiten validar la respuesta sin internet.
   final OfflineIntroData? offline;
@@ -592,6 +612,20 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
 
   FirebaseGameRepository get _repo => ref.read(firebaseGameRepositoryProvider);
 
+  String get _titulo0 => widget.sala?.titulo ?? 'Intro #${widget.intro.numero}';
+
+  /// [tipo]: 'intro', 'fullSong' o 'cover'.
+  Future<String> _urlRemota(String tipo) {
+    final sala = widget.sala;
+    return sala == null
+        ? _repo.obtenerUrlIntro(introId: widget.intro.id, tipo: tipo)
+        : _repo.audioIntroSala(
+            codigo: sala.codigo,
+            introId: widget.intro.id,
+            tipo: tipo,
+          );
+  }
+
   // Refresca la barra de progreso del reproductor mientras suena.
   void _iniciarReloj() =>
       _reloj ??= Timer.periodic(const Duration(milliseconds: 300), (_) {
@@ -614,7 +648,7 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       final guardado = await _audioService.cachedFile(clave);
       final url = guardado != null
           ? Uri.file(guardado.path).toString()
-          : await _repo.obtenerUrlIntro(introId: widget.intro.id, tipo: tipo);
+          : await _urlRemota(tipo);
       if (!mounted || generation != _playbackGeneration) return;
       await _audioService.reproducir(
         urls: [url],
@@ -654,9 +688,7 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     }
     if (widget.sinConexion) return;
     try {
-      final url = await _repo
-          .obtenerUrlIntro(introId: widget.intro.id, tipo: 'cover')
-          .timeout(const Duration(seconds: 4));
+      final url = await _urlRemota('cover').timeout(const Duration(seconds: 4));
       if (!mounted) return;
       var cargada = true;
       await precacheImage(
@@ -686,10 +718,16 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       }
       final ResultadoRespuesta resultado;
       try {
-        resultado = await _repo.enviarRespuestaIntro(
-          introId: widget.intro.id,
-          respuesta: answer,
-        );
+        final sala = widget.sala;
+        resultado = sala == null
+            ? await _repo.enviarRespuestaIntro(
+                introId: widget.intro.id,
+                respuesta: answer,
+              )
+            : await _repo.responderIntroSala(
+                codigo: sala.codigo,
+                respuesta: answer,
+              );
       } catch (error) {
         // Se cayó la conexión: si la intro está descargada se valida aquí.
         if (widget.offline == null || error is GameRepositoryException) {
@@ -702,6 +740,11 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       if (!resultado.correcta) {
         _fallo();
         return;
+      }
+      if (resultado.puntos > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('🏆 +${resultado.puntos} puntos')),
+        );
       }
       await _ganar(resultado.titulo ?? answer, resultado.artista);
     } catch (error) {
@@ -759,7 +802,7 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     color: _colorIntros,
     titulo: _titulo,
     artista: _artista,
-    insignia: '¡ADIVINASTE! · INTRO #${widget.intro.numero}',
+    insignia: '¡ADIVINASTE! · ${_titulo0.toUpperCase()}',
     portada: _portada,
     reproduciendo: _playing,
     enPausa: _paused,
@@ -773,9 +816,27 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     onDetener: _playing ? () => _audioService.detener() : null,
     onBuscar: _playing ? _audioService.buscar : null,
     confeti: _confeti,
-    botones: LiquidGlassButton(
-      onPressed: () => Navigator.of(context).pop(),
-      label: 'Volver a las intros',
+    botones: Row(
+      children: [
+        Expanded(
+          child: LiquidGlassButton(
+            onPressed: () => Navigator.of(context).pop(),
+            label: widget.sala == null
+                ? 'Volver a las intros'
+                : 'Volver a la sala',
+          ),
+        ),
+        if (widget.sala?.onSiguiente case final siguiente?) ...[
+          const SizedBox(width: 12),
+          Expanded(
+            child: LiquidGlassButton(
+              variant: LiquidGlassButtonVariant.secondary,
+              onPressed: siguiente,
+              label: 'Siguiente intro',
+            ),
+          ),
+        ],
+      ],
     ),
   );
 
@@ -792,6 +853,10 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (widget.sala?.cabecera case final cabecera?) ...[
+              cabecera,
+              const SizedBox(height: 12),
+            ],
             Center(
               child: LiquidGlassCard(
                 borderRadius: 26,
@@ -859,6 +924,14 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
               onPressed: _sending ? null : _submitAnswer,
               label: 'Comprobar respuesta',
             ),
+            if (widget.sala?.onSaltar case final saltar?) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _sending ? null : saltar,
+                icon: const Icon(Icons.skip_next_rounded),
+                label: const Text('Saltar intro (0 puntos)'),
+              ),
+            ],
           ],
         ),
       ),
@@ -871,7 +944,7 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     child: Scaffold(
       backgroundColor: Colors.transparent,
       appBar: LiquidGlassAppBar(
-        title: Text('Intro #${widget.intro.numero}'),
+        title: Text(_titulo0),
         actions: [
           if (_playing)
             Padding(
