@@ -1,9 +1,11 @@
 import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/nivel.dart';
+import '../models/sala.dart';
 
 class GameRepositoryException implements Exception {
   const GameRepositoryException({
@@ -206,8 +208,65 @@ class FirebaseGameRepository {
       titulo: response['titulo'] as String?,
       artista: response['artista'] as String?,
       monedas: (response['monedas'] as num?)?.toInt() ?? 0,
+      puntos: (response['puntos'] as num?)?.toInt() ?? 0,
     );
   }
+
+  // --- Salas de "Desafía a tus amigos" ---
+
+  Future<String> crearSala({
+    required ModoSala modo,
+    required Dificultad dificultad,
+    required bool publica,
+  }) async {
+    final response = await _post({
+      'action': 'crearSala',
+      'modo': modo.name,
+      'dificultad': dificultad.id,
+      'publica': publica,
+    });
+    return response['codigo'] as String;
+  }
+
+  Future<void> unirseSala(String codigo) =>
+      _post({'action': 'unirseSala', 'codigo': codigo});
+
+  Future<void> salirSala(String codigo) =>
+      _post({'action': 'salirSala', 'codigo': codigo});
+
+  Future<void> iniciarSala(String codigo) =>
+      _post({'action': 'iniciarSala', 'codigo': codigo});
+
+  Future<void> saltarCancionSala(String codigo) =>
+      _post({'action': 'saltarCancionSala', 'codigo': codigo});
+
+  /// Cierra la sala si ya se acabó el tiempo de contrarreloj.
+  Future<void> revisarSala(String codigo) =>
+      _post({'action': 'revisarSala', 'codigo': codigo});
+
+  Future<PartidaSala> partidaSala(String codigo) async => PartidaSala.fromJson(
+    await _post({'action': 'partidaSala', 'codigo': codigo}),
+  );
+
+  /// La sala en tiempo real; null si se borró (todos salieron antes de jugar).
+  Stream<Sala?> escucharSala(String codigo) => FirebaseFirestore.instance
+      .collection('salas')
+      .doc(codigo)
+      .snapshots()
+      .map((doc) => doc.exists ? Sala.fromMap(doc.data()!) : null);
+
+  /// Salas públicas que aún esperan jugadores.
+  Stream<List<Sala>> salasPublicas() => FirebaseFirestore.instance
+      .collection('salas')
+      .where('publica', isEqualTo: true)
+      .where('estado', isEqualTo: 'esperando')
+      .limit(20)
+      .snapshots()
+      .map(
+        (query) => [
+          for (final doc in query.docs) Sala.fromMap(doc.data()),
+        ].where((sala) => !sala.llena).toList(),
+      );
 
   Future<ResultadoCompraInstrumento> comprarInstrumento({
     required String gameId,
@@ -346,6 +405,7 @@ class ResultadoRespuesta {
     this.titulo,
     this.artista,
     this.monedas = 0,
+    this.puntos = 0,
   });
 
   final bool correcta;
@@ -353,6 +413,8 @@ class ResultadoRespuesta {
   final String? artista;
   // Monedas ganadas para "Adivina la intro" (0 al repetir un nivel).
   final int monedas;
+  // Puntos ganados en una sala contrarreloj.
+  final int puntos;
 }
 
 enum EstadoIntro { desbloqueada, completada }

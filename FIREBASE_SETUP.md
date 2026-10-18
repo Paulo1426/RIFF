@@ -411,6 +411,40 @@ validarse/actualizarse mediante Cloud Functions y transacciones, no con escritur
 del cliente. `preciosInstrumentos` empieza vacio y va guardando el precio de
 cada instrumento al comprarlo; no asignes precios a instrumentos no comprados.
 
+Las partidas de una sala llevan además `salaId` (código de la sala) y
+`salaIndice` (posición de la canción); no cambian el progreso del jugador.
+
+### `salas/{codigo}`
+
+Salas de "Desafía a tus amigos". Las crea y modifica solo `game-progress`
+(acciones `crearSala`, `unirseSala`, `salirSala`, `iniciarSala`,
+`partidaSala`, `saltarCancionSala` y `revisarSala`); hace falta una cuenta
+registrada. La app escucha su sala en tiempo real y lista las públicas en
+espera.
+
+```text
+codigo: string              # 6 caracteres, también es el id del documento
+creadorUid: string
+publica: boolean            # false: solo se entra con el código
+modo: "contrarreloj" | "eliminacion"
+dificultad: "facil" | "medio" | "avanzado"
+maxJugadores: number        # 5; ampliable cambiando maxJugadoresSala en salas.ts
+estado: "esperando" | "jugando" | "terminada"
+jugadores: map<uid, {nombre, puntos, aciertos, indice, gameId, inicioCancion,
+                     eliminado, eliminadoEnRonda, abandono}>
+orden: array<uid>           # orden de llegada
+levelIds: array<string>     # canciones de la dificultad, mezcladas al iniciar
+ronda: number               # eliminación: ronda actual
+acertaronRonda: array<uid>  # eliminación: quienes ya adivinaron la ronda
+finEn: string | null        # contrarreloj: fin de los 5 minutos (ISO)
+ganadorUid: string | null
+```
+
+- Contrarreloj: cada acierto suma 100 puntos, más hasta 50 por rapidez y 1
+  por cada $10.000 sin gastar. Se puede saltar una canción sin puntos.
+- Eliminación: cuando todos menos uno adivinaron la canción, ese uno queda
+  eliminado y empieza otra ronda, hasta que queda un ganador.
+
 ## 5. Reglas incluidas en este repositorio
 
 - `firestore.rules`: restringe los datos privados al propietario cuando aplica;

@@ -35,6 +35,13 @@ class GameScreen extends ConsumerStatefulWidget {
   final OfflineLevelData? offlineLevel;
   final Future<void> Function(String levelId, String answer)?
   onOfflineCompleted;
+  // Partidas de sala: título propio ("Canción 3"), aviso arriba (reloj o
+  // ronda), botón para saltar y compras hechas antes de salir y volver.
+  final String? titulo;
+  final Widget? cabecera;
+  final VoidCallback? onSaltar;
+  final Map<String, int> comprasPrevias;
+  final bool melodiaDescubierta;
 
   const GameScreen({
     super.key,
@@ -45,6 +52,11 @@ class GameScreen extends ConsumerStatefulWidget {
     this.offlineMode = false,
     this.offlineLevel,
     this.onOfflineCompleted,
+    this.titulo,
+    this.cabecera,
+    this.onSaltar,
+    this.comprasPrevias = const {},
+    this.melodiaDescubierta = false,
   });
 
   @override
@@ -89,6 +101,10 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     // La música del menú se pausa mientras se juega y vuelve al salir.
     _musicaMenu = ref.read(musicaMenuProvider)..entrarNivel();
     _playingOffline = widget.offlineMode;
+    _purchased.addAll(widget.comprasPrevias.keys);
+    _prices.addAll(widget.comprasPrevias);
+    _balance -= widget.comprasPrevias.values.fold(0, (a, b) => a + b);
+    _melodyFound = widget.melodiaDescubierta;
     _offlinePartida = widget.offlineLevel != null
         ? Partida(
             instrumentos: widget.nivel.instrumentos,
@@ -525,11 +541,13 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           _correct = true;
           _message = '¡Correcto! Reproduciendo la canción original.';
         });
-        if (resultado.monedas > 0) {
+        if (resultado.monedas > 0 || resultado.puntos > 0) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                '🪙 +${resultado.monedas} monedas para Adivina la intro',
+                resultado.puntos > 0
+                    ? '🏆 +${resultado.puntos} puntos'
+                    : '🪙 +${resultado.monedas} monedas para Adivina la intro',
               ),
             ),
           );
@@ -656,7 +674,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     titulo: _titulo,
     artista: _artista,
     insignia:
-        '¡ADIVINASTE! · NIVEL ${widget.numeroVisible ?? widget.nivel.numero}',
+        '¡ADIVINASTE! · ${(widget.titulo ?? 'Nivel ${widget.numeroVisible ?? widget.nivel.numero}').toUpperCase()}',
     portada: _portadaUrl == null ? null : NetworkImage(_portadaUrl!),
     reproduciendo: _playing,
     enPausa: _paused,
@@ -806,7 +824,10 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: LiquidGlassAppBar(
-          title: Text('Nivel ${widget.numeroVisible ?? widget.nivel.numero}'),
+          title: Text(
+            widget.titulo ??
+                'Nivel ${widget.numeroVisible ?? widget.nivel.numero}',
+          ),
           actions: [
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 250),
@@ -840,6 +861,10 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                       vertical: 16,
                     ),
                     children: [
+                      if (widget.cabecera case final cabecera?) ...[
+                        cabecera,
+                        const SizedBox(height: 12),
+                      ],
                       Text(
                         widget.nivel.modoPrueba
                             ? 'Modo de prueba: ${widget.nivel.duracionFragmentoSegundos} segundos por escucha.'
@@ -945,6 +970,14 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                           onPressed: _sending ? null : _submitAnswer,
                           label: 'Comprobar respuesta',
                         ),
+                      if (!_won && widget.onSaltar != null) ...[
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: _sending ? null : widget.onSaltar,
+                          icon: const Icon(Icons.skip_next_rounded),
+                          label: const Text('Saltar canción (0 puntos)'),
+                        ),
+                      ],
                     ],
                   ),
                 ),

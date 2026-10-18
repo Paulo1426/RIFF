@@ -8,8 +8,20 @@ import {
 import {
   canonicalDifficulty,
   levelsPerDifficulty,
+  type PublishedLevel,
   selectDifficultyLevels,
 } from "./level_selection.ts";
+import {
+  codigoValido,
+  duracionContrarrelojMs,
+  eliminadoDeRonda,
+  generarCodigo,
+  maxJugadoresSala,
+  type ModoSala,
+  modosSala,
+  nivelDeIndice,
+  puntosAcierto,
+} from "./salas.ts";
 import {
   coinBalance,
   coinsEarned,
@@ -426,6 +438,19 @@ function userPath(
   return `${root}/${collection}/${difficulty}`;
 }
 
+async function publishedLevels(token: string): Promise<PublishedLevel[]> {
+  const documents = await listCollection(token, "levels");
+  return documents.map((document) => {
+    const fields = fromFields(document.fields ?? {});
+    return {
+      id: document.name?.split("/").at(-1) ?? "",
+      numero: typeof fields.numero === "number" ? fields.numero : Number.NaN,
+      dificultad: normalizeDifficulty(fields.dificultad) ?? "",
+      published: fields.published === true,
+    };
+  });
+}
+
 async function ensureOrder(
   token: string,
   uid: string,
@@ -434,17 +459,8 @@ async function ensureOrder(
 ): Promise<string[]> {
   const path = userPath(uid, "difficultyOrders", difficulty, guest);
   const existing = await getDocument(token, path);
-  const documents = await listCollection(token, "levels");
   const levels = selectDifficultyLevels(
-    documents.map((document) => {
-      const fields = fromFields(document.fields ?? {});
-      return {
-        id: document.name?.split("/").at(-1) ?? "",
-        numero: typeof fields.numero === "number" ? fields.numero : Number.NaN,
-        dificultad: normalizeDifficulty(fields.dificultad) ?? "",
-        published: fields.published === true,
-      };
-    }),
+    await publishedLevels(token),
     difficulty,
   ).map((level) => level.id);
   if (existing) {
@@ -1045,14 +1061,7 @@ async function startLevel(
     );
   }
 
-  const random = new Uint32Array(1);
-  crypto.getRandomValues(random);
-  const gameId = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
   const nivel = selected.nivel as JsonObject;
-  const points = nivel.puntos_inicio as number[];
-  const startPoint = points.length > 0 ? points[random[0] % points.length] : 0;
   const instrumentList = nivel.instrumentos as JsonObject[];
   const gameLevel = {
     ...nivel,
@@ -1063,8 +1072,30 @@ async function startLevel(
       comprable: true,
     })),
   };
-  await commitWrites(token, [
-    createWrite(`games/${gameId}`, {
+  const { gameId, write } = newGame(uid, levelId, nivel);
+  await commitWrites(token, [write]);
+  return { gameId, nivel: gameLevel };
+}
+
+/// Partida nueva de [levelId] con presupuesto completo; [extra] añade campos
+/// (p. ej. la sala a la que pertenece).
+function newGame(
+  uid: string,
+  levelId: string,
+  nivel: JsonObject,
+  extra: JsonObject = {},
+): { gameId: string; write: JsonObject } {
+  const random = new Uint32Array(1);
+  crypto.getRandomValues(random);
+  const gameId = Array.from(crypto.getRandomValues(new Uint8Array(16)))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  const points = nivel.puntos_inicio as number[];
+  const startPoint = points.length > 0 ? points[random[0] % points.length] : 0;
+  const now = new Date().toISOString();
+  return {
+    gameId,
+    write: createWrite(`games/${gameId}`, {
       uid,
       levelId,
       dificultad: nivel.dificultad,
@@ -1077,11 +1108,28 @@ async function startLevel(
       ganada: false,
       failedAnswerAttempts: 0,
       nextAnswerAt: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      ...extra,
+      createdAt: now,
+      updatedAt: now,
     }),
-  ]);
-  return { gameId, nivel: gameLevel };
+  };
+}
+
+/// Título y artista de la canción del nivel, para el reproductor al acertar.
+async function revealedSong(
+  token: string,
+  level: { fields: JsonObject },
+): Promise<JsonObject> {
+  const songId = level.fields.cancionId;
+  const song = typeof songId === "string" && validId(songId)
+    ? await getDocument(token, `songs/${songId}`)
+    : null;
+  return {
+    titulo: typeof song?.fields.titulo === "string" ? song.fields.titulo : null,
+    artista: typeof song?.fields.artista === "string"
+      ? song.fields.artista
+      : null,
+  };
 }
 
 async function submitAnswer(
@@ -1115,11 +1163,16 @@ async function submitAnswer(
     throw new HttpError(500, "La partida no tiene datos de nivel válidos");
   }
 
+  // Las partidas de una sala no tocan el orden ni el progreso del jugador.
+  const salaId = game.fields.salaId;
+  const enSala = typeof salaId === "string";
   const [level, answerDoc, order, progress] = await Promise.all([
     getDocument(token, `levels/${levelId}`),
     getDocument(token, `privateLevelAnswers/${levelId}`),
-    ensureOrder(token, uid, difficulty as Difficulty, guest),
-    getDocument(
+    enSala
+      ? [] as string[]
+      : ensureOrder(token, uid, difficulty as Difficulty, guest),
+    enSala ? null : getDocument(
       token,
       userPath(uid, "progress", difficulty as Difficulty, guest),
     ),
@@ -1152,6 +1205,9 @@ async function submitAnswer(
       ),
     ]);
     return { correct: false };
+  }
+  if (enSala) {
+    return await answerRoomGame(token, uid, gameId, salaId as string, level);
   }
 
   const currentOrder = order;
@@ -1214,11 +1270,6 @@ async function submitAnswer(
     ]),
   ];
   await commitWrites(token, writes);
-  // Al acertar ya se puede revelar la canción para el reproductor.
-  const songId = level.fields.cancionId;
-  const song = typeof songId === "string" && validId(songId)
-    ? await getDocument(token, `songs/${songId}`)
-    : null;
   return {
     correct: true,
     // Monedas para "Adivina la intro": solo la primera vez que se gana.
@@ -1226,10 +1277,544 @@ async function submitAnswer(
       ? 0
       : introCoinRewards[difficulty as Difficulty],
     completedDifficulty: currentOrder.every((id) => completedIds.has(id)),
-    titulo: typeof song?.fields.titulo === "string" ? song.fields.titulo : null,
-    artista: typeof song?.fields.artista === "string"
-      ? song.fields.artista
-      : null,
+    // Al acertar ya se puede revelar la canción para el reproductor.
+    ...await revealedSong(token, level),
+  };
+}
+
+// --- "Desafía a tus amigos" ---
+// Firestore: salas/{codigo}. La app la escucha en tiempo real (las reglas
+// dejan leerla a sus jugadores y listar las públicas en espera) y solo esta
+// función la modifica. Cada canción de un jugador es una partida normal en
+// games/{gameId} con salaId y salaIndice, así compras y audios (audio-link)
+// funcionan igual que en el juego principal.
+
+interface Jugador extends JsonObject {
+  nombre: string;
+  puntos: number;
+  aciertos: number;
+  // Contrarreloj: canción en la que va el jugador.
+  indice: number;
+  gameId: string | null;
+  inicioCancion: string | null;
+  eliminado: boolean;
+  eliminadoEnRonda: number | null;
+  abandono: boolean;
+}
+
+function newPlayer(nombre: string): Jugador {
+  return {
+    nombre,
+    puntos: 0,
+    aciertos: 0,
+    indice: 0,
+    gameId: null,
+    inicioCancion: null,
+    eliminado: false,
+    eliminadoEnRonda: null,
+    abandono: false,
+  };
+}
+
+function roomPath(codigo: string): string {
+  return `salas/${codigo}`;
+}
+
+function roomPlayers(sala: JsonObject): Record<string, Jugador> {
+  const raw = sala.jugadores;
+  return raw && typeof raw === "object" && !Array.isArray(raw)
+    ? { ...raw as Record<string, Jugador> }
+    : {};
+}
+
+function roomOrder(sala: JsonObject): string[] {
+  return Array.isArray(sala.orden)
+    ? (sala.orden as unknown[]).filter((uid): uid is string =>
+      typeof uid === "string"
+    )
+    : [];
+}
+
+function roomMember(sala: JsonObject, uid: string): Jugador {
+  const jugador = roomPlayers(sala)[uid];
+  if (!jugador) throw new HttpError(403, "No estás en esta sala");
+  return jugador;
+}
+
+/// Canción que le toca al jugador: en eliminación es la de la ronda.
+function roomSongIndex(sala: JsonObject, jugador: Jugador): number {
+  return sala.modo === "eliminacion"
+    ? (sala.ronda as number) - 1
+    : jugador.indice;
+}
+
+function roomExpired(sala: JsonObject): boolean {
+  return sala.modo === "contrarreloj" && typeof sala.finEn === "string" &&
+    Date.parse(sala.finEn) <= Date.now();
+}
+
+/// Fin de contrarreloj: gana más puntos; a igualdad, más aciertos y luego
+/// quien entró primero.
+function finishTimedRoom(sala: JsonObject): JsonObject {
+  const jugadores = roomPlayers(sala);
+  const [ganador] = roomOrder(sala).filter((uid) => jugadores[uid])
+    .sort((a, b) =>
+      jugadores[b].puntos - jugadores[a].puntos ||
+      jugadores[b].aciertos - jugadores[a].aciertos
+    );
+  return { estado: "terminada", ganadorUid: ganador ?? null };
+}
+
+/// Eliminación: saca al último en adivinar y abre la siguiente ronda, o
+/// cierra la sala cuando queda uno.
+function advanceElimination(
+  sala: JsonObject,
+  jugadores: Record<string, Jugador>,
+  acertaron: string[],
+): JsonObject {
+  const ronda = sala.ronda as number;
+  const vivos = roomOrder(sala).filter((uid) =>
+    jugadores[uid] && !jugadores[uid].eliminado
+  );
+  const fuera = eliminadoDeRonda(vivos, acertaron);
+  if (fuera) {
+    jugadores[fuera] = {
+      ...jugadores[fuera],
+      eliminado: true,
+      eliminadoEnRonda: ronda,
+    };
+  }
+  const restantes = vivos.filter((uid) => uid !== fuera);
+  if (restantes.length <= 1) {
+    return {
+      jugadores,
+      acertaronRonda: acertaron,
+      estado: "terminada",
+      ganadorUid: restantes[0] ?? null,
+    };
+  }
+  if (!fuera) return { jugadores, acertaronRonda: acertaron };
+  return {
+    jugadores,
+    ronda: ronda + 1,
+    acertaronRonda: [],
+    inicioRonda: new Date().toISOString(),
+  };
+}
+
+interface RoomChange<T> {
+  campos?: JsonObject;
+  borrar?: boolean;
+  extra?: JsonObject[];
+  resultado: T;
+}
+
+/// Lee la sala, aplica [cambio] y la guarda solo si nadie la modificó
+/// entretanto; si otro jugador escribió antes, reintenta con la versión nueva.
+async function updateRoom<T>(
+  token: string,
+  codigo: string,
+  cambio: (sala: JsonObject) => Promise<RoomChange<T>> | RoomChange<T>,
+): Promise<T> {
+  for (let intento = 0; intento < 5; intento++) {
+    const sala = await getDocument(token, roomPath(codigo));
+    if (!sala?.updateTime) {
+      throw new HttpError(404, "No existe una sala con ese código");
+    }
+    const { campos, borrar, extra = [], resultado } = await cambio(sala.fields);
+    const writes = [...extra];
+    if (borrar) {
+      writes.push({
+        delete: documentName(roomPath(codigo)),
+        currentDocument: { updateTime: sala.updateTime },
+      });
+    } else if (campos) {
+      writes.push(
+        updateWrite(
+          roomPath(codigo),
+          { ...campos, updatedAt: new Date().toISOString() },
+          sala.updateTime,
+        ),
+      );
+    }
+    if (writes.length === 0) return resultado;
+    try {
+      await commitWrites(token, writes);
+      return resultado;
+    } catch (error) {
+      if (!(error instanceof HttpError) || error.status !== 409) throw error;
+    }
+  }
+  throw new HttpError(409, "La sala está muy ocupada; inténtalo de nuevo");
+}
+
+async function createRoom(
+  token: string,
+  uid: string,
+  nombre: string,
+  body: JsonObject,
+): Promise<JsonObject> {
+  const dificultad = normalizeDifficulty(body.dificultad);
+  if (
+    !modosSala.includes(body.modo as ModoSala) ||
+    !difficulties.includes(dificultad as Difficulty) ||
+    typeof body.publica !== "boolean"
+  ) {
+    throw new HttpError(400, "modo, dificultad o publica no son válidos");
+  }
+  const now = new Date().toISOString();
+  for (let intento = 0; intento < 5; intento++) {
+    const codigo = generarCodigo((max) => {
+      const random = new Uint32Array(1);
+      crypto.getRandomValues(random);
+      return random[0] % max;
+    });
+    try {
+      await commitWrites(token, [
+        createWrite(roomPath(codigo), {
+          codigo,
+          creadorUid: uid,
+          publica: body.publica,
+          modo: body.modo,
+          dificultad,
+          maxJugadores: maxJugadoresSala,
+          estado: "esperando",
+          jugadores: { [uid]: newPlayer(nombre) },
+          orden: [uid],
+          levelIds: [],
+          ronda: 0,
+          acertaronRonda: [],
+          inicioRonda: null,
+          finEn: null,
+          ganadorUid: null,
+          createdAt: now,
+          updatedAt: now,
+        }),
+      ]);
+      return { codigo };
+    } catch (error) {
+      // Código repetido: se prueba con otro.
+      if (!(error instanceof HttpError) || error.status !== 409) throw error;
+    }
+  }
+  throw new HttpError(503, "No se pudo generar un código de sala");
+}
+
+function joinRoom(
+  token: string,
+  uid: string,
+  nombre: string,
+  codigo: string,
+): Promise<JsonObject> {
+  return updateRoom(token, codigo, (sala) => {
+    const jugadores = roomPlayers(sala);
+    if (jugadores[uid]) return { resultado: { codigo } };
+    if (sala.estado !== "esperando") {
+      throw new HttpError(409, "La sala ya empezó");
+    }
+    const max = typeof sala.maxJugadores === "number"
+      ? sala.maxJugadores
+      : maxJugadoresSala;
+    if (Object.keys(jugadores).length >= max) {
+      throw new HttpError(409, "La sala está llena");
+    }
+    return {
+      campos: {
+        jugadores: { ...jugadores, [uid]: newPlayer(nombre) },
+        orden: [...roomOrder(sala), uid],
+      },
+      resultado: { codigo },
+    };
+  });
+}
+
+function leaveRoom(
+  token: string,
+  uid: string,
+  codigo: string,
+): Promise<JsonObject> {
+  return updateRoom(token, codigo, (sala) => {
+    const jugadores = roomPlayers(sala);
+    const jugador = jugadores[uid];
+    if (!jugador || sala.estado === "terminada") {
+      return { resultado: { salio: true } };
+    }
+    if (sala.estado === "esperando") {
+      delete jugadores[uid];
+      const orden = roomOrder(sala).filter((id) => id !== uid);
+      if (orden.length === 0) return { borrar: true, resultado: { salio: true } };
+      return {
+        campos: {
+          jugadores,
+          orden,
+          // Si sale quien la creó, la sala pasa al siguiente en llegar.
+          creadorUid: sala.creadorUid === uid ? orden[0] : sala.creadorUid,
+        },
+        resultado: { salio: true },
+      };
+    }
+    // En juego el jugador queda en la tabla, pero ya no compite.
+    jugadores[uid] = sala.modo === "eliminacion" && !jugador.eliminado
+      ? {
+        ...jugador,
+        abandono: true,
+        eliminado: true,
+        eliminadoEnRonda: sala.ronda as number,
+      }
+      : { ...jugador, abandono: true };
+    const activos = roomOrder(sala).filter((id) =>
+      jugadores[id] && !jugadores[id].abandono
+    );
+    let campos: JsonObject = { jugadores };
+    if (sala.modo === "eliminacion") {
+      const acertaron = (sala.acertaronRonda as string[] ?? []).filter((id) =>
+        id !== uid
+      );
+      campos = advanceElimination(sala, jugadores, acertaron);
+    } else if (activos.length === 0) {
+      campos = { jugadores, ...finishTimedRoom({ ...sala, jugadores }) };
+    }
+    return { campos, resultado: { salio: true } };
+  });
+}
+
+function startRoom(
+  token: string,
+  uid: string,
+  codigo: string,
+): Promise<JsonObject> {
+  return updateRoom(token, codigo, async (sala) => {
+    if (sala.creadorUid !== uid) {
+      throw new HttpError(403, "Solo quien creó la sala puede iniciarla");
+    }
+    if (sala.estado !== "esperando") {
+      throw new HttpError(409, "La sala ya empezó");
+    }
+    if (roomOrder(sala).length < 2) {
+      throw new HttpError(409, "Se necesitan al menos 2 jugadores");
+    }
+    const levelIds = (await publishedLevels(token))
+      .filter((level) =>
+        level.published && level.dificultad === sala.dificultad &&
+        validId(level.id)
+      )
+      .map((level) => level.id);
+    if (levelIds.length === 0) {
+      throw new HttpError(409, "No hay canciones publicadas en esa dificultad");
+    }
+    const now = Date.now();
+    return {
+      campos: {
+        estado: "jugando",
+        levelIds: shuffled(levelIds),
+        ronda: 1,
+        acertaronRonda: [],
+        inicioRonda: new Date(now).toISOString(),
+        finEn: sala.modo === "contrarreloj"
+          ? new Date(now + duracionContrarrelojMs).toISOString()
+          : null,
+      },
+      resultado: { iniciada: true },
+    };
+  });
+}
+
+/// Partida del jugador para la canción que le toca; la crea si aún no existe
+/// y, si ya existe, devuelve también sus compras para retomarla.
+function roomGame(
+  token: string,
+  uid: string,
+  codigo: string,
+): Promise<JsonObject> {
+  return updateRoom<JsonObject>(token, codigo, async (sala) => {
+    const jugador = roomMember(sala, uid);
+    if (sala.estado !== "jugando") return { resultado: { estado: sala.estado } };
+    if (roomExpired(sala)) {
+      return {
+        campos: finishTimedRoom(sala),
+        resultado: { estado: "terminada" },
+      };
+    }
+    if (jugador.eliminado || jugador.abandono) {
+      return { resultado: { estado: "jugando", eliminado: true } };
+    }
+    if ((sala.acertaronRonda as string[] ?? []).includes(uid)) {
+      return { resultado: { estado: "jugando", esperando: true } };
+    }
+    const indice = roomSongIndex(sala, jugador);
+    const levelId = nivelDeIndice(sala.levelIds as string[], indice);
+    const entry = await buildLevelEntry(
+      token,
+      levelId,
+      sala.dificultad as Difficulty,
+      new Set(),
+      true,
+    );
+    const nivel = entry.nivel as JsonObject;
+    const actual = jugador.gameId
+      ? await getDocument(token, `games/${jugador.gameId}`)
+      : null;
+    if (
+      actual && actual.fields.salaId === codigo &&
+      actual.fields.salaIndice === indice && actual.fields.ganada !== true
+    ) {
+      const comprados = Array.isArray(actual.fields.instrumentosComprados)
+        ? actual.fields.instrumentosComprados as string[]
+        : [];
+      const precios = (actual.fields.preciosInstrumentos ?? {}) as JsonObject;
+      return {
+        resultado: {
+          estado: "jugando",
+          gameId: jugador.gameId,
+          nivel,
+          indice,
+          compras: Object.fromEntries(comprados.map((t) => [t, precios[t]])),
+          melodiaDescubierta: actual.fields.melodiaDescubierta === true,
+        },
+      };
+    }
+    const { gameId, write } = newGame(uid, levelId, nivel, {
+      salaId: codigo,
+      salaIndice: indice,
+    });
+    return {
+      campos: {
+        jugadores: {
+          ...roomPlayers(sala),
+          [uid]: {
+            ...jugador,
+            gameId,
+            inicioCancion: new Date().toISOString(),
+          },
+        },
+      },
+      extra: [write],
+      resultado: {
+        estado: "jugando",
+        gameId,
+        nivel,
+        indice,
+        compras: {},
+        melodiaDescubierta: false,
+      },
+    };
+  });
+}
+
+/// Contrarreloj: pasa a la siguiente canción sin puntos.
+function skipRoomSong(
+  token: string,
+  uid: string,
+  codigo: string,
+): Promise<JsonObject> {
+  return updateRoom(token, codigo, (sala) => {
+    const jugador = roomMember(sala, uid);
+    if (sala.modo !== "contrarreloj" || sala.estado !== "jugando") {
+      throw new HttpError(409, "Solo se puede saltar en contrarreloj");
+    }
+    if (roomExpired(sala)) {
+      return { campos: finishTimedRoom(sala), resultado: { saltada: false } };
+    }
+    return {
+      campos: {
+        jugadores: {
+          ...roomPlayers(sala),
+          [uid]: {
+            ...jugador,
+            indice: jugador.indice + 1,
+            gameId: null,
+            inicioCancion: null,
+          },
+        },
+      },
+      resultado: { saltada: true },
+    };
+  });
+}
+
+/// La app lo llama al acabarse el reloj para cerrar la sala.
+function checkRoom(
+  token: string,
+  uid: string,
+  codigo: string,
+): Promise<JsonObject> {
+  return updateRoom(token, codigo, (sala) => {
+    roomMember(sala, uid);
+    return roomExpired(sala) && sala.estado === "jugando"
+      ? { campos: finishTimedRoom(sala), resultado: { estado: "terminada" } }
+      : { resultado: { estado: sala.estado } };
+  });
+}
+
+/// Respuesta correcta en una partida de sala: suma puntos (contrarreloj) o
+/// registra el acierto de la ronda (eliminación).
+async function answerRoomGame(
+  token: string,
+  uid: string,
+  gameId: string,
+  codigo: string,
+  level: { fields: JsonObject },
+): Promise<JsonObject> {
+  const gamePath = `games/${gameId}`;
+  const puntos = await updateRoom<number | null>(token, codigo, async (sala) => {
+    const jugador = roomMember(sala, uid);
+    if (sala.estado !== "jugando") {
+      throw new HttpError(409, "La sala ya terminó");
+    }
+    if (roomExpired(sala)) {
+      return { campos: finishTimedRoom(sala), resultado: null };
+    }
+    const game = await getDocument(token, gamePath);
+    if (
+      !game?.updateTime || game.fields.ganada === true ||
+      jugador.eliminado ||
+      game.fields.salaIndice !== roomSongIndex(sala, jugador)
+    ) {
+      throw new HttpError(409, "Esta canción ya no es la actual de la sala");
+    }
+    const ganar = updateWrite(gamePath, {
+      ganada: true,
+      failedAnswerAttempts: 0,
+      nextAnswerAt: null,
+      updatedAt: new Date().toISOString(),
+    }, game.updateTime);
+    const jugadores = roomPlayers(sala);
+    if (sala.modo === "eliminacion") {
+      jugadores[uid] = { ...jugador, aciertos: jugador.aciertos + 1 };
+      return {
+        campos: advanceElimination(sala, jugadores, [
+          ...(sala.acertaronRonda as string[] ?? []),
+          uid,
+        ]),
+        extra: [ganar],
+        resultado: 0,
+      };
+    }
+    const segundos = (Date.now() - Date.parse(jugador.inicioCancion ?? "")) /
+      1000;
+    const ganados = puntosAcierto(
+      Number.isFinite(segundos) ? segundos : 0,
+      game.fields.presupuestoRestante as number,
+    );
+    jugadores[uid] = {
+      ...jugador,
+      puntos: jugador.puntos + ganados,
+      aciertos: jugador.aciertos + 1,
+      indice: jugador.indice + 1,
+      gameId: null,
+      inicioCancion: null,
+    };
+    return { campos: { jugadores }, extra: [ganar], resultado: ganados };
+  });
+  if (puntos === null) {
+    throw new HttpError(409, "Se acabó el tiempo de la sala");
+  }
+  return {
+    correct: true,
+    monedas: 0,
+    completedDifficulty: false,
+    puntos,
+    ...await revealedSong(token, level),
   };
 }
 
@@ -1553,6 +2138,13 @@ async function handle(request: Request): Promise<Response> {
     const guest = firebaseClaim !== null &&
       typeof firebaseClaim === "object" &&
       (firebaseClaim as JsonObject).sign_in_provider === "anonymous";
+    // Nombre visible en las salas: el de Google o la parte local del correo.
+    const { name, email } = verified.payload;
+    const playerName = typeof name === "string" && name.trim()
+      ? name.trim().slice(0, 30)
+      : typeof email === "string"
+      ? email.split("@")[0].slice(0, 30)
+      : "Jugador";
     let rawBody: unknown;
     try {
       rawBody = await request.json();
@@ -1716,6 +2308,29 @@ async function handle(request: Request): Promise<Response> {
         200,
         await submitIntroAnswer(token, uid, body.introId, body.answer, guest),
       );
+    }
+    const roomActions: Record<
+      string,
+      (codigo: string) => Promise<JsonObject>
+    > = {
+      unirseSala: (codigo) => joinRoom(token, uid, playerName, codigo),
+      salirSala: (codigo) => leaveRoom(token, uid, codigo),
+      iniciarSala: (codigo) => startRoom(token, uid, codigo),
+      partidaSala: (codigo) => roomGame(token, uid, codigo),
+      saltarCancionSala: (codigo) => skipRoomSong(token, uid, codigo),
+      revisarSala: (codigo) => checkRoom(token, uid, codigo),
+    };
+    if (action === "crearSala" || Object.hasOwn(roomActions, String(action))) {
+      if (guest) {
+        throw new HttpError(403, "Crea una cuenta para jugar con amigos");
+      }
+      if (action === "crearSala") {
+        return response(200, await createRoom(token, uid, playerName, body));
+      }
+      if (!codigoValido(body.codigo)) {
+        throw new HttpError(400, "El código de sala no es válido");
+      }
+      return response(200, await roomActions[action as string](body.codigo));
     }
     if (action === "endGuestSession") {
       if (!guest) {

@@ -23,6 +23,7 @@ import 'carrusel_dificultades.dart';
 import 'game_screen.dart';
 import 'instrucciones_dialog.dart';
 import 'intros_screen.dart';
+import 'salas_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key, this.authStateChanges});
@@ -751,8 +752,14 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
                 ? _MenuPrincipal(
                     introsDisponibles: _introsDisponibles,
                     offlineMode: _offlineMode,
+                    esInvitado: widget.user.isAnonymous,
                     onInstrumentos: () =>
                         setState(() => _enInstrumentos = true),
+                    onSalas: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const SalasScreen(),
+                      ),
+                    ),
                     onIntros: () => Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => const IntrosScreen(),
@@ -908,13 +915,17 @@ class _MenuPrincipal extends StatelessWidget {
   const _MenuPrincipal({
     required this.introsDisponibles,
     required this.offlineMode,
+    required this.esInvitado,
     required this.onInstrumentos,
+    required this.onSalas,
     required this.onIntros,
   });
 
   final bool introsDisponibles;
   final bool offlineMode;
+  final bool esInvitado;
   final VoidCallback onInstrumentos;
+  final VoidCallback onSalas;
   final VoidCallback onIntros;
 
   @override
@@ -935,6 +946,21 @@ class _MenuPrincipal extends StatelessWidget {
                   detalle: 'Compra instrumentos y descubre la canción.',
                   color: AppColors.verde,
                   onTap: onInstrumentos,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: _CuadroModo(
+                  emoji: '🏆',
+                  titulo: 'Desafía a tus amigos',
+                  detalle: esInvitado
+                      ? 'Crea una cuenta para jugar en salas.'
+                      : offlineMode
+                      ? 'Necesitas conexión para jugar en salas.'
+                      : 'Crea o únete a una sala de hasta 5 jugadores.',
+                  color: AppColors.medio,
+                  bloqueado: esInvitado || offlineMode,
+                  onTap: esInvitado || offlineMode ? null : onSalas,
                 ),
               ),
               const SizedBox(height: 16),
