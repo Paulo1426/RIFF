@@ -1,6 +1,6 @@
 {
-    "name": "song_guess_game",
-    "short_name": "song_guess_game",
+    "name": "Riff",
+    "short_name": "Riff",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

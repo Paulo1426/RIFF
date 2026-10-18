@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:song_guess_game/screens/game_screen.dart';
+import 'package:riff/screens/game_screen.dart';
 
 void main() {
   test('agrega puntos de miles', () {

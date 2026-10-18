@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:song_guess_game/services/firebase_game_repository.dart';
-import 'package:song_guess_game/services/offline_intro_store.dart';
+import 'package:riff/services/firebase_game_repository.dart';
+import 'package:riff/services/offline_intro_store.dart';
 
 void main() {
   const data = OfflineIntroData(

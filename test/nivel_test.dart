@@ -1,9 +1,9 @@
 import 'dart:math';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:song_guess_game/models/instrumento.dart';
-import 'package:song_guess_game/models/nivel.dart';
-import 'package:song_guess_game/models/partida.dart';
+import 'package:riff/models/instrumento.dart';
+import 'package:riff/models/nivel.dart';
+import 'package:riff/models/partida.dart';
 
 void main() {
   final instrumentosPrueba = [

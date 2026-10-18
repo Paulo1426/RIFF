@@ -2,9 +2,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:song_guess_game/providers/providers.dart';
-import 'package:song_guess_game/screens/intros_screen.dart';
-import 'package:song_guess_game/services/firebase_game_repository.dart';
+import 'package:riff/providers/providers.dart';
+import 'package:riff/screens/intros_screen.dart';
+import 'package:riff/services/firebase_game_repository.dart';
 
 class _AuthFalsa implements FirebaseAuth {
   @override

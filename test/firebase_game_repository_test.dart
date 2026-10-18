@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:song_guess_game/models/nivel.dart';
-import 'package:song_guess_game/services/firebase_game_repository.dart';
+import 'package:riff/models/nivel.dart';
+import 'package:riff/services/firebase_game_repository.dart';
 
 void main() {
   test('retains backend status for actionable error messages', () {

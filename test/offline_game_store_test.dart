@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:song_guess_game/models/instrumento.dart';
-import 'package:song_guess_game/models/nivel.dart';
-import 'package:song_guess_game/services/offline_game_store.dart';
+import 'package:riff/models/instrumento.dart';
+import 'package:riff/models/nivel.dart';
+import 'package:riff/services/offline_game_store.dart';
 
 void main() {
   final level = Nivel(

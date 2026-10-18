@@ -2,12 +2,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:song_guess_game/models/instrumento.dart';
-import 'package:song_guess_game/models/nivel.dart';
-import 'package:song_guess_game/screens/game_screen.dart';
-import 'package:song_guess_game/screens/home_screen.dart';
-import 'package:song_guess_game/screens/instrucciones_dialog.dart';
-import 'package:song_guess_game/services/offline_game_store.dart';
+import 'package:riff/models/instrumento.dart';
+import 'package:riff/models/nivel.dart';
+import 'package:riff/screens/game_screen.dart';
+import 'package:riff/screens/home_screen.dart';
+import 'package:riff/screens/instrucciones_dialog.dart';
+import 'package:riff/services/offline_game_store.dart';
 
 void main() {
   final nivel = Nivel.generar(

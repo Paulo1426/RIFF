@@ -1,8 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:song_guess_game/main.dart';
-import 'package:song_guess_game/screens/home_screen.dart';
+import 'package:riff/main.dart';
+import 'package:riff/screens/home_screen.dart';
 
 void main() {
   testWidgets('muestra la pantalla inicial', (tester) async {
