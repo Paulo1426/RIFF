@@ -170,7 +170,7 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
                     'Fácil 2, Media 3 y Avanzada 4.'
               : 'Quedan ${estado.restantes} intros por descubrir.',
           textAlign: TextAlign.center,
-          style: text.bodySmall?.copyWith(color: AppColors.slatePencil),
+          style: text.bodySmall?.copyWith(color: context.paleta.tintaSuave),
         ),
       ],
     );
@@ -323,7 +323,9 @@ class _TarjetaIntro extends StatelessWidget {
         child: Icon(
           completada ? Icons.music_note_rounded : Icons.headphones_rounded,
           size: 36,
-          color: completada ? tonoTexto(color) : AppColors.paperWhite,
+          color: completada
+              ? context.paleta.tonoTexto(color)
+              : AppColors.paperWhite,
         ),
       ),
     );
@@ -382,7 +384,7 @@ class _TarjetaIntro extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: text.labelLarge?.copyWith(
                         color: completada
-                            ? tonoTexto(color)
+                            ? context.paleta.tonoTexto(color)
                             : AppColors.paperWhite,
                         fontWeight: FontWeight.w700,
                       ),
@@ -395,7 +397,9 @@ class _TarjetaIntro extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
                       style: text.labelSmall?.copyWith(
-                        color: tonoTexto(color).withValues(alpha: 0.8),
+                        color: context.paleta
+                            .tonoTexto(color)
+                            .withValues(alpha: 0.8),
                       ),
                     ),
                 ],
@@ -453,7 +457,7 @@ class _CartaReveladaState extends State<_CartaRevelada>
           end: Alignment.bottomRight,
           colors: dorso
               ? [_colorIntros, Color.lerp(_colorIntros, Colors.black, 0.25)!]
-              : [AppColors.paperWhite, AppColors.cloudMist],
+              : [context.paleta.superficie, context.paleta.fondo],
         ),
         border: Border.all(color: _colorIntros, width: 3),
         boxShadow: const [BoxShadow(blurRadius: 24, color: Color(0x33000000))],

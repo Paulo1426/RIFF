@@ -2,6 +2,7 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 
+import '../../theme.dart';
 import '../../theme/liquid_glass_theme.dart';
 
 /// Tarjeta de vidrio líquido: desenfoca lo de atrás bajo un blanco
@@ -43,19 +44,21 @@ class LiquidGlassCard extends StatelessWidget {
     final tinte = tintColor == null
         ? LiquidGlass.verdeGlassBase
         : tintColor!.withValues(alpha: 0.12);
+    final paleta = context.paleta;
     final relleno = Color.alphaBlend(
       tinte,
-      Colors.white.withValues(alpha: opacity),
+      paleta.vidrio.withValues(alpha: opacity),
     );
     Widget contenido = DecoratedBox(
       decoration: BoxDecoration(
         color: relleno,
-        gradient: LiquidGlass.glassGradient,
+        gradient: LiquidGlass.glassGradient(paleta),
         borderRadius: forma,
       ),
       child: CustomPaint(
         foregroundPainter: _BordeLuzPainter(
           radio: borderRadius,
+          paleta: paleta,
           color: borderColor,
         ),
         child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
@@ -80,9 +83,14 @@ class LiquidGlassCard extends StatelessWidget {
 /// Pinta el borde de luz (degradado blanco) o un borde de color, más una
 /// línea de brillo interior en la parte de arriba.
 class _BordeLuzPainter extends CustomPainter {
-  const _BordeLuzPainter({required this.radio, this.color});
+  const _BordeLuzPainter({
+    required this.radio,
+    required this.paleta,
+    this.color,
+  });
 
   final double radio;
+  final Paleta paleta;
   final Color? color;
 
   @override
@@ -97,7 +105,9 @@ class _BordeLuzPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = color == null ? ancho : 2;
     if (color == null) {
-      pincel.shader = LiquidGlass.glassBorderGradient.createShader(rect);
+      pincel.shader = LiquidGlass.glassBorderGradient(
+        paleta,
+      ).createShader(rect);
     } else {
       pincel.color = color!;
     }
@@ -107,7 +117,7 @@ class _BordeLuzPainter extends CustomPainter {
     final brillo = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1
-      ..color = Colors.white.withValues(alpha: 0.3);
+      ..color = paleta.brillo.withValues(alpha: 0.3);
     canvas.drawLine(
       Offset(radio, ancho + 1),
       Offset(size.width - radio, ancho + 1),
@@ -117,7 +127,9 @@ class _BordeLuzPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_BordeLuzPainter oldDelegate) =>
-      oldDelegate.radio != radio || oldDelegate.color != color;
+      oldDelegate.radio != radio ||
+      oldDelegate.paleta != paleta ||
+      oldDelegate.color != color;
 }
 
 /// Sombra suave solo por fuera de la tarjeta: una BoxShadow normal se vería a

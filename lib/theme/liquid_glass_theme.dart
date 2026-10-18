@@ -21,23 +21,20 @@ abstract final class LiquidGlass {
   static const glassShadowBlur = 30.0;
   static const glassShadowOpacity = 0.16;
 
-  /// Relleno: blanco más denso arriba que abajo, como luz que entra.
-  static final glassGradient = LinearGradient(
+  /// Relleno: más denso arriba que abajo, como luz que entra.
+  static LinearGradient glassGradient(Paleta p) => LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [
-      Colors.white.withValues(alpha: 0.45),
-      Colors.white.withValues(alpha: 0.1),
-    ],
+    colors: [p.vidrio.withValues(alpha: 0.45), p.vidrio.withValues(alpha: 0.1)],
   );
 
   /// Borde: más brillante en la esquina superior izquierda.
-  static final glassBorderGradient = LinearGradient(
+  static LinearGradient glassBorderGradient(Paleta p) => LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Colors.white.withValues(alpha: 0.95),
-      Colors.white.withValues(alpha: 0.45),
+      p.brillo.withValues(alpha: 0.95),
+      p.brillo.withValues(alpha: 0.45),
     ],
   );
 
@@ -58,11 +55,12 @@ abstract final class LiquidGlass {
 
 /// Tema de la app con la capa de vidrio: parte del tema base y cambia solo
 /// superficies, bordes y botones, sin tocar tipografía ni estructura.
-ThemeData buildLiquidGlassTheme() {
-  final base = buildAppTheme();
+ThemeData buildLiquidGlassTheme({bool oscuro = false}) {
+  final base = buildAppTheme(oscuro: oscuro);
+  final p = base.extension<Paleta>()!;
   final redondeo = BorderRadius.circular(LiquidGlass.glassRadius);
   final bordeVidrio = BorderSide(
-    color: Colors.white.withValues(alpha: LiquidGlass.glassBorderOpacity),
+    color: p.brillo.withValues(alpha: LiquidGlass.glassBorderOpacity),
     width: LiquidGlass.glassBorderWidth,
   );
   final inputBorder = OutlineInputBorder(
@@ -70,7 +68,7 @@ ThemeData buildLiquidGlassTheme() {
     borderSide: bordeVidrio,
   );
   return base.copyWith(
-    scaffoldBackgroundColor: AppColors.cloudMist,
+    scaffoldBackgroundColor: p.fondo,
     // Transición líquida: fundido + escala + desenfoque que se aclara.
     pageTransitionsTheme: const PageTransitionsTheme(
       builders: {
@@ -83,7 +81,7 @@ ThemeData buildLiquidGlassTheme() {
       backgroundColor: Colors.transparent,
     ),
     cardTheme: base.cardTheme.copyWith(
-      color: Colors.white.withValues(alpha: LiquidGlass.glassOpacity + 0.5),
+      color: p.vidrio.withValues(alpha: LiquidGlass.glassOpacity + 0.5),
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: redondeo, side: bordeVidrio),
     ),
@@ -91,7 +89,7 @@ ThemeData buildLiquidGlassTheme() {
       style: base.filledButtonTheme.style?.copyWith(
         backgroundColor: WidgetStateProperty.resolveWith(
           (estados) => estados.contains(WidgetState.disabled)
-              ? AppColors.cloudEdge
+              ? p.borde
               : LiquidGlass.naranjaGlass,
         ),
         shape: WidgetStatePropertyAll(
@@ -102,7 +100,7 @@ ThemeData buildLiquidGlassTheme() {
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: base.outlinedButtonTheme.style?.copyWith(
         backgroundColor: WidgetStatePropertyAll(
-          Colors.white.withValues(alpha: 0.45),
+          p.vidrio.withValues(alpha: 0.45),
         ),
         side: WidgetStatePropertyAll(bordeVidrio),
         shape: WidgetStatePropertyAll(
@@ -111,7 +109,7 @@ ThemeData buildLiquidGlassTheme() {
       ),
     ),
     inputDecorationTheme: base.inputDecorationTheme.copyWith(
-      fillColor: Colors.white.withValues(alpha: 0.55),
+      fillColor: p.vidrio.withValues(alpha: 0.55),
       border: inputBorder,
       enabledBorder: inputBorder,
       // Borde verde luminoso al enfocar.
@@ -120,11 +118,11 @@ ThemeData buildLiquidGlassTheme() {
       ),
     ),
     dialogTheme: base.dialogTheme.copyWith(
-      backgroundColor: Colors.white.withValues(alpha: 0.88),
+      backgroundColor: p.vidrio.withValues(alpha: 0.88),
       shape: RoundedRectangleBorder(borderRadius: redondeo, side: bordeVidrio),
     ),
     popupMenuTheme: base.popupMenuTheme.copyWith(
-      color: Colors.white.withValues(alpha: 0.92),
+      color: p.vidrio.withValues(alpha: 0.92),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: bordeVidrio,

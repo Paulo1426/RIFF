@@ -69,7 +69,7 @@ class InstruccionesDialog extends StatelessWidget {
                         Text(
                           '¿Cómo funciona?',
                           style: text.bodyLarge?.copyWith(
-                            color: AppColors.slatePencil,
+                            color: context.paleta.tintaSuave,
                           ),
                         ),
                       ],
@@ -149,7 +149,7 @@ class InstruccionesDialog extends StatelessWidget {
                                   decoration: BoxDecoration(
                                     borderRadius: BorderRadius.circular(40),
                                     border: Border.all(
-                                      color: AppColors.graphiteInk,
+                                      color: context.paleta.tinta,
                                     ),
                                   ),
                                   child: Text(
@@ -265,7 +265,7 @@ class _Paso extends StatelessWidget {
                           ),
                         ),
                       ),
-                      Icon(icono, color: AppColors.slatePencil),
+                      Icon(icono, color: context.paleta.tintaSuave),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -295,14 +295,14 @@ class _Etiqueta extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
     decoration: BoxDecoration(
-      color: AppColors.paperWhite,
-      border: Border.all(color: AppColors.cloudEdge),
+      color: context.paleta.superficie,
+      border: Border.all(color: context.paleta.borde),
       borderRadius: BorderRadius.circular(999),
     ),
     child: Text(
       texto,
       style: Theme.of(context).textTheme.labelLarge?.copyWith(
-        color: AppColors.graphiteInk,
+        color: context.paleta.tinta,
         fontWeight: FontWeight.w700,
       ),
     ),
@@ -326,7 +326,7 @@ class _Vineta extends StatelessWidget {
           child: Icon(
             icono,
             size: icono == Icons.circle ? 8 : 16,
-            color: AppColors.graphiteInk,
+            color: context.paleta.tinta,
           ),
         ),
         const SizedBox(width: 8),

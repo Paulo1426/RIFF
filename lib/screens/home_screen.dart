@@ -706,6 +706,25 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
                     ),
                   ),
                   PopupMenuItem(
+                    value: () => ref
+                        .read(modoTemaProvider.notifier)
+                        .cambiar(
+                          context.paleta.oscuro
+                              ? ThemeMode.light
+                              : ThemeMode.dark,
+                        ),
+                    child: ListTile(
+                      leading: Icon(
+                        context.paleta.oscuro
+                            ? Icons.light_mode_rounded
+                            : Icons.dark_mode_rounded,
+                      ),
+                      title: Text(
+                        context.paleta.oscuro ? 'Modo claro' : 'Modo oscuro',
+                      ),
+                    ),
+                  ),
+                  PopupMenuItem(
                     value: _cerrarSesion,
                     child: const ListTile(
                       leading: Icon(Icons.logout),
@@ -799,7 +818,7 @@ class _ProgresoGeneral extends StatelessWidget {
           if (detalle != null)
             Text(
               detalle,
-              style: text.bodySmall?.copyWith(color: AppColors.slatePencil),
+              style: text.bodySmall?.copyWith(color: context.paleta.tintaSuave),
             ),
           const SizedBox(height: 4),
           ClipRRect(
@@ -852,7 +871,7 @@ class _ProgresoGeneral extends StatelessWidget {
         Text(
           '$niveles de $totalNiveles niveles · $adivinadas de $totalIntros intros',
           textAlign: TextAlign.center,
-          style: text.bodyMedium?.copyWith(color: AppColors.slatePencil),
+          style: text.bodyMedium?.copyWith(color: context.paleta.tintaSuave),
         ),
         const SizedBox(height: 20),
         for (final item in dificultades)
@@ -988,8 +1007,8 @@ class _CuadroModo extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: text.headlineSmall?.copyWith(
                         color: bloqueado
-                            ? AppColors.slatePencil
-                            : tonoTexto(color),
+                            ? context.paleta.tintaSuave
+                            : context.paleta.tonoTexto(color),
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -997,10 +1016,10 @@ class _CuadroModo extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (bloqueado) ...[
-                          const Icon(
+                          Icon(
                             Icons.lock_rounded,
                             size: 18,
-                            color: AppColors.slatePencil,
+                            color: context.paleta.tintaSuave,
                           ),
                           const SizedBox(width: 4),
                         ],
@@ -1009,7 +1028,7 @@ class _CuadroModo extends StatelessWidget {
                             detalle,
                             textAlign: TextAlign.center,
                             style: text.bodyMedium?.copyWith(
-                              color: AppColors.slatePencil,
+                              color: context.paleta.tintaSuave,
                             ),
                           ),
                         ),
@@ -1064,7 +1083,7 @@ class _PanelDificultades extends StatelessWidget {
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
-              ).textTheme.bodySmall?.copyWith(color: AppColors.slatePencil),
+              ).textTheme.bodySmall?.copyWith(color: context.paleta.tintaSuave),
             ),
           ),
         Expanded(
@@ -1105,9 +1124,9 @@ class _PanelDificultades extends StatelessWidget {
               child: Text(
                 'Modo invitado: el progreso se guarda en este dispositivo.',
                 textAlign: TextAlign.center,
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: AppColors.slatePencil),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: context.paleta.tintaSuave,
+                ),
               ),
             ),
           ),
@@ -1157,7 +1176,7 @@ class _TarjetaDificultad extends StatelessWidget {
                   child: Text(
                     'DIFICULTAD',
                     style: text.labelMedium?.copyWith(
-                      color: tonoTexto(color),
+                      color: context.paleta.tonoTexto(color),
                       fontWeight: FontWeight.w800,
                       letterSpacing: 2,
                     ),
@@ -1165,7 +1184,9 @@ class _TarjetaDificultad extends StatelessWidget {
                 ),
                 Text(
                   _nombreDificultad(progreso.dificultad),
-                  style: text.displaySmall?.copyWith(color: tonoTexto(color)),
+                  style: text.displaySmall?.copyWith(
+                    color: context.paleta.tonoTexto(color),
+                  ),
                 ),
               ],
             ),
@@ -1176,7 +1197,9 @@ class _TarjetaDificultad extends StatelessWidget {
                   : progreso.total == 0
                   ? 'Todavía no hay niveles publicados'
                   : '${progreso.completados}/${progreso.total} niveles completados',
-              style: text.bodyMedium?.copyWith(color: AppColors.slatePencil),
+              style: text.bodyMedium?.copyWith(
+                color: context.paleta.tintaSuave,
+              ),
             ),
             const SizedBox(height: 8),
             ClipRRect(
@@ -1465,7 +1488,7 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                             'Adivina la canción: pon a prueba tu oído y descubre la melodía',
                             textAlign: TextAlign.center,
                             style: text.bodyLarge?.copyWith(
-                              color: AppColors.slatePencil,
+                              color: context.paleta.tintaSuave,
                             ),
                           ),
                           const SizedBox(height: 24),

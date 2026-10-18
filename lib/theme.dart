@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'models/nivel.dart';
@@ -35,43 +36,114 @@ Color colorDificultad(Dificultad dificultad) => switch (dificultad) {
   Dificultad.avanzado => AppColors.avanzado,
 };
 
-/// Versión oscurecida de un color de acento para usarla en textos: el
-/// amarillo de Medio (y en menor medida el verde) no se lee sobre fondo claro.
-Color tonoTexto(Color acento) =>
-    Color.lerp(acento, AppColors.graphiteInk, 0.4)!;
+/// Neutros que cambian entre modo claro y oscuro. Los acentos de marca
+/// (naranja, verde y colores de dificultad) siguen en [AppColors] y son
+/// iguales en los dos modos.
+class Paleta extends ThemeExtension<Paleta> {
+  const Paleta({
+    required this.oscuro,
+    required this.fondo,
+    required this.superficie,
+    required this.tinta,
+    required this.tintaSuave,
+    required this.borde,
+    required this.apagado,
+    required this.ventana,
+    required this.vidrio,
+    required this.brillo,
+  });
+
+  static const claro = Paleta(
+    oscuro: false,
+    fondo: AppColors.cloudMist,
+    superficie: AppColors.paperWhite,
+    tinta: AppColors.graphiteInk,
+    tintaSuave: AppColors.slatePencil,
+    borde: AppColors.cloudEdge,
+    apagado: AppColors.ashMist,
+    ventana: AppColors.appWindow,
+    vidrio: Colors.white,
+    brillo: Colors.white,
+  );
+
+  static const noche = Paleta(
+    oscuro: true,
+    fondo: Color(0xFF121417),
+    superficie: Color(0xFF1E2126),
+    tinta: Color(0xFFECEEF0),
+    tintaSuave: Color(0xFFA4AAB0),
+    borde: Color(0xFF353A42),
+    apagado: Color(0xFF6B7178),
+    ventana: Color(0xFF1A1D21),
+    // Vidrio ahumado: mismas opacidades que el claro, sobre gris oscuro.
+    vidrio: Color(0xFF262A31),
+    brillo: Color(0xFF7A828C),
+  );
+
+  final bool oscuro;
+  final Color fondo;
+  final Color superficie;
+  final Color tinta;
+  final Color tintaSuave;
+  final Color borde;
+  final Color apagado;
+  final Color ventana;
+  // Relleno del vidrio y luz de sus bordes.
+  final Color vidrio;
+  final Color brillo;
+
+  /// Color de acento ajustado para usarlo en textos: en claro se oscurece
+  /// porque el amarillo de Medio no se lee sobre fondo claro; en oscuro casi
+  /// no cambia porque los acentos ya contrastan.
+  Color tonoTexto(Color acento) =>
+      Color.lerp(acento, tinta, oscuro ? 0.1 : 0.4)!;
+
+  @override
+  Paleta copyWith() => this;
+
+  @override
+  Paleta lerp(Paleta? other, double t) =>
+      t < 0.5 || other == null ? this : other;
+}
+
+extension PaletaDeContexto on BuildContext {
+  Paleta get paleta => Theme.of(this).extension<Paleta>() ?? Paleta.claro;
+}
 
 const radioVidrio = 16.0;
 
-ThemeData buildAppTheme() {
-  const scheme = ColorScheme.light(
-    primary: AppColors.graphiteInk,
-    onPrimary: AppColors.paperWhite,
-    primaryContainer: AppColors.cloudMist,
-    onPrimaryContainer: AppColors.graphiteInk,
+ThemeData buildAppTheme({bool oscuro = false}) {
+  final p = oscuro ? Paleta.noche : Paleta.claro;
+  final scheme = ColorScheme(
+    brightness: oscuro ? Brightness.dark : Brightness.light,
+    primary: p.tinta,
+    onPrimary: p.superficie,
+    primaryContainer: p.fondo,
+    onPrimaryContainer: p.tinta,
     secondary: AppColors.signalOrange,
     onSecondary: AppColors.paperWhite,
-    secondaryContainer: AppColors.cloudMist,
-    onSecondaryContainer: AppColors.graphiteInk,
+    secondaryContainer: p.fondo,
+    onSecondaryContainer: p.tinta,
     tertiary: AppColors.emberCrust,
     onTertiary: AppColors.paperWhite,
-    surface: AppColors.cloudMist,
-    onSurface: AppColors.graphiteInk,
-    onSurfaceVariant: AppColors.slatePencil,
-    surfaceContainerLowest: AppColors.paperWhite,
-    surfaceContainerLow: AppColors.paperWhite,
-    surfaceContainer: AppColors.paperWhite,
-    surfaceContainerHigh: AppColors.paperWhite,
-    surfaceContainerHighest: AppColors.appWindow,
-    outline: AppColors.ashMist,
-    outlineVariant: AppColors.cloudEdge,
-    error: Color(0xFFD92D20),
+    surface: p.fondo,
+    onSurface: p.tinta,
+    onSurfaceVariant: p.tintaSuave,
+    surfaceContainerLowest: p.superficie,
+    surfaceContainerLow: p.superficie,
+    surfaceContainer: p.superficie,
+    surfaceContainerHigh: p.superficie,
+    surfaceContainerHighest: p.ventana,
+    outline: p.apagado,
+    outlineVariant: p.borde,
+    error: const Color(0xFFD92D20),
     onError: AppColors.paperWhite,
   );
 
   // Manrope para todo lo que se lee; Jersey 10 (pixel) solo para títulos
   // grandes, nunca en textos chicos.
   final base = GoogleFonts.manropeTextTheme(
-    ThemeData(brightness: Brightness.light).textTheme,
+    ThemeData(brightness: scheme.brightness).textTheme,
   );
   TextStyle pixel(TextStyle? s, double size) => GoogleFonts.jersey10(
     textStyle: s,
@@ -103,10 +175,7 @@ ThemeData buildAppTheme() {
         labelMedium: aire(base.labelMedium),
         labelSmall: aire(base.labelSmall),
       )
-      .apply(
-        bodyColor: AppColors.graphiteInk,
-        displayColor: AppColors.graphiteInk,
-      );
+      .apply(bodyColor: p.tinta, displayColor: p.tinta);
 
   // Controles con esquinas de 6px; tarjetas de 16px.
   final control = RoundedRectangleBorder(
@@ -115,13 +184,14 @@ ThemeData buildAppTheme() {
   const buttonPadding = EdgeInsets.symmetric(horizontal: 20, vertical: 14);
   final inputBorder = OutlineInputBorder(
     borderRadius: BorderRadius.circular(12),
-    borderSide: const BorderSide(color: AppColors.cloudEdge),
+    borderSide: BorderSide(color: p.borde),
   );
 
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
-    scaffoldBackgroundColor: AppColors.cloudMist,
+    extensions: [p],
+    scaffoldBackgroundColor: p.fondo,
     textTheme: textTheme,
     // Transición suave (deslizar + desvanecer) entre pantallas.
     pageTransitionsTheme: const PageTransitionsTheme(
@@ -131,8 +201,12 @@ ThemeData buildAppTheme() {
       },
     ),
     appBarTheme: AppBarTheme(
-      backgroundColor: AppColors.cloudMist,
-      foregroundColor: AppColors.graphiteInk,
+      backgroundColor: p.fondo,
+      foregroundColor: p.tinta,
+      // Iconos de la barra de estado legibles sobre el fondo de cada modo.
+      systemOverlayStyle: oscuro
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
       surfaceTintColor: Colors.transparent,
       centerTitle: true,
       elevation: 0,
@@ -140,13 +214,13 @@ ThemeData buildAppTheme() {
       titleTextStyle: pixel(base.titleLarge, 36),
     ),
     cardTheme: CardThemeData(
-      color: AppColors.paperWhite.withValues(alpha: 0.82),
+      color: p.superficie.withValues(alpha: 0.82),
       surfaceTintColor: Colors.transparent,
       elevation: 3,
       shadowColor: const Color(0x330F2234),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(radioVidrio),
-        side: const BorderSide(color: AppColors.cloudEdge, width: 1.2),
+        side: BorderSide(color: p.borde, width: 1.2),
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
@@ -154,8 +228,8 @@ ThemeData buildAppTheme() {
       style: FilledButton.styleFrom(
         backgroundColor: AppColors.signalOrange,
         foregroundColor: AppColors.paperWhite,
-        disabledBackgroundColor: AppColors.cloudEdge,
-        disabledForegroundColor: AppColors.slatePencil,
+        disabledBackgroundColor: p.borde,
+        disabledForegroundColor: p.tintaSuave,
         shape: control,
         padding: buttonPadding,
         textStyle: textTheme.labelLarge,
@@ -163,9 +237,9 @@ ThemeData buildAppTheme() {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        backgroundColor: AppColors.paperWhite.withValues(alpha: 0.75),
-        foregroundColor: AppColors.graphiteInk,
-        side: const BorderSide(color: AppColors.cloudEdge, width: 1.2),
+        backgroundColor: p.superficie.withValues(alpha: 0.75),
+        foregroundColor: p.tinta,
+        side: BorderSide(color: p.borde, width: 1.2),
         shape: control,
         padding: buttonPadding,
         textStyle: textTheme.labelLarge,
@@ -173,7 +247,7 @@ ThemeData buildAppTheme() {
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: AppColors.graphiteInk,
+        foregroundColor: p.tinta,
         shape: control,
         textStyle: textTheme.labelLarge,
       ),
@@ -183,7 +257,7 @@ ThemeData buildAppTheme() {
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: AppColors.paperWhite.withValues(alpha: 0.85),
+      fillColor: p.superficie.withValues(alpha: 0.85),
       border: inputBorder,
       enabledBorder: inputBorder,
       focusedBorder: inputBorder.copyWith(
@@ -191,31 +265,30 @@ ThemeData buildAppTheme() {
       ),
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: AppColors.cloudMist,
+      backgroundColor: p.fondo,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
     ),
     popupMenuTheme: PopupMenuThemeData(
-      color: AppColors.paperWhite,
+      color: p.superficie,
       surfaceTintColor: Colors.transparent,
       elevation: 6,
       shadowColor: const Color(0x330F2234),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(radioVidrio),
-        side: const BorderSide(color: AppColors.cloudEdge),
+        side: BorderSide(color: p.borde),
       ),
     ),
-    dividerTheme: const DividerThemeData(color: AppColors.cloudEdge),
-    progressIndicatorTheme: const ProgressIndicatorThemeData(
+    dividerTheme: DividerThemeData(color: p.borde),
+    progressIndicatorTheme: ProgressIndicatorThemeData(
       color: AppColors.signalOrange,
-      linearTrackColor: AppColors.cloudEdge,
+      linearTrackColor: p.borde,
     ),
     snackBarTheme: SnackBarThemeData(
-      backgroundColor: AppColors.graphiteInk,
-      contentTextStyle: textTheme.bodyMedium?.copyWith(
-        color: AppColors.paperWhite,
-      ),
+      // Invertido respecto al fondo para que destaque en los dos modos.
+      backgroundColor: p.tinta,
+      contentTextStyle: textTheme.bodyMedium?.copyWith(color: p.superficie),
       shape: control,
       behavior: SnackBarBehavior.floating,
     ),
@@ -338,7 +411,7 @@ class Cargando extends StatelessWidget {
           texto,
           style: Theme.of(
             context,
-          ).textTheme.bodyMedium?.copyWith(color: AppColors.slatePencil),
+          ).textTheme.bodyMedium?.copyWith(color: context.paleta.tintaSuave),
         ),
       ],
     ),
@@ -368,7 +441,7 @@ class ConCarga extends StatelessWidget {
           // ColoredBox bloquea los toques mientras carga.
           child: cargando
               ? ColoredBox(
-                  color: AppColors.cloudMist.withValues(alpha: 0.9),
+                  color: context.paleta.fondo.withValues(alpha: 0.9),
                   child: Cargando(texto: texto),
                 )
               : const SizedBox.shrink(),

@@ -42,13 +42,13 @@ class _LiquidGlassButtonState extends State<LiquidGlassButton> {
     final activo = widget.onPressed != null;
     final primario = widget.variant == LiquidGlassButtonVariant.primary;
     final color = !activo
-        ? AppColors.cloudEdge
+        ? context.paleta.borde
         : primario
         ? LiquidGlass.naranjaGlass
         : AppColors.verde.withValues(alpha: 0.9);
     // Texto oscuro sobre verde: el blanco no da contraste suficiente.
     final colorTexto = !activo
-        ? AppColors.slatePencil
+        ? context.paleta.tintaSuave
         : primario
         ? AppColors.paperWhite
         : AppColors.graphiteInk;

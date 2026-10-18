@@ -1,4 +1,8 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/nivel.dart';
 import '../models/partida.dart';
 import '../models/usuario.dart';
@@ -17,6 +21,9 @@ final musicaMenuProvider = Provider((ref) {
   ref.onDispose(musica.dispose);
   return musica;
 });
+final modoTemaProvider = StateNotifierProvider<ModoTema, ThemeMode>(
+  (ref) => ModoTema()..cargar(),
+);
 final firebaseGameRepositoryProvider = Provider(
   (ref) => FirebaseGameRepository(),
 );
@@ -49,6 +56,38 @@ final nivelesProvider = FutureProvider.family<List<Nivel>, Dificultad>(
 final partidaProvider = StateNotifierProvider<PartidaNotifier, Partida?>(
   (ref) => PartidaNotifier(),
 );
+
+/// Claro u oscuro elegido en el menú; sin elección sigue al sistema. Se
+/// guarda en un archivo, igual que el silencio de la música del menú.
+class ModoTema extends StateNotifier<ThemeMode> {
+  ModoTema() : super(ThemeMode.system);
+
+  static Future<File> _archivo() async =>
+      File('${(await getApplicationSupportDirectory()).path}/modo_tema');
+
+  Future<void> cargar() async {
+    try {
+      final archivo = await _archivo();
+      if (!await archivo.exists()) return;
+      final guardado = await archivo.readAsString();
+      state = ThemeMode.values.firstWhere(
+        (modo) => modo.name == guardado,
+        orElse: () => ThemeMode.system,
+      );
+    } catch (error) {
+      debugPrint('No se pudo leer el modo de tema: $error');
+    }
+  }
+
+  Future<void> cambiar(ThemeMode modo) async {
+    state = modo;
+    try {
+      await (await _archivo()).writeAsString(modo.name);
+    } catch (error) {
+      debugPrint('No se pudo guardar el modo de tema: $error');
+    }
+  }
+}
 
 class PartidaNotifier extends StateNotifier<Partida?> {
   PartidaNotifier() : super(null);

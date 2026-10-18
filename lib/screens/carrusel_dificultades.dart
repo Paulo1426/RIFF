@@ -193,8 +193,8 @@ class _Indicador extends StatelessWidget {
   Widget build(BuildContext context) {
     final boton = IconButton.styleFrom(
       shape: const CircleBorder(),
-      side: const BorderSide(color: AppColors.cloudEdge),
-      backgroundColor: AppColors.paperWhite.withValues(alpha: 0.7),
+      side: BorderSide(color: context.paleta.borde),
+      backgroundColor: context.paleta.superficie.withValues(alpha: 0.7),
     );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -215,7 +215,7 @@ class _Indicador extends StatelessWidget {
               width: i == actual ? 22 : 7,
               height: 7,
               decoration: BoxDecoration(
-                color: i == actual ? color : AppColors.ashMist,
+                color: i == actual ? color : context.paleta.apagado,
                 borderRadius: BorderRadius.circular(99),
               ),
             ),

@@ -71,7 +71,7 @@ class _LiquidLevelCardState extends State<LiquidLevelCard> {
           ),
           child: Text(
             '${widget.numero}',
-            style: text.headlineSmall?.copyWith(color: AppColors.graphiteInk),
+            style: text.headlineSmall?.copyWith(color: context.paleta.tinta),
           ),
         ),
         const SizedBox(width: 12),
@@ -91,7 +91,9 @@ class _LiquidLevelCardState extends State<LiquidLevelCard> {
                   _textoEstado!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: text.bodySmall?.copyWith(color: AppColors.slatePencil),
+                  style: text.bodySmall?.copyWith(
+                    color: context.paleta.tintaSuave,
+                  ),
                 ),
             ],
           ),
@@ -174,7 +176,7 @@ class _LiquidLevelCardState extends State<LiquidLevelCard> {
                   Positioned.fill(
                     child: IgnorePointer(
                       child: ColoredBox(
-                        color: AppColors.graphiteInk.withValues(alpha: 0.04),
+                        color: context.paleta.tinta.withValues(alpha: 0.04),
                       ),
                     ),
                   ),
@@ -198,13 +200,9 @@ class _CandadoVidrio extends StatelessWidget {
     margin: const EdgeInsets.all(4),
     decoration: BoxDecoration(
       shape: BoxShape.circle,
-      color: Colors.white.withValues(alpha: 0.5),
-      border: Border.all(color: Colors.white.withValues(alpha: 0.8)),
+      color: context.paleta.vidrio.withValues(alpha: 0.5),
+      border: Border.all(color: context.paleta.brillo.withValues(alpha: 0.8)),
     ),
-    child: const Icon(
-      Icons.lock_outline,
-      size: 20,
-      color: AppColors.slatePencil,
-    ),
+    child: Icon(Icons.lock_outline, size: 20, color: context.paleta.tintaSuave),
   );
 }

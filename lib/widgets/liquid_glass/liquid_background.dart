@@ -49,7 +49,7 @@ class _LiquidBackgroundState extends State<LiquidBackground>
     children: [
       // Gris base: la pantalla es transparente para que el fondo cubra
       // también la barra, así que el color lo pone este widget.
-      const Positioned.fill(child: ColoredBox(color: AppColors.cloudMist)),
+      Positioned.fill(child: ColoredBox(color: context.paleta.fondo)),
       Positioned.fill(
         // Capa propia: animar el fondo no repinta el contenido de encima.
         child: RepaintBoundary(

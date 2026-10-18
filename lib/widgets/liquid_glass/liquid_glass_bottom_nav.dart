@@ -56,8 +56,8 @@ class LiquidGlassBottomNav extends StatelessWidget {
                             Icon(
                               items[i].icon,
                               color: i == currentIndex
-                                  ? AppColors.graphiteInk
-                                  : AppColors.slatePencil,
+                                  ? context.paleta.tinta
+                                  : context.paleta.tintaSuave,
                             ),
                             Text(
                               items[i].label,

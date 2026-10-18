@@ -23,7 +23,9 @@ void main() {
   testWidgets('informa que Firebase no esta configurado para Web', (
     tester,
   ) async {
-    await tester.pumpWidget(const SongGuessApp(firebaseSupported: false));
+    await tester.pumpWidget(
+      const ProviderScope(child: SongGuessApp(firebaseSupported: false)),
+    );
 
     expect(
       find.text('Firebase solo está configurado para Android e iOS.'),

@@ -126,7 +126,7 @@ class ReproductorCancion extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: text.bodyLarge?.copyWith(
-                            color: AppColors.slatePencil,
+                            color: context.paleta.tintaSuave,
                           ),
                         ),
                       ],
@@ -155,7 +155,7 @@ class ReproductorCancion extends StatelessWidget {
                       children: [
                         Icon(
                           Icons.music_note_rounded,
-                          color: tonoTexto(color),
+                          color: context.paleta.tonoTexto(color),
                           size: 18,
                         ),
                         const SizedBox(width: 4),
@@ -163,7 +163,7 @@ class ReproductorCancion extends StatelessWidget {
                           child: Text(
                             insignia,
                             style: text.labelMedium?.copyWith(
-                              color: tonoTexto(color),
+                              color: context.paleta.tonoTexto(color),
                               fontWeight: FontWeight.w800,
                               letterSpacing: 1.5,
                             ),
@@ -177,7 +177,7 @@ class ReproductorCancion extends StatelessWidget {
               SliderTheme(
                 data: SliderTheme.of(context).copyWith(
                   activeTrackColor: color,
-                  inactiveTrackColor: AppColors.cloudEdge,
+                  inactiveTrackColor: context.paleta.borde,
                   thumbColor: color,
                   overlayColor: color.withValues(alpha: 0.15),
                   trackHeight: 4,
@@ -251,7 +251,7 @@ class ReproductorCancion extends StatelessWidget {
                     nota!,
                     textAlign: TextAlign.center,
                     style: text.bodySmall?.copyWith(
-                      color: AppColors.slatePencil,
+                      color: context.paleta.tintaSuave,
                     ),
                   ),
                 ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'firebase_options.dart';
+import 'providers/providers.dart';
 import 'screens/home_screen.dart';
 import 'theme/liquid_glass_theme.dart';
 import 'services/supabase_service.dart';
@@ -34,17 +35,19 @@ Future<void> main() async {
   );
 }
 
-class SongGuessApp extends StatelessWidget {
+class SongGuessApp extends ConsumerWidget {
   const SongGuessApp({super.key, this.home, this.firebaseSupported = true});
 
   final Widget? home;
   final bool firebaseSupported;
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
+  Widget build(BuildContext context, WidgetRef ref) => MaterialApp(
     title: 'Riff',
     debugShowCheckedModeBanner: false,
     theme: buildLiquidGlassTheme(),
+    darkTheme: buildLiquidGlassTheme(oscuro: true),
+    themeMode: ref.watch(modoTemaProvider),
     // Las tarjetas de vidrio comparten una sola captura del fondo.
     builder: (context, child) => BackdropGroup(child: child!),
     home:
