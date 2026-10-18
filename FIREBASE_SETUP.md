@@ -379,7 +379,7 @@ respuestaCancionNormalizada: string
 ```
 
 Despues de la tercera compra, el servidor elige y guarda la asignacion en
-`games/{gameId}.instrumentoMelodia`, siguiendo la probabilidad 70/30 descrita
+`games/{gameId}.instrumentoMelodia`, siguiendo la probabilidad 50/50 descrita
 en la regla de niveles.
 Configura `instrumentalAudioPath` en el documento `songs/{songId}` para la
 version sin voz.
@@ -571,7 +571,7 @@ En los documentos Firestore usados por esta funcion:
 
 - `games/{gameId}` incluye `uid`, `levelId`, `puntoInicio`,
   `preciosInstrumentos`, `instrumentosComprados`, `instrumentoMelodia`
-  (seleccionado al azar entre los tres comprables), `melodiaDescubierta` y
+  (50% el no comprado, 50% uno de los tres comprados), `melodiaDescubierta` y
   `ganada`. Los precios privados son una asignacion aleatoria de
   `400000, 300000, 300000, 0`; no la devuelvas a la app.
 - `levels/{levelId}` incluye `published`, `cancionId` y `instrumentos`, donde

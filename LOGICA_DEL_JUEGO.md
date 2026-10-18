@@ -91,9 +91,10 @@ El servidor impide una cuarta compra y persiste las compras, sus precios y el
 saldo en la partida. Al repetir el nivel se inicia una partida nueva y se
 asignan nuevos precios y una nueva melodia.
 
-Despues de la tercera compra, el servidor asigna la melodia con un sorteo de
-diez resultados: siete seleccionan el instrumento no comprado y tres
-seleccionan uno de los comprados. Si queda en uno comprado, se descubre y se
+Despues de la tercera compra, el servidor asigna la melodia con un sorteo
+50/50: la mitad de las veces queda en el instrumento no comprado y la otra
+mitad en uno de los tres comprados, elegido al azar. Si queda en uno comprado,
+se descubre y se
 desbloquean todos los stems y la mezcla instrumental. Si queda en el no
 comprado, no se revela al comprar; el jugador puede adivinar con los stems
 adquiridos.
