@@ -1,16 +1,18 @@
 import 'nivel.dart';
 
-/// Contrarreloj: 5 minutos, gana quien sume más puntos. Eliminación: sin
-/// tiempo, en cada ronda sale el último en adivinar.
+/// Contrarreloj: 10 minutos, gana quien sume más puntos. Eliminación: sin
+/// tiempo, en cada ronda sale el último en adivinar. Las canciones salen de
+/// todas las dificultades.
 enum ModoSala { contrarreloj, eliminacion }
 
 enum EstadoSala { esperando, jugando, terminada }
 
 /// Instrumentos: juego principal (gratis, reparte fichas). Intros: cuesta
-/// [precioSalaIntros] fichas crearla o entrar.
+/// fichas crearla o entrar.
 enum TipoSala { instrumentos, intros }
 
-const precioSalaIntros = 5;
+const precioCrearSalaIntros = 10;
+const precioEntrarSalaIntros = 5;
 
 class JugadorSala {
   const JugadorSala({
@@ -20,6 +22,7 @@ class JugadorSala {
     required this.aciertos,
     required this.eliminado,
     required this.abandono,
+    this.listo = false,
     this.eliminadoEnRonda,
   });
 
@@ -29,6 +32,8 @@ class JugadorSala {
   final int aciertos;
   final bool eliminado;
   final bool abandono;
+  // En la espera: marcó "Listo".
+  final bool listo;
   final int? eliminadoEnRonda;
 
   factory JugadorSala.fromMap(String uid, Map<String, dynamic> map) =>
@@ -39,6 +44,7 @@ class JugadorSala {
         aciertos: (map['aciertos'] as num?)?.toInt() ?? 0,
         eliminado: map['eliminado'] as bool? ?? false,
         abandono: map['abandono'] as bool? ?? false,
+        listo: map['listo'] as bool? ?? false,
         eliminadoEnRonda: (map['eliminadoEnRonda'] as num?)?.toInt(),
       );
 }
@@ -51,7 +57,6 @@ class Sala {
     required this.publica,
     required this.tipo,
     required this.modo,
-    required this.dificultad,
     required this.maxJugadores,
     required this.estado,
     required this.jugadores,
@@ -67,7 +72,6 @@ class Sala {
   final bool publica;
   final TipoSala tipo;
   final ModoSala modo;
-  final Dificultad dificultad;
   final int maxJugadores;
   final EstadoSala estado;
   // En orden de llegada.
@@ -80,6 +84,10 @@ class Sala {
   final Map<String, int> premios;
 
   bool get llena => jugadores.length >= maxJugadores;
+
+  String get nombre => 'Sala de ${jugador(creadorUid)?.nombre ?? 'Alguien'}';
+
+  int get listos => jugadores.where((j) => j.listo).length;
 
   JugadorSala? jugador(String uid) =>
       jugadores.where((j) => j.uid == uid).firstOrNull;
@@ -111,7 +119,6 @@ class Sala {
       publica: map['publica'] as bool? ?? false,
       tipo: TipoSala.values.byName(map['tipo'] as String? ?? 'instrumentos'),
       modo: ModoSala.values.byName(map['modo'] as String),
-      dificultad: DificultadExtension.fromId(map['dificultad'] as String),
       maxJugadores: (map['maxJugadores'] as num?)?.toInt() ?? 5,
       estado: EstadoSala.values.byName(map['estado'] as String),
       jugadores: [

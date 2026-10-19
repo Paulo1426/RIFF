@@ -53,10 +53,12 @@ class RecorridoInicial {
     List<PasoRecorrido> Function() pasos,
   ) async {
     if (!await pendiente()) return;
+    // Se marca antes de mostrarlo: aunque se cierre la app o se salga de la
+    // pantalla a mitad, no vuelve a aparecer.
+    await marcarVisto();
     await Future<void>.delayed(const Duration(milliseconds: 600));
     if (!context.mounted) return;
     await mostrarRecorrido(context, pasos());
-    await marcarVisto();
   }
 }
 

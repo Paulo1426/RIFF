@@ -5,6 +5,7 @@ import {
   nivelDeIndice,
   premiosSala,
   puntosAcierto,
+  todosListos,
 } from "./salas.ts";
 
 function assertEquals(actual: unknown, expected: unknown) {
@@ -49,6 +50,12 @@ Deno.test("los tres primeros cobran 10, 7 y 3 fichas", () => {
     premiosSala([jugador("a", 3, true), jugador("b"), jugador("c", 0)]),
     { b: 10 },
   );
+});
+
+Deno.test("arranca solo con 2 o más jugadores y todos listos", () => {
+  assertEquals(todosListos([true]), false);
+  assertEquals(todosListos([true, false]), false);
+  assertEquals(todosListos([true, true]), true);
 });
 
 Deno.test("la lista de canciones vuelve a empezar", () => {

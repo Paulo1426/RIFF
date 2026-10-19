@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:riff/models/nivel.dart';
 import 'package:riff/models/sala.dart';
 
 Map<String, dynamic> _jugador(
@@ -39,7 +38,7 @@ void main() {
       'a': _jugador('Ana'),
       'b': _jugador('Beto'),
     });
-    expect(sala.dificultad, Dificultad.medio);
+    expect(sala.nombre, 'Sala de Ana');
     expect(sala.jugadores.map((j) => j.nombre), ['Ana', 'Beto']);
     expect(sala.finEn, DateTime.utc(2026, 10, 18, 12, 5));
     expect(sala.llena, isFalse);

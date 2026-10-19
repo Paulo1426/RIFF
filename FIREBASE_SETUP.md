@@ -417,7 +417,7 @@ Las partidas de una sala llevan además `salaId` (código de la sala) y
 ### `salas/{codigo}`
 
 Salas de "Desafía a tus amigos". Las crea y modifica solo `game-progress`
-(acciones `crearSala`, `unirseSala`, `salirSala`, `iniciarSala`,
+(acciones `crearSala`, `unirseSala`, `salirSala`, `listoSala`,
 `partidaSala`, `saltarCancionSala` y `revisarSala`); hace falta una cuenta
 registrada. La app escucha su sala en tiempo real y lista las públicas en
 espera.
@@ -429,19 +429,21 @@ publica: boolean            # false: solo se entra con el código
 tipo: "instrumentos" | "intros"
 premios: map<uid, number>   # fichas repartidas al terminar (instrumentos)
 modo: "contrarreloj" | "eliminacion"
-dificultad: "facil" | "medio" | "avanzado"
+dificultad: null            # las canciones salen de todas las dificultades
 maxJugadores: number        # 5; ampliable cambiando maxJugadoresSala en salas.ts
 estado: "esperando" | "jugando" | "terminada"
-jugadores: map<uid, {nombre, puntos, aciertos, indice, gameId, inicioCancion,
-                     eliminado, eliminadoEnRonda, abandono}>
+jugadores: map<uid, {nombre, listo, pagado, puntos, aciertos, indice, gameId,
+                     inicioCancion, eliminado, eliminadoEnRonda, abandono}>
 orden: array<uid>           # orden de llegada
 levelIds: array<string>     # canciones de la dificultad, mezcladas al iniciar
 ronda: number               # eliminación: ronda actual
 acertaronRonda: array<uid>  # eliminación: quienes ya adivinaron la ronda
-finEn: string | null        # contrarreloj: fin de los 5 minutos (ISO)
+finEn: string | null        # contrarreloj: fin de los 10 minutos (ISO)
 ganadorUid: string | null
 ```
 
+- La partida empieza sola cuando todos los jugadores (2 o más) marcan
+  "Listo" (`listoSala`); en contrarreloj, ahí arrancan los 10 minutos.
 - Contrarreloj: cada acierto suma 100 puntos, más hasta 50 por rapidez y 1
   por cada $10.000 sin gastar. Se puede saltar una canción sin puntos.
 - Eliminación: cuando todos menos uno adivinaron la canción, ese uno queda
@@ -456,8 +458,8 @@ intro". Solo `game-progress` las escribe y el jugador puede leer su saldo.
 
 - Al terminar una sala de instrumentos, el 1.º gana 10, el 2.º 7 y el 3.º 3.
   No cobra quien abandonó ni quien no acertó ninguna canción.
-- Crear o entrar a una sala de intros cuesta 5; se devuelven si sales antes
-  de que empiece.
+- Crear una sala de intros cuesta 10 y entrar a una cuesta 5 (`pagado`
+  guarda cuánto pagó cada uno); se devuelven si sales antes de que empiece.
 
 ## 5. Reglas incluidas en este repositorio
 

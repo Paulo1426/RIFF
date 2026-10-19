@@ -10,9 +10,10 @@ export const tiposSala = ["instrumentos", "intros"] as const;
 export type TipoSala = typeof tiposSala[number];
 
 // Fichas: moneda propia de las salas, distinta de las monedas de intros.
-// Se ganan en salas de instrumentos y se gastan para crear o entrar a una de
-// intros (se devuelven si sales antes de que empiece).
-export const precioSalaIntros = 5;
+// Se ganan en salas de instrumentos y se gastan en las de intros: crearla
+// cuesta más que entrar. Se devuelven si sales antes de que empiece.
+export const precioCrearSalaIntros = 10;
+export const precioEntrarSalaIntros = 5;
 export const premiosPorPuesto = [10, 7, 3] as const;
 
 /// Fichas para los tres primeros de [clasificados] (ya ordenados). No cobra
@@ -31,7 +32,7 @@ export function premiosSala(
 
 // Se guarda en cada sala (maxJugadores) para poder ampliarlo sin migrar.
 export const maxJugadoresSala = 5;
-export const duracionContrarrelojMs = 5 * 60_000;
+export const duracionContrarrelojMs = 10 * 60_000;
 
 // Sin 0/O ni 1/I/L para que el código se pueda dictar sin confusiones.
 const alfabetoCodigo = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -69,6 +70,12 @@ export function eliminadoDeRonda(
 ): string | null {
   const pendientes = vivos.filter((uid) => !acertaron.includes(uid));
   return vivos.length > 1 && pendientes.length === 1 ? pendientes[0] : null;
+}
+
+/// La partida arranca sola cuando hay al menos 2 jugadores y todos marcaron
+/// "Listo".
+export function todosListos(listos: readonly boolean[]): boolean {
+  return listos.length >= 2 && listos.every((listo) => listo);
 }
 
 /// Canción de la posición [indice]; si se acaban, vuelve a empezar la lista.

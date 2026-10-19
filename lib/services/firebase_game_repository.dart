@@ -217,14 +217,12 @@ class FirebaseGameRepository {
   Future<String> crearSala({
     required TipoSala tipo,
     required ModoSala modo,
-    required Dificultad dificultad,
     required bool publica,
   }) async {
     final response = await _post({
       'action': 'crearSala',
       'tipo': tipo.name,
       'modo': modo.name,
-      'dificultad': dificultad.id,
       'publica': publica,
     });
     return response['codigo'] as String;
@@ -236,8 +234,9 @@ class FirebaseGameRepository {
   Future<void> salirSala(String codigo) =>
       _post({'action': 'salirSala', 'codigo': codigo});
 
-  Future<void> iniciarSala(String codigo) =>
-      _post({'action': 'iniciarSala', 'codigo': codigo});
+  /// Cuando todos (2 o más) marcan "Listo", la partida empieza sola.
+  Future<void> marcarListo(String codigo, {required bool listo}) =>
+      _post({'action': 'listoSala', 'codigo': codigo, 'listo': listo});
 
   Future<void> saltarCancionSala(String codigo) =>
       _post({'action': 'saltarCancionSala', 'codigo': codigo});

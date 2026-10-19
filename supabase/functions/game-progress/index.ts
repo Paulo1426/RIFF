@@ -20,9 +20,11 @@ import {
   type ModoSala,
   modosSala,
   nivelDeIndice,
-  precioSalaIntros,
+  precioCrearSalaIntros,
+  precioEntrarSalaIntros,
   premiosSala,
   puntosAcierto,
+  todosListos,
   type TipoSala,
   tiposSala,
 } from "./salas.ts";
@@ -539,10 +541,11 @@ async function ensureOrder(
   }
 }
 
+/// [difficulty] null (salas): acepta el nivel sea cual sea su dificultad.
 async function buildLevelEntry(
   token: string,
   id: string,
-  difficulty: Difficulty,
+  difficulty: Difficulty | null,
   completed: Set<string>,
   canStart: boolean,
 ): Promise<JsonObject> {
@@ -559,7 +562,8 @@ async function buildLevelEntry(
   if (
     !validId(songId) ||
     !Number.isInteger(fields.numero) ||
-    levelDifficulty !== difficulty
+    !difficulties.includes(levelDifficulty as Difficulty) ||
+    (difficulty !== null && levelDifficulty !== difficulty)
   ) {
     throw new HttpError(500, `El nivel ${id} tiene metadatos inválidos`);
   }
@@ -1306,6 +1310,10 @@ interface Jugador extends JsonObject {
   eliminado: boolean;
   eliminadoEnRonda: number | null;
   abandono: boolean;
+  // En la espera: marcó "Listo". Fichas que pagó al entrar (se devuelven si
+  // sale antes de empezar).
+  listo?: boolean;
+  pagado?: number;
   // Solo salas de intros: intros adivinadas (dan acceso a la original), qué
   // canción tiene el reloj en marcha y los fallos para la espera de 30 s.
   acertadas?: string[];
@@ -1314,9 +1322,11 @@ interface Jugador extends JsonObject {
   nextAnswerAt?: string | null;
 }
 
-function newPlayer(nombre: string): Jugador {
+function newPlayer(nombre: string, pagado = 0): Jugador {
   return {
     nombre,
+    listo: false,
+    pagado,
     puntos: 0,
     aciertos: 0,
     indice: 0,
@@ -1412,22 +1422,23 @@ function walletWrite(
   };
 }
 
-/// Cobra la entrada a una sala de intros o explica por qué no alcanza.
+/// Cobra [precio] fichas por una sala de intros o explica por qué no alcanza.
 async function chargeIntroRoom(
   token: string,
   uid: string,
+  precio: number,
 ): Promise<JsonObject> {
   const saldo = await getDocument(token, walletPath(uid));
   const fichas = typeof saldo?.fields.fichas === "number"
     ? saldo.fields.fichas
     : 0;
-  if (!saldo?.updateTime || fichas < precioSalaIntros) {
+  if (!saldo?.updateTime || fichas < precio) {
     throw new HttpError(
       409,
-      `Necesitas ${precioSalaIntros} fichas para una sala de intros y tienes ${fichas}. Gánalas en salas de instrumentos.`,
+      `Necesitas ${precio} fichas y tienes ${fichas}. Gánalas en salas de Adivina la canción.`,
     );
   }
-  return walletWrite(uid, -precioSalaIntros, saldo.updateTime);
+  return walletWrite(uid, -precio, saldo.updateTime);
 }
 
 /// Eliminación: saca al último en adivinar y abre la siguiente ronda, o
@@ -1533,16 +1544,15 @@ async function createRoom(
   nombre: string,
   body: JsonObject,
 ): Promise<JsonObject> {
-  const dificultad = normalizeDifficulty(body.dificultad);
   const tipo = body.tipo ?? "instrumentos";
   if (
     !modosSala.includes(body.modo as ModoSala) ||
     !tiposSala.includes(tipo as TipoSala) ||
-    !difficulties.includes(dificultad as Difficulty) ||
     typeof body.publica !== "boolean"
   ) {
-    throw new HttpError(400, "tipo, modo, dificultad o publica no son válidos");
+    throw new HttpError(400, "tipo, modo o publica no son válidos");
   }
+  const pagado = tipo === "intros" ? precioCrearSalaIntros : 0;
   const now = new Date().toISOString();
   for (let intento = 0; intento < 5; intento++) {
     const codigo = generarCodigo((max) => {
@@ -1552,18 +1562,18 @@ async function createRoom(
     });
     try {
       await commitWrites(token, [
-        ...(tipo === "intros" ? [await chargeIntroRoom(token, uid)] : []),
+        ...(pagado ? [await chargeIntroRoom(token, uid, pagado)] : []),
         createWrite(roomPath(codigo), {
           codigo,
           creadorUid: uid,
           publica: body.publica,
           tipo,
           modo: body.modo,
-          // Las intros no tienen dificultad; se guarda igual para la tabla.
-          dificultad,
+          // Las canciones salen de todas las dificultades.
+          dificultad: null,
           maxJugadores: maxJugadoresSala,
           estado: "esperando",
-          jugadores: { [uid]: newPlayer(nombre) },
+          jugadores: { [uid]: newPlayer(nombre, pagado) },
           orden: [uid],
           levelIds: [],
           ronda: 0,
@@ -1602,12 +1612,13 @@ function joinRoom(
     if (Object.keys(jugadores).length >= max) {
       throw new HttpError(409, "La sala está llena");
     }
+    const pagado = sala.tipo === "intros" ? precioEntrarSalaIntros : 0;
     return {
       campos: {
-        jugadores: { ...jugadores, [uid]: newPlayer(nombre) },
+        jugadores: { ...jugadores, [uid]: newPlayer(nombre, pagado) },
         orden: [...roomOrder(sala), uid],
       },
-      extra: sala.tipo === "intros" ? [await chargeIntroRoom(token, uid)] : [],
+      extra: pagado ? [await chargeIntroRoom(token, uid, pagado)] : [],
       resultado: { codigo },
     };
   });
@@ -1618,7 +1629,7 @@ function leaveRoom(
   uid: string,
   codigo: string,
 ): Promise<JsonObject> {
-  return updateRoom(token, codigo, (sala) => {
+  return updateRoom(token, codigo, async (sala) => {
     const jugadores = roomPlayers(sala);
     const jugador = jugadores[uid];
     if (!jugador || sala.estado === "terminada") {
@@ -1627,19 +1638,27 @@ function leaveRoom(
     if (sala.estado === "esperando") {
       delete jugadores[uid];
       const orden = roomOrder(sala).filter((id) => id !== uid);
-      // Salir antes de empezar devuelve la entrada de una sala de intros.
-      const extra = sala.tipo === "intros"
-        ? [walletWrite(uid, precioSalaIntros)]
-        : [];
+      // Salir antes de empezar devuelve lo que pagó (salas de intros).
+      const extra = jugador.pagado ? [walletWrite(uid, jugador.pagado)] : [];
       if (orden.length === 0) {
         return { borrar: true, extra, resultado: { salio: true } };
       }
+      const restante = {
+        ...sala,
+        jugadores,
+        orden,
+        // Si sale quien la creó, la sala pasa al siguiente en llegar.
+        creadorUid: sala.creadorUid === uid ? orden[0] : sala.creadorUid,
+      };
       return {
         campos: {
           jugadores,
           orden,
-          // Si sale quien la creó, la sala pasa al siguiente en llegar.
-          creadorUid: sala.creadorUid === uid ? orden[0] : sala.creadorUid,
+          creadorUid: restante.creadorUid,
+          // Si los que quedan ya estaban todos listos, empieza ya.
+          ...(todosListos(orden.map((id) => jugadores[id].listo === true))
+            ? await roomStart(token, restante)
+            : {}),
         },
         extra,
         resultado: { salio: true },
@@ -1670,53 +1689,67 @@ function leaveRoom(
   });
 }
 
-function startRoom(
+/// Campos para arrancar la partida: canciones de todas las dificultades (o
+/// todas las intros) mezcladas y, en contrarreloj, el reloj desde ahora.
+async function roomStart(token: string, sala: JsonObject): Promise<JsonObject> {
+  const levelIds = sala.tipo === "intros"
+    ? (await listCollection(token, "intros"))
+      .filter((document) => fromFields(document.fields ?? {}).published === true)
+      .map((document) => document.name?.split("/").at(-1) ?? "")
+      .filter(validId)
+    : (await publishedLevels(token))
+      .filter((level) =>
+        level.published && Number.isInteger(level.numero) &&
+        difficulties.includes(level.dificultad as Difficulty) &&
+        validId(level.id)
+      )
+      .map((level) => level.id);
+  if (levelIds.length === 0) {
+    throw new HttpError(
+      409,
+      sala.tipo === "intros"
+        ? "No hay intros publicadas"
+        : "No hay canciones publicadas",
+    );
+  }
+  const now = Date.now();
+  return {
+    estado: "jugando",
+    levelIds: shuffled(levelIds),
+    ronda: 1,
+    acertaronRonda: [],
+    inicioRonda: new Date(now).toISOString(),
+    finEn: sala.modo === "contrarreloj"
+      ? new Date(now + duracionContrarrelojMs).toISOString()
+      : null,
+  };
+}
+
+/// Marca o desmarca "Listo"; cuando todos (2 o más) están listos, empieza.
+function readyRoom(
   token: string,
   uid: string,
   codigo: string,
+  listo: unknown,
 ): Promise<JsonObject> {
+  if (typeof listo !== "boolean") {
+    throw new HttpError(400, "listo debe ser true o false");
+  }
   return updateRoom(token, codigo, async (sala) => {
-    if (sala.creadorUid !== uid) {
-      throw new HttpError(403, "Solo quien creó la sala puede iniciarla");
-    }
+    const jugador = roomMember(sala, uid);
     if (sala.estado !== "esperando") {
       throw new HttpError(409, "La sala ya empezó");
     }
-    if (roomOrder(sala).length < 2) {
-      throw new HttpError(409, "Se necesitan al menos 2 jugadores");
-    }
-    const levelIds = sala.tipo === "intros"
-      ? (await listCollection(token, "intros"))
-        .filter((document) => fromFields(document.fields ?? {}).published === true)
-        .map((document) => document.name?.split("/").at(-1) ?? "")
-        .filter(validId)
-      : (await publishedLevels(token))
-        .filter((level) =>
-          level.published && level.dificultad === sala.dificultad &&
-          validId(level.id)
-        )
-        .map((level) => level.id);
-    if (levelIds.length === 0) {
-      throw new HttpError(
-        409,
-        sala.tipo === "intros"
-          ? "No hay intros publicadas"
-          : "No hay canciones publicadas en esa dificultad",
-      );
-    }
-    const now = Date.now();
+    const jugadores = { ...roomPlayers(sala), [uid]: { ...jugador, listo } };
+    const empieza = todosListos(
+      roomOrder(sala).map((id) => jugadores[id]?.listo === true),
+    );
     return {
       campos: {
-        estado: "jugando",
-        levelIds: shuffled(levelIds),
-        ronda: 1,
-        acertaronRonda: [],
-        inicioRonda: new Date(now).toISOString(),
-        finEn: sala.modo === "contrarreloj"
-          ? new Date(now + duracionContrarrelojMs).toISOString()
-          : null,
+        jugadores,
+        ...(empieza ? await roomStart(token, sala) : {}),
       },
-      resultado: { iniciada: true },
+      resultado: { listo, iniciada: empieza },
     };
   });
 }
@@ -1763,13 +1796,7 @@ function roomGame(
         resultado,
       };
     }
-    const entry = await buildLevelEntry(
-      token,
-      levelId,
-      sala.dificultad as Difficulty,
-      new Set(),
-      true,
-    );
+    const entry = await buildLevelEntry(token, levelId, null, new Set(), true);
     const nivel = entry.nivel as JsonObject;
     const actual = jugador.gameId
       ? await getDocument(token, `games/${jugador.gameId}`)
@@ -2590,7 +2617,7 @@ async function handle(request: Request): Promise<Response> {
     > = {
       unirseSala: (codigo) => joinRoom(token, uid, playerName, codigo),
       salirSala: (codigo) => leaveRoom(token, uid, codigo),
-      iniciarSala: (codigo) => startRoom(token, uid, codigo),
+      listoSala: (codigo) => readyRoom(token, uid, codigo, body.listo),
       partidaSala: (codigo) => roomGame(token, uid, codigo),
       saltarCancionSala: (codigo) => skipRoomSong(token, uid, codigo),
       revisarSala: (codigo) => checkRoom(token, uid, codigo),

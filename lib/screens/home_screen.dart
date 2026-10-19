@@ -38,8 +38,8 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  // La sesión guardada se conserva (progreso offline e invitados), pero cada
-  // arranque pasa por el login para confirmarla.
+  // Una cuenta registrada (correo o Google) entra directo al menú al abrir la
+  // app; un invitado pasa por el login, porque su sesión se limpia al entrar.
   bool _entered = false;
   late final Stream<User?> _authStateChanges =
       widget.authStateChanges ?? FirebaseAuth.instance.authStateChanges();
@@ -67,7 +67,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           return const Scaffold(body: Cargando());
         }
         final user = snapshot.data;
-        if (user == null || !_entered) {
+        if (user == null || (!_entered && user.isAnonymous)) {
           return FirebaseAuthScreen(
             savedUser: user,
             onSignedIn: () => setState(() => _entered = true),
