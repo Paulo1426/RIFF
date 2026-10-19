@@ -34,20 +34,30 @@ class CarruselGiratorio extends StatefulWidget {
 
 class _CarruselGiratorioState extends State<CarruselGiratorio>
     with TickerProviderStateMixin {
-  // Posición continua: un entero significa esa tarjeta al frente.
+  // Posición continua: un entero significa esa tarjeta al frente. Moverla no
+  // reconstruye las tarjetas (solo el AnimatedBuilder de posiciones); se
+  // reconstruyen únicamente cuando cambia cuál está al frente.
   late final _posicion = AnimationController.unbounded(
     vsync: this,
     value: widget.inicial.toDouble(),
-  )..addListener(() => setState(() {}));
+  )..addListener(_revisarFrente);
   // 0 = tarjeta a pantalla completa, 1 = modo carrusel (mientras gira).
   late final _giro = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 250),
-  )..addListener(() => setState(() {}));
+  );
+  late final _movimiento = Listenable.merge([_posicion, _giro]);
   double _anchoArrastre = 300;
+  late int _frenteConstruido = _frente;
 
   int get _n => widget.itemCount;
   int get _frente => _posicion.value.round() % _n;
+
+  void _revisarFrente() {
+    if (_frente != _frenteConstruido) {
+      setState(() => _frenteConstruido = _frente);
+    }
+  }
 
   @override
   void dispose() {
@@ -87,6 +97,15 @@ class _CarruselGiratorioState extends State<CarruselGiratorio>
 
   @override
   Widget build(BuildContext context) {
+    // Se construyen una vez por cambio de tarjeta al frente; durante la
+    // animación se reutilizan tal cual, así Flutter no rehace su contenido.
+    // RepaintBoundary: moverlas no obliga a volver a pintarlas.
+    final tarjetas = [
+      for (var i = 0; i < _n; i++)
+        RepaintBoundary(
+          child: widget.itemBuilder(context, i, i == _frenteConstruido),
+        ),
+    ];
     return Column(
       children: [
         Expanded(
@@ -94,10 +113,6 @@ class _CarruselGiratorioState extends State<CarruselGiratorio>
             builder: (context, constraints) {
               final ancho = min(constraints.maxWidth * 0.76, 380.0);
               _anchoArrastre = ancho;
-              final orden = List.generate(_n, (i) => i)
-                ..sort(
-                  (a, b) => _distancia(b).abs().compareTo(_distancia(a).abs()),
-                );
               return GestureDetector(
                 behavior: HitTestBehavior.translucent,
                 onHorizontalDragStart: (_) {
@@ -107,13 +122,23 @@ class _CarruselGiratorioState extends State<CarruselGiratorio>
                 onHorizontalDragUpdate: (details) =>
                     _posicion.value -= details.delta.dx / _anchoArrastre,
                 onHorizontalDragEnd: _soltar,
-                child: Stack(
-                  alignment: Alignment.center,
-                  clipBehavior: Clip.none,
-                  children: [
-                    for (final i in orden)
-                      _tarjeta(context, i, ancho, constraints),
-                  ],
+                child: AnimatedBuilder(
+                  animation: _movimiento,
+                  builder: (context, _) {
+                    final orden = List.generate(_n, (i) => i)
+                      ..sort(
+                        (a, b) =>
+                            _distancia(b).abs().compareTo(_distancia(a).abs()),
+                      );
+                    return Stack(
+                      alignment: Alignment.center,
+                      clipBehavior: Clip.none,
+                      children: [
+                        for (final i in orden)
+                          _tarjeta(i, tarjetas[i], ancho, constraints),
+                      ],
+                    );
+                  },
                 ),
               );
             },
@@ -131,8 +156,8 @@ class _CarruselGiratorioState extends State<CarruselGiratorio>
   }
 
   Widget _tarjeta(
-    BuildContext context,
     int i,
+    Widget contenido,
     double ancho,
     BoxConstraints espacio,
   ) {
@@ -154,7 +179,7 @@ class _CarruselGiratorioState extends State<CarruselGiratorio>
         min(espacio.maxHeight - 12, ancho * 1.75),
         g,
       ),
-      child: widget.itemBuilder(context, i, alFrente),
+      child: contenido,
     );
     // Las vecinas solo se ven mientras gira.
     final visible = alFrente ? 1.0 : g;

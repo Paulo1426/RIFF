@@ -15,6 +15,7 @@ import '../animations/liquid_ripple_effect.dart';
 import '../widgets/boton_tema.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
 import '../theme.dart';
+import '../theme/liquid_glass_theme.dart';
 import '../widgets/liquid_glass/liquid_glass_appbar.dart';
 import '../widgets/liquid_glass/liquid_glass_button.dart';
 import '../widgets/liquid_glass/liquid_glass_card.dart';
@@ -1396,6 +1397,9 @@ class _TarjetaDificultad extends StatelessWidget {
       borderRadius: 28,
       tintColor: color,
       borderColor: alFrente ? color : null,
+      // Las laterales solo se ven al girar y atenuadas: sin desenfoque, que es
+      // lo más caro de pintar en cada cuadro.
+      blur: alFrente ? LiquidGlass.glassBlur : 0,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
         child: Column(
