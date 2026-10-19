@@ -62,3 +62,6 @@ graphify-out/
 .continue/
 skills-lock.json
 /scripts/intros.json
+
+# Guía para colaboradores: se comparte aparte, no va en el repositorio.
+GUIA_COLABORADORES.md
