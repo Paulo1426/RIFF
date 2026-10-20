@@ -65,3 +65,8 @@ skills-lock.json
 
 # Guía para colaboradores: se comparte aparte, no va en el repositorio.
 GUIA_COLABORADORES.md
+ESTUDIO_DEL_PROYECTO.md
+
+# Documentación solo local: en el repositorio solo va el README.
+*.md
+!README.md
