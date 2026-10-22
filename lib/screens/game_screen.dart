@@ -628,6 +628,12 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           return;
         }
         if (!mounted) return;
+        // Canción y portada se piden a la vez: el reproductor aparece con la
+        // portada lista (máx. ~2 s) y la canción ya cargando, así salen
+        // juntas sin sumar las dos esperas.
+        unawaited(_playSong('fullSong', replaceCurrent: true));
+        await _cargarPortada();
+        if (!mounted) return;
         setState(() {
           _ganar(
             titulo: resultado.titulo ?? answer,
@@ -647,13 +653,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             ),
           );
         }
-        // Sin await: la canción sigue sonando en el reproductor y la pantalla
-        // queda libre (si no, "Comprobando respuesta" duraba toda la canción).
-        unawaited(_playSong('fullSong', replaceCurrent: true));
-        // La canción no espera a la portada: aparece cuando termine de bajar.
-        unawaited(
-          _cargarPortada().then((_) => mounted ? setState(() {}) : null),
-        );
       } else {
         setState(() {
           _correct = false;
@@ -740,17 +739,17 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           (await ref
                   .read(firebaseGameRepositoryProvider)
                   .obtenerAudio(gameId: widget.gameId, tipo: 'cover')
-                  .timeout(const Duration(seconds: 4)))
+                  .timeout(const Duration(seconds: 2)))
               .url;
       if (!mounted) return;
       // Se baja a la caché de imágenes antes de mostrarla; si no existe o
-      // tarda más de 4 s se sigue con el disco en su lugar.
+      // tarda más de 2 s se sigue con el disco en su lugar.
       var cargada = true;
       await precacheImage(
         NetworkImage(url),
         context,
         onError: (_, _) => cargada = false,
-      ).timeout(const Duration(seconds: 4), onTimeout: () => cargada = false);
+      ).timeout(const Duration(seconds: 2), onTimeout: () => cargada = false);
       if (mounted && cargada) _portadaUrl = url;
     } catch (error) {
       // Sin portada subida se muestra el disco; no es un error para el jugador.

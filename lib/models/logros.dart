@@ -106,9 +106,9 @@ List<Logro> logrosDe(SaldoSalas salas, AvanceJuego juego) {
     Logro(
       emoji: '👑',
       nombre: 'Vallenatólogo',
-      condicion: 'Queda de primero en 20 salas y completa el 100 % del juego',
+      condicion: 'Queda de primero en 30 salas y completa el 100 % del juego',
       actual: salas.ganadas,
-      meta: 20,
+      meta: 30,
       extra: juego.todoCompleto,
     ),
     Logro(

@@ -164,6 +164,10 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
       if (!mounted) return;
       setState(() => _estado = estado);
       widget.onMonedas?.call(estado.monedas);
+      final uid = ref.read(firebaseGameRepositoryProvider).uid;
+      // Precarga la portada (y los audios) de la carta nueva mientras se
+      // juega, para que al acertar salga junto con la canción.
+      if (uid != null) unawaited(_descargar(uid));
       final nueva = estado.intros.firstWhere((item) => item.id == estado.nueva);
       final jugar = await showDialog<bool>(
         context: context,
@@ -1134,6 +1138,11 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     _playbackGeneration++;
     await _audioService.detener();
     if (!mounted) return;
+    // Canción y portada a la vez; la portada suele estar ya descargada desde
+    // que se sacó la carta, así que salen juntas.
+    unawaited(_play('fullSong'));
+    await _cargarPortada();
+    if (!mounted) return;
     setState(() {
       _won = true;
       _correct = true;
@@ -1142,9 +1151,6 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     });
     _confeti.play();
     _iniciarReloj();
-    unawaited(_play('fullSong'));
-    // La canción no espera a la portada: aparece cuando termine de bajar.
-    unawaited(_cargarPortada().then((_) => mounted ? setState(() {}) : null));
   }
 
   Widget _vistaGanada() => ReproductorCancion(

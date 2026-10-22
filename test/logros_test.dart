@@ -38,8 +38,8 @@ void main() {
     expect(_tiene(logros, 'No rendirse'), isTrue);
   });
 
-  test('Vallenatólogo pide 20 victorias y el 100 % del juego', () {
-    const veinte = SaldoSalas(ganadasCancion: 20);
+  test('Vallenatólogo pide 30 victorias y el 100 % del juego', () {
+    const veinte = SaldoSalas(ganadasCancion: 30);
     expect(
       _tiene(logrosDe(veinte, _avance(intros: 45)), 'Vallenatólogo'),
       isFalse,

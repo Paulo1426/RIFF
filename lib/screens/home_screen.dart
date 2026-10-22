@@ -15,6 +15,7 @@ import '../services/firebase_game_repository.dart';
 import '../services/offline_game_store.dart';
 import '../animations/liquid_ripple_effect.dart';
 import '../widgets/boton_tema.dart';
+import '../widgets/dialogo_contrasena.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
 import '../theme.dart';
 import '../theme/liquid_glass_theme.dart';
@@ -842,32 +843,10 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     }
   }
 
-  Future<String?> _pedirContrasena() {
-    final controlador = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (context) => LiquidGlassDialog(
-        title: const Text('Confirma tu contraseña'),
-        content: TextField(
-          controller: controlador,
-          autofocus: true,
-          obscureText: true,
-          decoration: const InputDecoration(labelText: 'Contraseña'),
-          onSubmitted: (clave) => Navigator.of(context).pop(clave),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controlador.text),
-            child: const Text('Reiniciar'),
-          ),
-        ],
-      ),
-    ).whenComplete(controlador.dispose);
-  }
+  Future<String?> _pedirContrasena() => showDialog<String>(
+    context: context,
+    builder: (_) => const DialogoContrasena(accion: 'Reiniciar'),
+  );
 
   Future<void> _cerrarSesion() async {
     try {
@@ -1201,13 +1180,15 @@ class _PestanaProgreso extends StatelessWidget {
                   children: [
                     Text('👥 Salas', style: text.titleMedium),
                     const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
+                    // Dos filas de tres, del mismo ancho y alto, que llenan
+                    // la tarjeta.
+                    for (final fila in [
+                      [
                         _Dato('🎮', '${saldo.jugadas}', 'Jugadas'),
                         _Dato('🏆', '${saldo.ganadas}', 'Ganadas'),
                         _Dato('😔', '${saldo.derrotas}', 'Derrotas'),
+                      ],
+                      [
                         _Dato(
                           '📊',
                           '${(saldo.porcentajeVictorias * 100).round()}%',
@@ -1220,7 +1201,21 @@ class _PestanaProgreso extends StatelessWidget {
                           'Fichas ganadas',
                         ),
                       ],
-                    ),
+                    ])
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final (i, dato) in fila.indexed) ...[
+                                if (i > 0) const SizedBox(width: 10),
+                                Expanded(child: dato),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
                     const SizedBox(height: 8),
                     Text(
                       '🥁 ${saldo.ganadasCancion} ganadas de Adivina la '
@@ -1285,7 +1280,6 @@ class _Dato extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return Container(
-      width: 96,
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
       decoration: BoxDecoration(
         color: context.paleta.superficie.withValues(alpha: 0.5),
@@ -1293,6 +1287,7 @@ class _Dato extends StatelessWidget {
         border: Border.all(color: context.paleta.borde),
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(emoji, style: const TextStyle(fontSize: 22)),
           Text(valor, style: text.titleLarge),
