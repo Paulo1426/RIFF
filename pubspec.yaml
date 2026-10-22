@@ -76,6 +76,7 @@ flutter:
 
   assets:
     - lib/assets/images/logo/
+    - lib/assets/audio/menu/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -77,11 +77,21 @@ void main() {
       await tester.pump();
       expect(tester.takeException(), isNull);
       expect(find.text('7'), findsOneWidget);
-      expect(find.text('¿Qué canción es?'), findsOneWidget);
+      // La colección agrupa por artista; las sin adivinar van aparte.
+      expect(find.text('Por descubrir'), findsOneWidget);
+      expect(find.text('1 por adivinar'), findsOneWidget);
       expect(find.text('Artista'), findsOneWidget);
-      expect(find.textContaining('Una canción'), findsOneWidget);
+      expect(find.text('1 canción'), findsOneWidget);
       expect(find.textContaining('Quedan 43'), findsOneWidget);
       expect(find.text('Sacar carta · 🪙 1'), findsOneWidget);
+
+      // Al tocar el artista se ven sus cartas, sin desbordes.
+      await tester.tap(find.text('Artista'));
+      // El fondo líquido se anima sin fin; pumpAndSettle nunca terminaría.
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(tester.takeException(), isNull);
+      expect(find.textContaining('Una canción'), findsOneWidget);
     });
   }
 }
