@@ -844,10 +844,18 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     ),
     _pProgreso => const Text('Progreso'),
     5 => const Text('Ajustes'),
-    _ => Image.asset(
-      'lib/assets/images/logo/riff_logo.png',
-      height: 48,
-      semanticLabel: 'Riff',
+    _ => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Image.asset(
+          'lib/assets/images/logo/riff_logo.png',
+          height: 48,
+          // El nombre ya va escrito al lado.
+          excludeFromSemantics: true,
+        ),
+        const SizedBox(width: 10),
+        const Text('RIFF'),
+      ],
     ),
   };
 
@@ -1368,8 +1376,6 @@ class _MenuPrincipal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final introsBloqueadas = !introsDisponibles;
-    final salasBloqueadas = esInvitado || offlineMode;
     WidgetsBinding.instance.addPostFrameCallback((_) => onVisible());
     return Padding(
       padding: const EdgeInsets.only(top: 12),
@@ -1381,51 +1387,139 @@ class _MenuPrincipal extends StatelessWidget {
         compacto: true,
         proporcion: 1.25,
         colorDe: (index) => _colores[index],
-        itemBuilder: (context, index, alFrente) => switch (index) {
-          0 => _CuadroModo(
-            emoji: '🥁🪗🎸',
-            animacion: _Animacion.tocar,
-            titulo: 'Adivina la canción',
-            detalle: 'Compra instrumentos y descubre la canción.',
-            info: infoCancion,
-            color: AppColors.verde,
-            alFrente: alFrente,
-            onTap: onInstrumentos,
-          ),
-          1 => _CuadroModo(
-            emoji: '🏆',
-            animacion: _Animacion.saltar,
-            titulo: 'Desafía a tus amigos',
-            detalle: esInvitado
-                ? 'Crea una cuenta para jugar en salas.'
-                : offlineMode
-                ? 'Necesitas conexión para jugar en salas.'
-                : 'Crea o únete a una sala de hasta 5 jugadores.',
-            info: salasBloqueadas ? null : infoSalas,
-            color: AppColors.medio,
-            alFrente: alFrente,
-            bloqueado: salasBloqueadas,
-            onTap: salasBloqueadas ? null : onSalas,
-          ),
-          _ => _CuadroModo(
-            emoji: '🎧',
-            animacion: _Animacion.mecer,
-            titulo: 'Adivina la intro',
-            detalle: !introsDisponibles
-                ? 'Se desbloquea al completar tu primer nivel.'
-                : offlineMode
-                ? 'Sin conexión: juega las intros descargadas.'
-                : 'Escucha 20 segundos y adivina la canción.',
-            info: introsBloqueadas ? null : infoIntros,
-            color: AppColors.signalOrange,
-            alFrente: alFrente,
-            bloqueado: introsBloqueadas,
-            onTap: introsBloqueadas ? null : onIntros,
-          ),
-        },
+        itemBuilder: (context, index, alFrente) => _ConReflejo(
+          color: _colores[index],
+          tarjeta: _cuadro(index, alFrente),
+          // La copia del reflejo va sin desenfoque: es lo más caro de pintar.
+          reflejo: _cuadro(index, false),
+        ),
       ),
     );
   }
+
+  Widget _cuadro(int index, bool alFrente) {
+    final introsBloqueadas = !introsDisponibles;
+    final salasBloqueadas = esInvitado || offlineMode;
+    return switch (index) {
+      0 => _CuadroModo(
+        emoji: '🥁🪗🎸',
+        animacion: _Animacion.tocar,
+        titulo: 'Adivina la canción',
+        detalle: 'Compra instrumentos y descubre la canción.',
+        info: infoCancion,
+        color: AppColors.verde,
+        alFrente: alFrente,
+        onTap: onInstrumentos,
+      ),
+      1 => _CuadroModo(
+        emoji: '🏆',
+        animacion: _Animacion.saltar,
+        titulo: 'Desafía a tus amigos',
+        detalle: esInvitado
+            ? 'Crea una cuenta para jugar en salas.'
+            : offlineMode
+            ? 'Necesitas conexión para jugar en salas.'
+            : 'Crea o únete a una sala de hasta 5 jugadores.',
+        info: salasBloqueadas ? null : infoSalas,
+        color: AppColors.medio,
+        alFrente: alFrente,
+        bloqueado: salasBloqueadas,
+        onTap: salasBloqueadas ? null : onSalas,
+      ),
+      _ => _CuadroModo(
+        emoji: '🎧',
+        animacion: _Animacion.mecer,
+        titulo: 'Adivina la intro',
+        detalle: !introsDisponibles
+            ? 'Se desbloquea al completar tu primer nivel.'
+            : offlineMode
+            ? 'Sin conexión: juega las intros descargadas.'
+            : 'Escucha 20 segundos y adivina la canción.',
+        info: introsBloqueadas ? null : infoIntros,
+        color: AppColors.signalOrange,
+        alFrente: alFrente,
+        bloqueado: introsBloqueadas,
+        onTap: introsBloqueadas ? null : onIntros,
+      ),
+    };
+  }
+}
+
+/// Tarjeta con su reflejo debajo, como sobre un piso de vidrio: una copia
+/// volteada que se desvanece hacia abajo y una sombra suave de su color.
+class _ConReflejo extends StatelessWidget {
+  const _ConReflejo({
+    required this.color,
+    required this.tarjeta,
+    required this.reflejo,
+  });
+
+  final Color color;
+  final Widget tarjeta;
+  final Widget reflejo;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, espacio) {
+      final alto = espacio.maxHeight;
+      // Fracción de la tarjeta que se ve reflejada.
+      const parte = 0.22;
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Sombra: una elipse difusa del color de la tarjeta bajo su borde.
+          Positioned(
+            left: espacio.maxWidth * 0.1,
+            right: espacio.maxWidth * 0.1,
+            top: alto - 10,
+            height: 34,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  colors: [
+                    color.withValues(alpha: 0.45),
+                    color.withValues(alpha: 0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Positioned.fill(child: tarjeta),
+          Positioned(
+            left: 0,
+            right: 0,
+            top: alto + 6,
+            height: alto * parte,
+            child: IgnorePointer(
+              child: ExcludeSemantics(
+                child: ShaderMask(
+                  blendMode: BlendMode.dstIn,
+                  shaderCallback: (rect) => LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.white.withValues(alpha: 0.35),
+                      Colors.white.withValues(alpha: 0),
+                    ],
+                  ).createShader(rect),
+                  child: ClipRect(
+                    child: OverflowBox(
+                      alignment: Alignment.topCenter,
+                      minHeight: alto,
+                      maxHeight: alto,
+                      // Volteada: lo más cercano a la tarjeta es su borde
+                      // inferior, como en un espejo.
+                      child: Transform.flip(flipY: true, child: reflejo),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+  );
 }
 
 class _CuadroModo extends StatelessWidget {
