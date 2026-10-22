@@ -389,6 +389,25 @@ async function clearGuestSession(token: string, uid: string): Promise<void> {
   }
 }
 
+/// Empezar desde cero: borra progreso, orden de niveles, intros, fichas y
+/// estadísticas de salas de una cuenta registrada.
+async function resetUserProgress(token: string, uid: string): Promise<void> {
+  for (const coleccion of [
+    "progress",
+    "difficultyOrders",
+    "introProgress",
+    "fichas",
+  ]) {
+    const documentos = await listCollection(token, `users/${uid}/${coleccion}`);
+    await clearDocuments(
+      token,
+      documentos
+        .map((documento) => documento.name)
+        .filter((name): name is string => typeof name === "string"),
+    );
+  }
+}
+
 function createWrite(path: string, fields: JsonObject): JsonObject {
   return {
     update: { name: documentName(path), fields: toFields(fields) },
@@ -688,11 +707,15 @@ async function getProgress(
     );
     const done = order.length === levelsPerDifficulty &&
       order.every((levelId) => completed.has(levelId));
+    const unInstrumento = new Set(
+      stringList(progressDoc?.fields.unInstrumentoIds),
+    );
     summaries.push({
       dificultad: difficulty,
       desbloqueada: true,
       completados: order.filter((id) => completed.has(id)).length,
       total: order.length,
+      un_instrumento: order.filter((id) => unInstrumento.has(id)).length,
     });
     if (!done) {
       activeDifficulty = difficulty;
@@ -1237,6 +1260,13 @@ async function submitAnswer(
     );
   }
   completedIds.add(levelId);
+  // "Música para mis oídos": niveles ganados comprando un solo instrumento
+  // (cuenta también al repetir un nivel ya ganado).
+  const unInstrumento = new Set(stringList(progress?.fields?.unInstrumentoIds));
+  const conUnInstrumento =
+    stringList(game.fields.instrumentosComprados).length === 1;
+  const nuevoUnInstrumento = conUnInstrumento && !unInstrumento.has(levelId);
+  if (conUnInstrumento) unInstrumento.add(levelId);
   const completedNumbers = new Set(
     Array.isArray(progress?.fields?.nivelesCompletados)
       ? (progress.fields.nivelesCompletados as unknown[])
@@ -1253,6 +1283,7 @@ async function submitAnswer(
       : completedIds.size + 1,
     nivelesCompletados: [...completedNumbers].sort((a, b) => a - b),
     completedLevelIds: [...completedIds],
+    unInstrumentoIds: [...unInstrumento],
     updatedAt: now,
   };
   const progressPath = userPath(
@@ -1272,7 +1303,7 @@ async function submitAnswer(
       },
       game.updateTime!,
     ),
-    ...(replayingCompletedLevel ? [] : [
+    ...(replayingCompletedLevel && !nuevoUnInstrumento ? [] : [
       progress
         ? updateWrite(progressPath, progressFields, progress.updateTime!)
         : createWrite(progressPath, progressFields),
@@ -2670,6 +2701,23 @@ async function handle(request: Request): Promise<Response> {
         throw new HttpError(400, "El código de sala no es válido");
       }
       return response(200, await roomActions[action as string](body.codigo));
+    }
+    if (action === "reiniciarProgreso") {
+      if (guest) {
+        throw new HttpError(403, "Solo una cuenta registrada puede reiniciarse");
+      }
+      // Hace falta haber confirmado la contraseña (o Google) hace poco.
+      const authTime = verified.payload.auth_time;
+      if (
+        typeof authTime !== "number" || Date.now() / 1000 - authTime > 300
+      ) {
+        throw new HttpError(
+          401,
+          "Vuelve a confirmar tu cuenta para reiniciar el progreso",
+        );
+      }
+      await resetUserProgress(token, uid);
+      return response(200, { reiniciado: true });
     }
     if (action === "endGuestSession") {
       if (!guest) {

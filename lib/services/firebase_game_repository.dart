@@ -53,12 +53,15 @@ class ProgresoDificultadRemoto {
     required this.desbloqueada,
     required this.completados,
     required this.total,
+    this.unInstrumento = 0,
   });
 
   final Dificultad dificultad;
   final bool desbloqueada;
   final int completados;
   final int total;
+  // Niveles ganados comprando un solo instrumento.
+  final int unInstrumento;
 
   factory ProgresoDificultadRemoto.fromJson(Map<String, dynamic> json) {
     return ProgresoDificultadRemoto(
@@ -66,6 +69,7 @@ class ProgresoDificultadRemoto {
       desbloqueada: json['desbloqueada'] as bool,
       completados: (json['completados'] as num).toInt(),
       total: (json['total'] as num).toInt(),
+      unInstrumento: (json['un_instrumento'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -210,6 +214,14 @@ class FirebaseGameRepository {
       monedas: (response['monedas'] as num?)?.toInt() ?? 0,
       puntos: (response['puntos'] as num?)?.toInt() ?? 0,
     );
+  }
+
+  /// Borra todo el progreso de la cuenta. El servidor exige haber confirmado
+  /// la contraseña (o Google) hace poco: se pide un token nuevo con esa
+  /// confirmación.
+  Future<void> reiniciarProgreso() async {
+    await _auth.currentUser?.getIdToken(true);
+    await _post({'action': 'reiniciarProgreso'});
   }
 
   // --- Salas de "Desafía a tus amigos" ---

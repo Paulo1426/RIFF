@@ -239,7 +239,12 @@ class _TarjetaTipoSala extends StatelessWidget {
           if (!intros) ...[
             const SizedBox(height: 10),
             Center(
-              child: _Precio('Premios', '🥇10 🥈7 🥉3', color, destacado: true),
+              child: _Precio(
+                'Premios',
+                '🥇 🎟️10   🥈 🎟️7   🥉 🎟️3',
+                color,
+                destacado: true,
+              ),
             ),
           ],
           const SizedBox(height: 16),
@@ -299,9 +304,9 @@ class _Precio extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: destacado ? 0.3 : 0.14),
+        color: color.withValues(alpha: destacado ? 0.12 : 0.08),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: color.withValues(alpha: 0.7), width: 1.5),
       ),

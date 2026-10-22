@@ -139,6 +139,12 @@ class OfflineIntroStore {
   // Una sola descarga a la vez aunque la pidan el inicio y la pantalla.
   static Future<OfflineIntroSnapshot?>? _enCurso;
 
+  /// Borra la copia guardada de [uid] (al reiniciar el progreso).
+  Future<void> borrar(String uid) async {
+    final archivo = await _file(uid);
+    if (await archivo.exists()) await archivo.delete();
+  }
+
   Future<File> _file(String uid) async {
     final directory = await getApplicationSupportDirectory();
     final store = Directory('${directory.path}/offline_intros');

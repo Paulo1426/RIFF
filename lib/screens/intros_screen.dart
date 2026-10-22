@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../animations/liquid_ripple_effect.dart';
 import '../animations/sound_wave_animation.dart';
 import '../providers/providers.dart';
+import '../models/artistas.dart';
 import '../services/audio_service.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/musica_menu.dart';
@@ -264,7 +265,10 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
     for (final intro in estado.intros) {
       final artista = intro.artista;
       if (intro.estado == EstadoIntro.completada && artista != null) {
-        porArtista.putIfAbsent(artista, () => []).add(intro);
+        // Colaboraciones y variantes del nombre van con su artista.
+        porArtista
+            .putIfAbsent(artistaConocido(artista) ?? artista, () => [])
+            .add(intro);
       } else {
         pendientes.add(intro);
       }
@@ -423,7 +427,9 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
 /// ("Martín Elías" en "Martín Elías y Rolando Ochoa") siempre da el mismo
 /// tono, así las cartas de un artista se reconocen de un vistazo.
 Color colorArtista(String? artista) {
-  final principal = (artista ?? '')
+  // Mismo color para todas las formas de un artista del catálogo.
+  final conocido = artista == null ? null : artistaConocido(artista);
+  final principal = (conocido ?? artista ?? '')
       .split(RegExp(r',| y | e | & ', caseSensitive: false))
       .first
       .trim()

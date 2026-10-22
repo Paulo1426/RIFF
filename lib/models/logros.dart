@@ -32,6 +32,7 @@ class AvanceJuego {
     required this.nivelesPorDificultad,
     required this.introsAdivinadas,
     required this.totalIntros,
+    this.unInstrumento = 0,
   });
 
   // Niveles completados en cada dificultad.
@@ -41,6 +42,8 @@ class AvanceJuego {
   final int nivelesPorDificultad;
   final int introsAdivinadas;
   final int totalIntros;
+  // Niveles ganados comprando un solo instrumento.
+  final int unInstrumento;
 
   int get niveles => facil + media + avanzada;
   int get totalNiveles => nivelesPorDificultad * 3;
@@ -70,6 +73,13 @@ List<Logro> logrosDe(SaldoSalas salas, AvanceJuego juego) {
       nombre: 'Orgullo vallenato',
       condicion: 'Completa todos los niveles de Adivina la canción',
       actual: juego.niveles,
+      meta: juego.totalNiveles,
+    ),
+    Logro(
+      emoji: '🎶',
+      nombre: 'Música para mis oídos',
+      condicion: 'Completa todos los niveles comprando un solo instrumento',
+      actual: juego.unInstrumento,
       meta: juego.totalNiveles,
     ),
     Logro(

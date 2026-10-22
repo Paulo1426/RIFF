@@ -24,6 +24,7 @@ class SaldoSalas {
     this.jugadas = 0,
     this.fichasGanadas = 0,
     this.noRendirse = 0,
+    this.podios = 0,
   });
 
   final int fichas;
@@ -34,6 +35,8 @@ class SaldoSalas {
   final int fichasGanadas;
   // Veces que quedó último acertando al menos una canción.
   final int noRendirse;
+  // Veces que terminó entre los 3 primeros.
+  final int podios;
 
   int get ganadas => ganadasCancion + ganadasIntros;
   // Las victorias anteriores a contar partidas pueden superar a las jugadas.
@@ -50,6 +53,7 @@ class SaldoSalas {
       jugadas: campo('jugadas'),
       fichasGanadas: campo('fichasGanadas'),
       noRendirse: campo('noRendirse'),
+      podios: campo('podios'),
     );
   }
 }

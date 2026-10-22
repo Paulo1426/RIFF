@@ -85,6 +85,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 // Una vez por apertura de la app; cerrar sesión y volver a entrar no lo repite.
 var _avisoAuricularesMostrado = false;
 
+// GoogleSignIn se inicializa una sola vez (login y confirmar la cuenta).
+Future<void>? _googleListo;
+Future<void> prepararGoogle() =>
+    _googleListo ??= GoogleSignIn.instance.initialize();
+
 class _AuthenticatedHome extends ConsumerStatefulWidget {
   const _AuthenticatedHome({super.key, required this.user});
 
@@ -751,6 +756,119 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     }
   }
 
+  /// Empezar desde cero: confirma, pide la contraseña (o Google) de nuevo y
+  /// borra el progreso en el servidor y la copia offline del teléfono.
+  Future<void> _reiniciarProgreso() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => LiquidGlassDialog(
+        icon: const Icon(Icons.warning_amber_rounded, size: 56),
+        title: const Text('¿Empezar desde cero?', textAlign: TextAlign.center),
+        content: const Text(
+          'Se borrarán tus niveles, intros, monedas, fichas, estadísticas de '
+          'salas e insignias. No se puede deshacer.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    );
+    final user = FirebaseAuth.instance.currentUser;
+    if (confirmar != true || user == null || !mounted) return;
+    try {
+      final conCorreo = user.providerData.any(
+        (proveedor) => proveedor.providerId == 'password',
+      );
+      if (conCorreo) {
+        final clave = await _pedirContrasena();
+        if (clave == null) return;
+        await user.reauthenticateWithCredential(
+          EmailAuthProvider.credential(email: user.email!, password: clave),
+        );
+      } else {
+        await prepararGoogle();
+        final cuenta = await GoogleSignIn.instance.authenticate();
+        final idToken = cuenta.authentication.idToken;
+        if (idToken == null) throw StateError('Google no confirmó la cuenta.');
+        await user.reauthenticateWithCredential(
+          GoogleAuthProvider.credential(idToken: idToken),
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        _pestana = 0;
+        _loading = true;
+      });
+      await ref.read(firebaseGameRepositoryProvider).reiniciarProgreso();
+      await _offlineStore.borrar(user.uid);
+      await ref.read(offlineIntroStoreProvider).borrar(user.uid);
+      if (!mounted) return;
+      setState(() {
+        _offlineSnapshot = null;
+        _resumenIntros = null;
+        _monedas = null;
+        _seleccionada = null;
+      });
+      await _cargar();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tu progreso empezó desde cero.')),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      final mensaje = switch (error) {
+        FirebaseAuthException(code: 'wrong-password' || 'invalid-credential') =>
+          'La contraseña no es correcta.',
+        GameRepositoryException(:final message) => message,
+        _ => 'No se pudo reiniciar el progreso: $error',
+      };
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(mensaje)));
+      // Si el reinicio falló a medias, se vuelve a cargar lo que haya.
+      if (_loading) await _cargar();
+    }
+  }
+
+  Future<String?> _pedirContrasena() {
+    final controlador = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (context) => LiquidGlassDialog(
+        title: const Text('Confirma tu contraseña'),
+        content: TextField(
+          controller: controlador,
+          autofocus: true,
+          obscureText: true,
+          decoration: const InputDecoration(labelText: 'Contraseña'),
+          onSubmitted: (clave) => Navigator.of(context).pop(clave),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controlador.text),
+            child: const Text('Reiniciar'),
+          ),
+        ],
+      ),
+    ).whenComplete(controlador.dispose);
+  }
+
   Future<void> _cerrarSesion() async {
     try {
       if (widget.user.isAnonymous) {
@@ -824,6 +942,9 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
                 key: const ValueKey('configuracion'),
                 onRecorrido: _verRecorrido,
                 onCerrarSesion: _cerrarSesion,
+                onReiniciar: widget.user.isAnonymous
+                    ? null
+                    : _reiniciarProgreso,
               ),
               _ => _pestanaMenu(estado),
             },
@@ -1040,6 +1161,10 @@ class _PestanaProgreso extends StatelessWidget {
       totalIntros: intros == null
           ? _ProgresoGeneral._totalIntros
           : intros.intros.length + intros.restantes,
+      unInstrumento: dificultades.fold(
+        0,
+        (total, item) => total + item.unInstrumento,
+      ),
     );
   }
 
@@ -1088,6 +1213,7 @@ class _PestanaProgreso extends StatelessWidget {
                           '${(saldo.porcentajeVictorias * 100).round()}%',
                           'Victorias',
                         ),
+                        _Dato('🏅', '${saldo.podios}', 'Podios (top 3)'),
                         _Dato(
                           '🎟️',
                           '${saldo.fichasGanadas}',
@@ -1290,10 +1416,13 @@ class _PestanaConfiguracion extends ConsumerStatefulWidget {
     super.key,
     required this.onRecorrido,
     required this.onCerrarSesion,
+    this.onReiniciar,
   });
 
   final VoidCallback onRecorrido;
   final VoidCallback onCerrarSesion;
+  // null para invitados: su progreso ya se borra al salir.
+  final VoidCallback? onReiniciar;
 
   @override
   ConsumerState<_PestanaConfiguracion> createState() =>
@@ -1364,6 +1493,24 @@ class _PestanaConfiguracionState extends ConsumerState<_PestanaConfiguracion> {
           ),
         ),
         const SizedBox(height: 16),
+        if (widget.onReiniciar case final reiniciar?) ...[
+          LiquidGlassCard(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: ListTile(
+              leading: Icon(
+                Icons.restart_alt_rounded,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              title: Text(
+                'Reiniciar progreso',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+              subtitle: const Text('Empezar el juego desde cero'),
+              onTap: reiniciar,
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
         LiquidGlassCard(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: ListTile(
@@ -2256,7 +2403,6 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
   bool _showPassword = false;
   bool _busy = false;
   String? _error;
-  Future<void>? _googleSignInReady;
 
   @override
   void dispose() {
@@ -2302,7 +2448,7 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
       _error = null;
     });
     try {
-      await (_googleSignInReady ??= GoogleSignIn.instance.initialize());
+      await prepararGoogle();
       final account = await GoogleSignIn.instance.authenticate();
       final idToken = account.authentication.idToken;
       if (idToken == null || idToken.isEmpty) {

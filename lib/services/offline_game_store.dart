@@ -211,6 +211,12 @@ class OfflineGameSnapshot {
 }
 
 class OfflineGameStore {
+  /// Borra la copia guardada de [uid] (al reiniciar el progreso).
+  Future<void> borrar(String uid) async {
+    final archivo = await _file(uid);
+    if (await archivo.exists()) await archivo.delete();
+  }
+
   Future<File> _file(String uid) async {
     final directory = await getApplicationSupportDirectory();
     final store = Directory('${directory.path}/offline_game');

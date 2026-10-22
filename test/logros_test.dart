@@ -52,6 +52,21 @@ void main() {
     );
   });
 
+  test('Música para mis oídos pide los 15 niveles con un instrumento', () {
+    AvanceJuego avance(int uno) => AvanceJuego(
+      facil: 5,
+      media: 5,
+      avanzada: 5,
+      nivelesPorDificultad: 5,
+      introsAdivinadas: 0,
+      totalIntros: 45,
+      unInstrumento: uno,
+    );
+    const nombre = 'Música para mis oídos';
+    expect(_tiene(logrosDe(const SaldoSalas(), avance(14)), nombre), isFalse);
+    expect(_tiene(logrosDe(const SaldoSalas(), avance(15)), nombre), isTrue);
+  });
+
   test('el porcentaje de victorias no pasa de 100 %', () {
     // Victorias anteriores a contar partidas.
     const saldo = SaldoSalas(ganadasCancion: 3, jugadas: 2);

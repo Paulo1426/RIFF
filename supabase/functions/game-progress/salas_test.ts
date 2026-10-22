@@ -70,12 +70,16 @@ Deno.test("estadísticas al terminar una sala", () => {
     fichas: 10,
     fichasGanadas: 10,
     ganadasCancion: 1,
+    podios: 1,
   });
   // Último con aciertos: "no rendirse"; en intros no hay fichas.
   assertEquals(estadisticasSala(jugo, 2, 3, false, true, 0), {
     jugadas: 1,
     noRendirse: 1,
+    podios: 1,
   });
+  // Cuarto de cinco: sin podio.
+  assertEquals(estadisticasSala(jugo, 3, 5, false, false, 0), { jugadas: 1 });
   // Abandonó: solo cuenta la partida jugada.
   assertEquals(
     estadisticasSala({ aciertos: 3, abandono: true }, 0, 2, true, true, 0),

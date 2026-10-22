@@ -84,8 +84,8 @@ export function nivelDeIndice(levelIds: readonly string[], indice: number) {
 }
 
 /// Lo que suma al saldo de un jugador al terminar una sala: partida jugada,
-/// fichas ganadas, victoria (por tipo) y "no rendirse" (quedó último pero
-/// acertó alguna canción). La victoria usa el mismo criterio que los premios:
+/// fichas ganadas, victoria (por tipo), podio (top 3) y "no rendirse" (quedó
+/// último pero acertó alguna canción). La victoria usa el mismo criterio que los premios:
 /// no cuenta si abandonó o no acertó nada. [puesto] empieza en 0.
 export function estadisticasSala(
   jugador: { aciertos: number; abandono: boolean },
@@ -105,5 +105,7 @@ export function estadisticasSala(
     ...(totalJugadores > 1 && puesto === totalJugadores - 1 && valido
       ? { noRendirse: 1 }
       : {}),
+    // Podio: terminar entre los 3 primeros.
+    ...(puesto < 3 && valido ? { podios: 1 } : {}),
   };
 }
