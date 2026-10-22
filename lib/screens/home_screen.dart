@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../models/nivel.dart';
+import '../models/sala.dart';
 import '../providers/providers.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/offline_game_store.dart';
@@ -17,6 +18,7 @@ import '../widgets/liquid_glass/liquid_background.dart';
 import '../theme.dart';
 import '../theme/liquid_glass_theme.dart';
 import '../widgets/liquid_glass/liquid_glass_appbar.dart';
+import '../widgets/liquid_glass/liquid_glass_bottom_nav.dart';
 import '../widgets/liquid_glass/liquid_glass_button.dart';
 import '../widgets/liquid_glass/liquid_glass_card.dart';
 import '../widgets/liquid_glass/liquid_glass_dialog.dart';
@@ -79,6 +81,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
+// Una vez por apertura de la app; cerrar sesión y volver a entrar no lo repite.
+var _avisoAuricularesMostrado = false;
+
 class _AuthenticatedHome extends ConsumerStatefulWidget {
   const _AuthenticatedHome({super.key, required this.user});
 
@@ -98,46 +103,62 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   OfflineGameSnapshot? _offlineSnapshot;
   // Dificultad mostrada en el centro; null = la dificultad activa.
   Dificultad? _seleccionada;
-  // false: menú principal; true: juego por instrumentos (dificultades).
-  bool _enInstrumentos = false;
+  // Barra inferior: 0 menú, 1 Adivina la canción, 2 Adivina la intro,
+  // 3 salas, 4 progreso, 5 configuración.
+  int _pestana = 0;
+  static const _pCancion = 1, _pIntro = 2, _pSalas = 3, _pProgreso = 4;
+  Future<EstadoIntros?>? _introsFuturo;
+  // Para las tarjetas del menú: cuántas intros tiene y salas ganadas.
+  EstadoIntros? _resumenIntros;
+  SaldoSalas _saldo = const SaldoSalas();
+  StreamSubscription<SaldoSalas>? _suscripcionSaldo;
   // Elementos que resalta el recorrido guiado.
   final _claveMenu = GlobalKey();
-  final _claveInstrumentos = GlobalKey();
-  final _claveSalas = GlobalKey();
-  final _claveIntros = GlobalKey();
+  final _clavesPestanas = List.generate(6, (_) => GlobalKey());
   bool _recorridoRevisado = false;
+  // Se completa al cerrar el aviso de auriculares; el recorrido espera.
+  final _avisoCerrado = Completer<void>();
 
   Future<void> _verRecorrido() => mostrarRecorrido(context, _pasosMenu());
 
   List<PasoRecorrido> _pasosMenu() => [
     PasoRecorrido(
-      clave: _claveInstrumentos,
-      titulo: '🥁 Adivina la canción',
-      texto:
-          'El juego principal. Tienes \$1.000.000 para comprar 3 '
-          'instrumentos, escúchalos y adivina la canción. Completa los 5 '
-          'niveles de una dificultad para desbloquear la siguiente.',
-    ),
-    PasoRecorrido(
-      clave: _claveSalas,
-      titulo: '🏆 Desafía a tus amigos',
-      texto:
-          'Crea una sala o únete con código o QR. Compite contra reloj o por '
-          'eliminación. Los 3 primeros ganan fichas 🎟️ para salas de intros.',
-    ),
-    PasoRecorrido(
-      clave: _claveIntros,
-      titulo: '🎧 Adivina la intro',
-      texto:
-          'Escucha los primeros segundos y adivina la canción. Cada nivel '
-          'que completas te da monedas para sacar intros nuevas.',
-    ),
-    PasoRecorrido(
       clave: _claveMenu,
-      titulo: '☰ Menú',
+      titulo: '🎮 Menú principal',
       texto:
-          'Aquí ves tu progreso, silencias la música, cambias a modo oscuro, '
-          'repasas las instrucciones o cierras sesión.',
+          'Las tarjetas giran solas; también puedes deslizarlas. 🥁 Adivina '
+          'la canción: compra instrumentos con \$1.000.000 y adivina. '
+          '🏆 Desafía a tus amigos. 🎧 Adivina la intro: se desbloquea al '
+          'completar tu primer nivel.',
+    ),
+    PasoRecorrido(
+      clave: _clavesPestanas[_pCancion],
+      titulo: '🥁 Canción',
+      texto: 'Las dificultades y niveles de Adivina la canción.',
+    ),
+    PasoRecorrido(
+      clave: _clavesPestanas[_pIntro],
+      titulo: '🎧 Intro',
+      texto: 'Tu colección de Adivina la intro y el botón para sacar cartas.',
+    ),
+    PasoRecorrido(
+      clave: _clavesPestanas[_pSalas],
+      titulo: '👥 Salas',
+      texto:
+          'Juega con hasta 5 amigos: salas de Adivina la canción y de '
+          'Adivina la intro, por tiempo o por eliminación.',
+    ),
+    PasoRecorrido(
+      clave: _clavesPestanas[_pProgreso],
+      titulo: '📈 Progreso',
+      texto:
+          'Tus niveles, tus monedas 🪙, tus fichas 🎟️ y las canciones que '
+          'ya adivinaste.',
+    ),
+    PasoRecorrido(
+      clave: _clavesPestanas[5],
+      titulo: '⚙️ Ajustes',
+      texto: 'Instrucciones, música del menú, modo oscuro y cerrar sesión.',
     ),
   ];
 
@@ -145,13 +166,14 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   Future<void> _recorridoSiEsNuevo() async {
     if (_recorridoRevisado) return;
     _recorridoRevisado = true;
+    await _avisoCerrado.future;
+    if (!mounted) return;
     await const RecorridoInicial('menu').mostrarSiEsNuevo(context, _pasosMenu);
   }
 
   final _claveDificultades = GlobalKey();
 
-  void _abrirDificultades() {
-    setState(() => _enInstrumentos = true);
+  void _recorridoDificultades() {
     const RecorridoInicial('dificultades').mostrarSiEsNuevo(
       context,
       () => [
@@ -172,14 +194,57 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   bool get _introsDisponibles =>
       _estado?.dificultades.any((item) => item.completados > 0) ?? false;
 
+  /// Una vez por apertura de la app, antes del menú: usar auriculares.
+  Future<void> _avisoAuriculares() async {
+    if (!_avisoAuricularesMostrado && mounted) {
+      _avisoAuricularesMostrado = true;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => LiquidGlassDialog(
+          icon: const Icon(Icons.headphones_rounded, size: 64),
+          title: const Text('Usa auriculares', textAlign: TextAlign.center),
+          content: const Text(
+            'Se recomienda usar cascos (audífonos o auriculares) para '
+            'distinguir bien cada instrumento.',
+            textAlign: TextAlign.center,
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
+      );
+    }
+    if (!_avisoCerrado.isCompleted) _avisoCerrado.complete();
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _avisoAuriculares());
+    if (!widget.user.isAnonymous) {
+      _suscripcionSaldo = ref
+          .read(firebaseGameRepositoryProvider)
+          .saldoSalas()
+          .listen(
+            (saldo) => setState(() => _saldo = saldo),
+            onError: (Object error) =>
+                debugPrint('No se pudo leer el saldo de salas: $error'),
+          );
+    }
     if (widget.user.isAnonymous) {
       _iniciarSesionInvitado();
     } else {
       _cargar();
     }
+  }
+
+  @override
+  void dispose() {
+    _suscripcionSaldo?.cancel();
+    super.dispose();
   }
 
   Future<void> _iniciarSesionInvitado() async {
@@ -235,6 +300,13 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         _offlineMode = false;
         _loading = false;
       });
+      if (_introsDisponibles) {
+        unawaited(
+          _estadoIntros().then((intros) {
+            if (mounted) setState(() => _resumenIntros = intros);
+          }),
+        );
+      }
       // Deja listas las intros obtenidas por si luego se pierde la conexión.
       if (_introsDisponibles) {
         unawaited(
@@ -641,30 +713,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     }
   }
 
-  Future<void> _verProgreso() {
-    final intros = _estadoIntros();
-    return showDialog<void>(
-      context: context,
-      builder: (context) => FutureBuilder<EstadoIntros?>(
-        future: intros,
-        builder: (context, snapshot) => LiquidGlassDialog(
-          title: const Text('Tu progreso'),
-          content: _ProgresoGeneral(
-            dificultades: _estado?.dificultades ?? const [],
-            intros: snapshot.data,
-            cargandoIntros: snapshot.connectionState != ConnectionState.done,
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cerrar'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   /// Juega el nivel [index] y sigue con los siguientes mientras el jugador
   /// elija "Siguiente nivel".
   Future<void> _jugar(Dificultad dificultad, int index) async {
@@ -717,155 +765,415 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     final estado = _estado;
     // El fondo cubre también la barra para que el vidrio tenga qué mostrar.
     return LiquidBackground(
-      acento: estado == null || !_enInstrumentos
-          ? null
-          : colorDificultad(_seleccionada ?? estado.dificultadActiva),
-      // Atrás desde las dificultades vuelve al menú principal.
+      acento: switch (_pestana) {
+        _pCancion when estado != null => colorDificultad(
+          _seleccionada ?? estado.dificultadActiva,
+        ),
+        _pIntro => AppColors.signalOrange,
+        _ => null,
+      },
+      // Atrás desde cualquier pestaña vuelve al menú.
       child: PopScope(
-        canPop: !_enInstrumentos,
+        canPop: _pestana == 0,
         onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) setState(() => _enInstrumentos = false);
+          if (!didPop) _cambiarPestana(0);
         },
         child: Scaffold(
           backgroundColor: Colors.transparent,
           appBar: LiquidGlassAppBar(
             centerTitle: false,
-            titleSpacing: _enInstrumentos ? 0 : 16,
-            leading: _enInstrumentos
-                ? IconButton(
-                    tooltip: 'Menú principal',
-                    icon: const Icon(Icons.arrow_back_rounded),
-                    onPressed: () => setState(() => _enInstrumentos = false),
-                  )
-                : null,
             title: Image.asset(
               'lib/assets/images/logo/riff_logo.png',
               height: 48,
               semanticLabel: 'Riff',
             ),
-            actions: [
-              PopupMenuButton<VoidCallback>(
-                key: _claveMenu,
-                tooltip: 'Menú',
-                icon: const Icon(Icons.menu_rounded),
-                position: PopupMenuPosition.under,
-                onSelected: (accion) => accion(),
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: () => mostrarInstrucciones(context),
-                    child: const ListTile(
-                      leading: Icon(Icons.menu_book_rounded),
-                      title: Text('Instrucciones'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: _verRecorrido,
-                    child: const ListTile(
-                      leading: Icon(Icons.tour_rounded),
-                      title: Text('Recorrido guiado'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: _verProgreso,
-                    child: const ListTile(
-                      leading: Icon(Icons.insights_rounded),
-                      title: Text('Ver progreso'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: () =>
-                        ref.read(musicaMenuProvider).alternarSilencio(),
-                    child: ListTile(
-                      leading: Icon(
-                        ref.read(musicaMenuProvider).silenciada
-                            ? Icons.music_off_rounded
-                            : Icons.music_note_rounded,
-                      ),
-                      title: Text(
-                        ref.read(musicaMenuProvider).silenciada
-                            ? 'Activar música'
-                            : 'Silenciar música',
-                      ),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: () => ref
-                        .read(modoTemaProvider.notifier)
-                        .cambiar(
-                          context.paleta.oscuro
-                              ? ThemeMode.light
-                              : ThemeMode.dark,
-                        ),
-                    child: ListTile(
-                      leading: Icon(
-                        context.paleta.oscuro
-                            ? Icons.light_mode_rounded
-                            : Icons.dark_mode_rounded,
-                      ),
-                      title: Text(
-                        context.paleta.oscuro ? 'Modo claro' : 'Modo oscuro',
-                      ),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: _cerrarSesion,
-                    child: const ListTile(
-                      leading: Icon(Icons.logout),
-                      title: Text('Cerrar sesión'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 8),
+          ),
+          bottomNavigationBar: LiquidGlassBottomNav(
+            claves: _clavesPestanas,
+            currentIndex: _pestana,
+            onTap: _cambiarPestana,
+            items: const [
+              (icon: Icons.home_rounded, label: 'Menú'),
+              (icon: Icons.music_note_rounded, label: 'Canción'),
+              (icon: Icons.headphones_rounded, label: 'Intro'),
+              (icon: Icons.groups_rounded, label: 'Salas'),
+              (icon: Icons.insights_rounded, label: 'Progreso'),
+              (icon: Icons.settings_rounded, label: 'Ajustes'),
             ],
           ),
           body: AnimatedSwitcher(
             duration: const Duration(milliseconds: 350),
-            child: _loading
-                ? const Cargando(
-                    key: ValueKey('cargando'),
-                    texto: 'Cargando progreso...',
-                  )
-                : _error != null
-                ? _ErrorPanel(error: _error!, onRetry: _cargar)
-                : estado == null
-                ? const Center(child: Text('No se pudo cargar el progreso.'))
-                : !_enInstrumentos
-                ? _MenuPrincipal(
-                    claveInstrumentos: _claveInstrumentos,
-                    claveSalas: _claveSalas,
-                    claveIntros: _claveIntros,
-                    onVisible: _recorridoSiEsNuevo,
-                    introsDisponibles: _introsDisponibles,
-                    offlineMode: _offlineMode,
-                    esInvitado: widget.user.isAnonymous,
-                    onInstrumentos: _abrirDificultades,
-                    onSalas: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const SalasScreen(),
-                      ),
-                    ),
-                    onIntros: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const IntrosScreen(),
-                      ),
-                    ),
-                  )
-                : _PanelDificultades(
-                    key: _claveDificultades,
-                    estado: estado,
-                    seleccionada: _seleccionada ?? estado.dificultadActiva,
-                    esInvitado: widget.user.isAnonymous,
-                    offlineMode: _offlineMode,
-                    nivelesDe: _nivelesDe,
-                    onCambio: (dificultad) =>
-                        setState(() => _seleccionada = dificultad),
-                    onJugar: _jugar,
-                    onRefresh: _cargar,
-                  ),
+            child: switch (_pestana) {
+              _pCancion => _pestanaCancion(estado),
+              _pIntro => _pestanaIntro(),
+              _pSalas => _pestanaSalas(),
+              _pProgreso => _PestanaProgreso(
+                key: const ValueKey('progreso'),
+                dificultades: estado?.dificultades ?? const [],
+                intros: _introsFuturo,
+                saldo: _saldo,
+              ),
+              5 => _PestanaConfiguracion(
+                key: const ValueKey('configuracion'),
+                onRecorrido: _verRecorrido,
+                onCerrarSesion: _cerrarSesion,
+              ),
+              _ => _pestanaMenu(estado),
+            },
           ),
         ),
       ),
+    );
+  }
+
+  void _cambiarPestana(int pestana) {
+    setState(() {
+      _pestana = pestana;
+      // Progreso se vuelve a pedir al abrir la pestaña, para que esté al día.
+      if (pestana == _pProgreso) _introsFuturo = _estadoIntros();
+    });
+    if (pestana == _pCancion && _estado != null) _recorridoDificultades();
+  }
+
+  /// Carga o error del progreso; null si ya está listo.
+  Widget? _esperandoProgreso() {
+    if (_loading) {
+      return const Cargando(
+        key: ValueKey('cargando'),
+        texto: 'Cargando progreso...',
+      );
+    }
+    if (_error != null) return _ErrorPanel(error: _error!, onRetry: _cargar);
+    if (_estado == null) {
+      return const Center(child: Text('No se pudo cargar el progreso.'));
+    }
+    return null;
+  }
+
+  Widget _pestanaMenu(EstadoJuegoRemoto? estado) {
+    if (_esperandoProgreso() case final espera?) return espera;
+    return _MenuPrincipal(
+      key: const ValueKey('menu'),
+      claveCarrusel: _claveMenu,
+      onVisible: _recorridoSiEsNuevo,
+      introsDisponibles: _introsDisponibles,
+      offlineMode: _offlineMode,
+      esInvitado: widget.user.isAnonymous,
+      infoCancion: _infoCancion(estado!),
+      infoIntros: _resumenIntros == null
+          ? null
+          : '${_resumenIntros!.intros.length} intros desbloqueadas',
+      infoSalas: widget.user.isAnonymous
+          ? null
+          : _saldo.ganadas == 0
+          ? 'Aún no ganas salas'
+          : 'Ganaste ${_saldo.ganadas} '
+                '${_saldo.ganadas == 1 ? 'sala' : 'salas'} · '
+                '🥁 ${_saldo.ganadasCancion} · 🎧 ${_saldo.ganadasIntros}',
+      onInstrumentos: () => _cambiarPestana(_pCancion),
+      onSalas: () => _cambiarPestana(_pSalas),
+      onIntros: () => _cambiarPestana(_pIntro),
+    );
+  }
+
+  /// "Vas en el nivel 3 de Fácil" según la dificultad activa.
+  String _infoCancion(EstadoJuegoRemoto estado) {
+    if (_juegoTerminado()) return '¡Completaste las tres dificultades!';
+    final activa = estado.dificultades
+        .where((item) => item.dificultad == estado.dificultadActiva)
+        .firstOrNull;
+    final nivel = min((activa?.completados ?? 0) + 1, 5);
+    return 'Vas en el nivel $nivel de '
+        '${_nombreDificultad(estado.dificultadActiva)}';
+  }
+
+  Widget _pestanaIntro() {
+    if (_esperandoProgreso() case final espera?) return espera;
+    if (!_introsDisponibles) {
+      return _bloqueada(
+        'intro-bloqueada',
+        'Adivina la intro se desbloquea al completar tu primer nivel de '
+            'Adivina la canción.',
+      );
+    }
+    return const IntrosScreen(key: ValueKey('intro'), embebida: true);
+  }
+
+  Widget _bloqueada(String clave, String motivo) => Center(
+    key: ValueKey(clave),
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: LiquidGlassCard(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.lock_rounded, size: 40),
+            const SizedBox(height: 12),
+            Text(motivo, textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _pestanaCancion(EstadoJuegoRemoto? estado) {
+    if (_esperandoProgreso() case final espera?) return espera;
+    return _PanelDificultades(
+      key: _claveDificultades,
+      estado: estado!,
+      seleccionada: _seleccionada ?? estado.dificultadActiva,
+      esInvitado: widget.user.isAnonymous,
+      offlineMode: _offlineMode,
+      nivelesDe: _nivelesDe,
+      onCambio: (dificultad) => setState(() => _seleccionada = dificultad),
+      onJugar: _jugar,
+      onRefresh: _cargar,
+    );
+  }
+
+  Widget _pestanaSalas() {
+    final motivo = widget.user.isAnonymous
+        ? 'Crea una cuenta para jugar en salas con tus amigos.'
+        : _offlineMode
+        ? 'Necesitas conexión a internet para jugar en salas.'
+        : null;
+    if (motivo == null) return const SalasPanel(key: ValueKey('salas'));
+    return _bloqueada('salas-bloqueadas', motivo);
+  }
+}
+
+/// Pestaña Progreso: avance de niveles e intros, monedas 🪙, fichas 🎟️ y las
+/// canciones de Adivina la intro ya adivinadas (insignias).
+class _PestanaProgreso extends StatelessWidget {
+  const _PestanaProgreso({
+    super.key,
+    required this.dificultades,
+    required this.intros,
+    required this.saldo,
+  });
+
+  final List<ProgresoDificultadRemoto> dificultades;
+  final Future<EstadoIntros?>? intros;
+  final SaldoSalas saldo;
+
+  Widget _saldo(
+    BuildContext context,
+    String emoji,
+    String valor,
+    String nombre,
+  ) {
+    final text = Theme.of(context).textTheme;
+    return LiquidGlassCard(
+      borderRadius: 20,
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+      child: Column(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 32)),
+          Text(valor, style: text.headlineSmall),
+          Text(
+            nombre,
+            textAlign: TextAlign.center,
+            style: text.bodySmall?.copyWith(color: context.paleta.tintaSuave),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return FutureBuilder<EstadoIntros?>(
+      future: intros,
+      builder: (context, snapshot) {
+        final estadoIntros = snapshot.data;
+        final cargando = snapshot.connectionState != ConnectionState.done;
+        final adivinadas = [
+          for (final intro in estadoIntros?.intros ?? const <IntroAsignada>[])
+            if (intro.estado == EstadoIntro.completada) intro,
+        ];
+        return ListView(
+          padding: EdgeInsets.symmetric(
+            horizontal: max(16, (MediaQuery.sizeOf(context).width - 680) / 2),
+            vertical: 16,
+          ),
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: _saldo(
+                    context,
+                    '🪙',
+                    cargando ? '…' : '${estadoIntros?.monedas ?? 0}',
+                    'Monedas para Adivina la intro',
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _saldo(
+                    context,
+                    '🎟️',
+                    '${saldo.fichas}',
+                    'Fichas para las salas',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            LiquidGlassCard(
+              padding: const EdgeInsets.all(20),
+              child: _ProgresoGeneral(
+                dificultades: dificultades,
+                intros: estadoIntros,
+                cargandoIntros: cargando,
+              ),
+            ),
+            const SizedBox(height: 16),
+            LiquidGlassCard(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('🏅 Insignias', style: text.titleMedium),
+                  Text(
+                    'Canciones que adivinaste en Adivina la intro',
+                    style: text.bodySmall?.copyWith(
+                      color: context.paleta.tintaSuave,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (cargando)
+                    const LinearProgressIndicator()
+                  else if (adivinadas.isEmpty)
+                    Text(
+                      estadoIntros == null
+                          ? 'Se desbloquea al completar tu primer nivel.'
+                          : 'Aún no adivinas ninguna intro. ¡Saca una carta!',
+                      textAlign: TextAlign.center,
+                    )
+                  else
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final intro in adivinadas)
+                          Chip(
+                            avatar: const Text('🎵'),
+                            label: Text(
+                              [
+                                intro.titulo ?? 'Intro #${intro.numero}',
+                                ?intro.artista,
+                              ].join(' · '),
+                            ),
+                          ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Pestaña Configuración: instrucciones, música del menú, tema y sesión.
+class _PestanaConfiguracion extends ConsumerStatefulWidget {
+  const _PestanaConfiguracion({
+    super.key,
+    required this.onRecorrido,
+    required this.onCerrarSesion,
+  });
+
+  final VoidCallback onRecorrido;
+  final VoidCallback onCerrarSesion;
+
+  @override
+  ConsumerState<_PestanaConfiguracion> createState() =>
+      _PestanaConfiguracionState();
+}
+
+class _PestanaConfiguracionState extends ConsumerState<_PestanaConfiguracion> {
+  @override
+  Widget build(BuildContext context) {
+    final musica = ref.read(musicaMenuProvider);
+    final oscuro = context.paleta.oscuro;
+    return ListView(
+      padding: EdgeInsets.symmetric(
+        horizontal: max(16, (MediaQuery.sizeOf(context).width - 680) / 2),
+        vertical: 16,
+      ),
+      children: [
+        LiquidGlassCard(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.menu_book_rounded),
+                title: const Text('Instrucciones'),
+                subtitle: const Text('Cómo se juega cada modo'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => mostrarInstrucciones(context),
+              ),
+              ListTile(
+                leading: const Icon(Icons.tour_rounded),
+                title: const Text('Recorrido guiado'),
+                subtitle: const Text('Las burbujas que explican la app'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: widget.onRecorrido,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        LiquidGlassCard(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            children: [
+              SwitchListTile(
+                secondary: Icon(
+                  musica.silenciada
+                      ? Icons.music_off_rounded
+                      : Icons.music_note_rounded,
+                ),
+                title: const Text('Música del menú'),
+                value: !musica.silenciada,
+                onChanged: (_) async {
+                  await musica.alternarSilencio();
+                  if (mounted) setState(() {});
+                },
+              ),
+              SwitchListTile(
+                secondary: Icon(
+                  oscuro ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                ),
+                title: const Text('Modo oscuro'),
+                value: oscuro,
+                onChanged: (valor) => ref
+                    .read(modoTemaProvider.notifier)
+                    .cambiar(valor ? ThemeMode.dark : ThemeMode.light),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        LiquidGlassCard(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: ListTile(
+            leading: Icon(
+              Icons.logout_rounded,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            title: Text(
+              'Cerrar sesión',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+            onTap: widget.onCerrarSesion,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -988,32 +1296,36 @@ class _ProgresoGeneral extends StatelessWidget {
                 color: AppColors.signalOrange,
                 detalle: intros == null
                     ? 'Se desbloquea al completar tu primer nivel.'
-                    : '${intros.intros.length} cartas obtenidas · '
-                          '${intros.monedas} 🪙',
+                    : '${intros.intros.length} cartas obtenidas',
               ),
       ],
     );
   }
 }
 
-/// Menú principal: dos cuadros para elegir a qué jugar.
+/// Menú principal: carrusel de los tres modos que gira solo de izquierda a
+/// derecha (se pausa al tocarlo).
 class _MenuPrincipal extends StatelessWidget {
   const _MenuPrincipal({
-    required this.claveInstrumentos,
-    required this.claveSalas,
-    required this.claveIntros,
+    super.key,
+    required this.claveCarrusel,
     required this.onVisible,
     required this.introsDisponibles,
     required this.offlineMode,
     required this.esInvitado,
+    required this.infoCancion,
+    required this.infoIntros,
+    required this.infoSalas,
     required this.onInstrumentos,
     required this.onSalas,
     required this.onIntros,
   });
 
-  final GlobalKey claveInstrumentos;
-  final GlobalKey claveSalas;
-  final GlobalKey claveIntros;
+  final GlobalKey claveCarrusel;
+  // Una línea de datos del jugador en cada tarjeta (null si no hay).
+  final String infoCancion;
+  final String? infoIntros;
+  final String? infoSalas;
   // Avisa cuando el menú ya está en pantalla (para el recorrido inicial).
   final VoidCallback onVisible;
   final bool introsDisponibles;
@@ -1023,66 +1335,69 @@ class _MenuPrincipal extends StatelessWidget {
   final VoidCallback onSalas;
   final VoidCallback onIntros;
 
+  static const _colores = [
+    AppColors.verde,
+    AppColors.medio,
+    AppColors.signalOrange,
+  ];
+
   @override
   Widget build(BuildContext context) {
     final introsBloqueadas = !introsDisponibles;
+    final salasBloqueadas = esInvitado || offlineMode;
     WidgetsBinding.instance.addPostFrameCallback((_) => onVisible());
-    return SafeArea(
-      top: false,
-      minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Column(
-            children: [
-              Expanded(
-                key: claveInstrumentos,
-                child: _CuadroModo(
-                  emoji: '🥁🪗🎸',
-                  animacion: _Animacion.tocar,
-                  titulo: 'Adivina la canción',
-                  detalle: 'Compra instrumentos y descubre la canción.',
-                  color: AppColors.verde,
-                  onTap: onInstrumentos,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                key: claveSalas,
-                child: _CuadroModo(
-                  emoji: '🏆',
-                  animacion: _Animacion.saltar,
-                  titulo: 'Desafía a tus amigos',
-                  detalle: esInvitado
-                      ? 'Crea una cuenta para jugar en salas.'
-                      : offlineMode
-                      ? 'Necesitas conexión para jugar en salas.'
-                      : 'Crea o únete a una sala de hasta 5 jugadores.',
-                  color: AppColors.medio,
-                  bloqueado: esInvitado || offlineMode,
-                  onTap: esInvitado || offlineMode ? null : onSalas,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                key: claveIntros,
-                child: _CuadroModo(
-                  emoji: '🎧',
-                  animacion: _Animacion.mecer,
-                  titulo: 'Adivina la intro',
-                  detalle: !introsDisponibles
-                      ? 'Se desbloquea al completar tu primer nivel.'
-                      : offlineMode
-                      ? 'Sin conexión: juega las intros descargadas.'
-                      : 'Escucha 20 segundos y adivina la canción.',
-                  color: AppColors.signalOrange,
-                  bloqueado: introsBloqueadas,
-                  onTap: introsBloqueadas ? null : onIntros,
-                ),
-              ),
-            ],
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: CarruselGiratorio(
+        key: claveCarrusel,
+        itemCount: _colores.length,
+        autoGiro: const Duration(seconds: 5),
+        // Más pequeñas y con las otras dos asomando detrás.
+        compacto: true,
+        proporcion: 1.25,
+        colorDe: (index) => _colores[index],
+        itemBuilder: (context, index, alFrente) => switch (index) {
+          0 => _CuadroModo(
+            emoji: '🥁🪗🎸',
+            animacion: _Animacion.tocar,
+            titulo: 'Adivina la canción',
+            detalle: 'Compra instrumentos y descubre la canción.',
+            info: infoCancion,
+            color: AppColors.verde,
+            alFrente: alFrente,
+            onTap: onInstrumentos,
           ),
-        ),
+          1 => _CuadroModo(
+            emoji: '🏆',
+            animacion: _Animacion.saltar,
+            titulo: 'Desafía a tus amigos',
+            detalle: esInvitado
+                ? 'Crea una cuenta para jugar en salas.'
+                : offlineMode
+                ? 'Necesitas conexión para jugar en salas.'
+                : 'Crea o únete a una sala de hasta 5 jugadores.',
+            info: salasBloqueadas ? null : infoSalas,
+            color: AppColors.medio,
+            alFrente: alFrente,
+            bloqueado: salasBloqueadas,
+            onTap: salasBloqueadas ? null : onSalas,
+          ),
+          _ => _CuadroModo(
+            emoji: '🎧',
+            animacion: _Animacion.mecer,
+            titulo: 'Adivina la intro',
+            detalle: !introsDisponibles
+                ? 'Se desbloquea al completar tu primer nivel.'
+                : offlineMode
+                ? 'Sin conexión: juega las intros descargadas.'
+                : 'Escucha 20 segundos y adivina la canción.',
+            info: introsBloqueadas ? null : infoIntros,
+            color: AppColors.signalOrange,
+            alFrente: alFrente,
+            bloqueado: introsBloqueadas,
+            onTap: introsBloqueadas ? null : onIntros,
+          ),
+        },
       ),
     );
   }
@@ -1096,6 +1411,8 @@ class _CuadroModo extends StatelessWidget {
     required this.detalle,
     required this.color,
     required this.onTap,
+    this.info,
+    this.alFrente = true,
     this.bloqueado = false,
   });
 
@@ -1105,6 +1422,9 @@ class _CuadroModo extends StatelessWidget {
   final String detalle;
   final Color color;
   final VoidCallback? onTap;
+  // Dato del jugador (nivel, intros, salas ganadas) bajo la descripción.
+  final String? info;
+  final bool alFrente;
   final bool bloqueado;
 
   @override
@@ -1113,6 +1433,9 @@ class _CuadroModo extends StatelessWidget {
     return LiquidGlassCard(
       borderRadius: 28,
       opacity: bloqueado ? 0.35 : 0.6,
+      // Las laterales solo se ven al girar: sin desenfoque, que es caro.
+      blur: alFrente ? LiquidGlass.glassBlur : 0,
+      borderColor: alFrente && !bloqueado ? color : null,
       tintColor: bloqueado ? null : color,
       child: LiquidRippleEffect(
         onTap: onTap,
@@ -1169,6 +1492,29 @@ class _CuadroModo extends StatelessWidget {
                         ),
                       ],
                     ),
+                    if (info case final dato?) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(99),
+                          border: Border.all(
+                            color: color.withValues(alpha: 0.6),
+                          ),
+                        ),
+                        child: Text(
+                          dato,
+                          textAlign: TextAlign.center,
+                          style: text.labelLarge?.copyWith(
+                            color: context.paleta.tonoTexto(color),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

@@ -5,17 +5,18 @@ import 'liquid_glass_card.dart';
 
 /// Barra de navegación inferior flotante de vidrio. La pestaña activa se
 /// marca con una píldora verde translúcida.
-///
-/// Todavía no se usa: la app no tiene navegación inferior.
 class LiquidGlassBottomNav extends StatelessWidget {
   const LiquidGlassBottomNav({
     super.key,
     required this.items,
     required this.currentIndex,
     required this.onTap,
+    this.claves,
   });
 
   final List<({IconData icon, String label})> items;
+  // Una por pestaña, para que el recorrido guiado pueda resaltarlas.
+  final List<GlobalKey>? claves;
   final int currentIndex;
   final ValueChanged<int> onTap;
 
@@ -34,6 +35,7 @@ class LiquidGlassBottomNav extends StatelessWidget {
             children: [
               for (var i = 0; i < items.length; i++)
                 Expanded(
+                  key: claves?[i],
                   child: Semantics(
                     selected: i == currentIndex,
                     button: true,

@@ -1404,18 +1404,20 @@ function walletPath(uid: string): string {
   return `users/${uid}/fichas/saldo`;
 }
 
-/// Suma (o resta) fichas; crea el saldo si no existe. Con [updateTime] solo
-/// se aplica si el saldo no cambió desde que se leyó.
+/// Suma (o resta) en [campo] del saldo: fichas o salas ganadas
+/// (ganadasCancion, ganadasIntros); crea el saldo si no existe. Con
+/// [updateTime] solo se aplica si el saldo no cambió desde que se leyó.
 function walletWrite(
   uid: string,
   cantidad: number,
   updateTime?: string,
+  campo = "fichas",
 ): JsonObject {
   return {
     update: { name: documentName(walletPath(uid)), fields: {} },
     updateMask: { fieldPaths: [] },
     updateTransforms: [{
-      fieldPath: "fichas",
+      fieldPath: campo,
       increment: { integerValue: String(cantidad) },
     }],
     ...(updateTime ? { currentDocument: { updateTime } } : {}),
@@ -1501,17 +1503,31 @@ async function updateRoom<T>(
     const { borrar, extra = [], resultado } = cambiado;
     let campos = cambiado.campos;
     const writes = [...extra];
-    // Al terminar una sala de instrumentos se reparten las fichas, en el
-    // mismo guardado que la cierra para que no se paguen dos veces.
-    if (
-      campos?.estado === "terminada" && sala.fields.estado !== "terminada" &&
-      sala.fields.tipo !== "intros"
-    ) {
-      const premios = premiosSala(roomRanking({ ...sala.fields, ...campos }));
-      writes.push(
-        ...Object.entries(premios).map(([id, n]) => walletWrite(id, n)),
-      );
-      campos = { ...campos, premios };
+    // Al terminar una sala se cuenta la victoria del ganador y, si es de
+    // instrumentos, se reparten las fichas; todo en el mismo guardado que la
+    // cierra para que no se cuente ni se pague dos veces.
+    if (campos?.estado === "terminada" && sala.fields.estado !== "terminada") {
+      const final = { ...sala.fields, ...campos };
+      const ranking = roomRanking(final);
+      const ganador = ranking.find((jugador) => jugador.uid === final.ganadorUid);
+      // Mismo criterio que los premios: no cuenta si abandonó o no acertó.
+      if (ganador && !ganador.abandono && ganador.aciertos > 0) {
+        writes.push(
+          walletWrite(
+            ganador.uid,
+            1,
+            undefined,
+            final.tipo === "intros" ? "ganadasIntros" : "ganadasCancion",
+          ),
+        );
+      }
+      if (final.tipo !== "intros") {
+        const premios = premiosSala(ranking);
+        writes.push(
+          ...Object.entries(premios).map(([id, n]) => walletWrite(id, n)),
+        );
+        campos = { ...campos, premios };
+      }
     }
     if (borrar) {
       writes.push({

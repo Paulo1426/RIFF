@@ -12,12 +12,14 @@ import '../models/sala.dart';
 import '../providers/providers.dart';
 import '../services/firebase_game_repository.dart';
 import '../theme.dart';
+import '../theme/liquid_glass_theme.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
 import '../widgets/liquid_glass/liquid_glass_appbar.dart';
 import '../widgets/liquid_glass/liquid_glass_button.dart';
 import '../widgets/liquid_glass/liquid_glass_card.dart';
 import '../widgets/liquid_glass/liquid_glass_dialog.dart';
 import '../widgets/recorrido.dart';
+import 'carrusel_dificultades.dart';
 import 'game_screen.dart';
 import 'intros_screen.dart';
 
@@ -48,78 +50,66 @@ EdgeInsets _margenLista(BuildContext context) => EdgeInsets.symmetric(
   vertical: 16,
 );
 
-/// "Desafía a tus amigos": crear una sala, unirse con código o entrar a una
-/// sala pública.
-class SalasScreen extends ConsumerStatefulWidget {
-  const SalasScreen({super.key});
+/// Pestaña "Salas": un carrusel con una tarjeta por tipo de sala (Adivina la
+/// canción e intros). Cada tarjeta crea su sala, se une con código o QR y
+/// lista las salas públicas de ese tipo.
+class SalasPanel extends ConsumerStatefulWidget {
+  const SalasPanel({super.key});
 
   @override
-  ConsumerState<SalasScreen> createState() => _SalasScreenState();
+  ConsumerState<SalasPanel> createState() => _SalasPanelState();
 }
 
-class _SalasScreenState extends ConsumerState<SalasScreen> {
-  final _codigo = TextEditingController();
+class _SalasPanelState extends ConsumerState<SalasPanel> {
   bool _ocupado = false;
   int _fichas = 0;
-  StreamSubscription<int>? _suscripcionFichas;
-  final _claveFichas = GlobalKey();
-  final _claveCrear = GlobalKey();
-  final _claveUnirse = GlobalKey();
-  final _claveAbiertas = GlobalKey();
-
-  List<PasoRecorrido> _pasos() => [
-    PasoRecorrido(
-      clave: _claveFichas,
-      titulo: '🎟️ Tus fichas',
-      texto:
-          'Moneda de las salas, distinta de las monedas 🪙. Al terminar una '
-          'sala de Adivina la canción el 1.º gana 10, el 2.º 7 y el 3.º 3 (si '
-          'acertaron al menos una canción y no abandonaron).',
-    ),
-    PasoRecorrido(
-      clave: _claveCrear,
-      titulo: '➕ Crear sala',
-      texto:
-          'Elige qué se juega (🥁 Adivina la canción gratis o 🎧 intros: '
-          'crearla cuesta $precioCrearSalaIntros fichas y entrar '
-          '$precioEntrarSalaIntros), el reto y si es pública o cerrada. Hasta '
-          '5 jugadores; empieza cuando todos marcan "Listo".',
-    ),
-    PasoRecorrido(
-      clave: _claveUnirse,
-      titulo: '🔑 Unirse',
-      texto:
-          'Escribe el código de 6 letras o escanea el QR que muestra la '
-          'sala de tu amigo.',
-    ),
-    PasoRecorrido(
-      clave: _claveAbiertas,
-      titulo: '🌍 Salas abiertas',
-      texto:
-          'Salas públicas esperando jugadores. Toca una para entrar. '
-          'Contrarreloj: 10 minutos, gana quien sume más puntos. '
-          'Eliminación: sale el último en adivinar cada canción.',
-    ),
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => const RecorridoInicial('salas').mostrarSiEsNuevo(context, _pasos),
-    );
-    _suscripcionFichas = _repo.fichas().listen(
-      (fichas) => setState(() => _fichas = fichas),
-      onError: (Object error) => debugPrint('No se pudo leer fichas: $error'),
-    );
-  }
+  // null mientras carga la lista de salas públicas.
+  List<Sala>? _publicas;
+  StreamSubscription<SaldoSalas>? _suscripcionFichas;
+  StreamSubscription<List<Sala>>? _suscripcionSalas;
+  final _claveCarrusel = GlobalKey();
 
   FirebaseGameRepository get _repo => ref.read(firebaseGameRepositoryProvider);
 
   @override
+  void initState() {
+    super.initState();
+    _suscripcionFichas = _repo.saldoSalas().listen(
+      (saldo) => setState(() => _fichas = saldo.fichas),
+      onError: (Object error) => debugPrint('No se pudo leer fichas: $error'),
+    );
+    _suscripcionSalas = _repo.salasPublicas().listen(
+      (salas) => setState(() => _publicas = salas),
+      // Un error al listar no le sirve al jugador: se muestra como vacío.
+      onError: (Object error) {
+        debugPrint('No se pudieron listar salas: $error');
+        setState(() => _publicas = const []);
+      },
+    );
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => const RecorridoInicial('salas').mostrarSiEsNuevo(
+        context,
+        () => [
+          PasoRecorrido(
+            clave: _claveCarrusel,
+            titulo: '🏆 Salas',
+            texto:
+                'Desliza entre 🥁 Adivina la canción (gratis; los 3 primeros '
+                'ganan fichas 10/7/3) y 🎧 Adivina la intro (crearla cuesta '
+                '$precioCrearSalaIntros fichas y entrar '
+                '$precioEntrarSalaIntros). En cada una puedes crear una sala, '
+                'unirte con código o QR o entrar a una pública. Empieza cuando '
+                'todos marcan "Listo".',
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
   void dispose() {
     _suscripcionFichas?.cancel();
-    _codigo.dispose();
+    _suscripcionSalas?.cancel();
     super.dispose();
   }
 
@@ -143,13 +133,13 @@ class _SalasScreenState extends ConsumerState<SalasScreen> {
     }
   }
 
-  Future<void> _crear() async {
-    final opciones = await showDialog<(TipoSala, ModoSala, bool)>(
+  Future<void> _crear(TipoSala tipo) async {
+    final opciones = await showDialog<(ModoSala, bool)>(
       context: context,
-      builder: (_) => _DialogoCrearSala(fichas: _fichas),
+      builder: (_) => _DialogoCrearSala(tipo: tipo, fichas: _fichas),
     );
     if (opciones == null) return;
-    final (tipo, modo, publica) = opciones;
+    final (modo, publica) = opciones;
     await _ejecutar(
       () => _repo.crearSala(tipo: tipo, modo: modo, publica: publica),
     );
@@ -160,169 +150,219 @@ class _SalasScreenState extends ConsumerState<SalasScreen> {
     return codigo;
   });
 
+  Future<void> _unirseConCodigo() async {
+    final codigo = await showDialog<String>(
+      context: context,
+      builder: (_) => const _DialogoCodigo(),
+    );
+    if (codigo != null) await _unirse(codigo);
+  }
+
+  @override
+  Widget build(BuildContext context) => ConCarga(
+    cargando: _ocupado,
+    texto: 'Entrando a la sala...',
+    child: Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: CarruselGiratorio(
+        key: _claveCarrusel,
+        itemCount: TipoSala.values.length,
+        colorDe: (index) => _colorTipo(TipoSala.values[index]),
+        itemBuilder: (context, index, alFrente) {
+          final tipo = TipoSala.values[index];
+          return _TarjetaTipoSala(
+            tipo: tipo,
+            alFrente: alFrente,
+            fichas: _fichas,
+            publicas: _publicas?.where((sala) => sala.tipo == tipo).toList(),
+            onCrear: () => _crear(tipo),
+            onUnirseConCodigo: _unirseConCodigo,
+            onUnirseA: _unirse,
+          );
+        },
+      ),
+    ),
+  );
+}
+
+Color _colorTipo(TipoSala tipo) =>
+    tipo == TipoSala.intros ? AppColors.signalOrange : AppColors.verde;
+
+/// Tarjeta de un tipo de sala dentro del carrusel de la pestaña Salas.
+class _TarjetaTipoSala extends StatelessWidget {
+  const _TarjetaTipoSala({
+    required this.tipo,
+    required this.alFrente,
+    required this.fichas,
+    required this.publicas,
+    required this.onCrear,
+    required this.onUnirseConCodigo,
+    required this.onUnirseA,
+  });
+
+  final TipoSala tipo;
+  final bool alFrente;
+  final int fichas;
+  final List<Sala>? publicas;
+  final VoidCallback onCrear;
+  final VoidCallback onUnirseConCodigo;
+  final ValueChanged<String> onUnirseA;
+
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    return LiquidBackground(
-      acento: _colorSalas,
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: LiquidGlassAppBar(
-          title: const Text('Sala RIFF'),
-          actions: [
-            IconButton(
-              tooltip: 'Ver ayuda',
-              icon: const Icon(Icons.help_outline_rounded),
-              onPressed: () => mostrarRecorrido(context, _pasos()),
-            ),
-          ],
-        ),
-        body: ConCarga(
-          cargando: _ocupado,
-          texto: 'Entrando a la sala...',
-          child: ListView(
-            padding: _margenLista(context),
-            children: [
-              LiquidGlassCard(
-                key: _claveFichas,
-                borderRadius: 18,
-                tintColor: AppColors.signalOrange,
-                child: ListTile(
-                  leading: const Text('🎟️', style: TextStyle(fontSize: 28)),
-                  title: Text(
-                    '$_fichas ${_fichas == 1 ? 'ficha' : 'fichas'}',
-                    style: text.titleMedium,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              LiquidGlassButton(
-                key: _claveCrear,
-                onPressed: _crear,
-                icon: Icons.add_rounded,
-                label: 'Crear sala',
-              ),
-              const SizedBox(height: 16),
-              LiquidGlassCard(
-                key: _claveUnirse,
-                tintColor: _colorSalas,
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text('Unirse con código', style: text.titleMedium),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _codigo,
-                      maxLength: 6,
-                      textCapitalization: TextCapitalization.characters,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp('[A-Za-z0-9]'),
-                        ),
-                        TextInputFormatter.withFunction(
-                          (_, nuevo) =>
-                              nuevo.copyWith(text: nuevo.text.toUpperCase()),
-                        ),
-                      ],
-                      decoration: const InputDecoration(
-                        labelText: 'Código de invitación',
-                        counterText: '',
-                      ),
-                      onSubmitted: (_) => _unirseConCodigo(),
-                    ),
-                    const SizedBox(height: 12),
-                    LiquidGlassButton(
-                      variant: LiquidGlassButtonVariant.secondary,
-                      onPressed: _unirseConCodigo,
-                      icon: Icons.login_rounded,
-                      label: 'Unirse',
-                    ),
-                    const SizedBox(height: 8),
-                    TextButton.icon(
-                      onPressed: _escanear,
-                      icon: const Icon(Icons.qr_code_scanner_rounded),
-                      label: const Text('Escanear código QR'),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Salas abiertas',
-                key: _claveAbiertas,
-                style: text.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              StreamBuilder<List<Sala>>(
-                stream: _repo.salasPublicas(),
-                builder: (context, snapshot) {
-                  // Un error al listar no le sirve al jugador: se registra y
-                  // se muestra igual que "no hay salas".
-                  if (snapshot.hasError) {
-                    debugPrint(
-                      'No se pudieron listar salas: ${snapshot.error}',
-                    );
-                  }
-                  final salas = snapshot.data;
-                  if (salas == null && !snapshot.hasError) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (salas == null || salas.isEmpty) {
-                    return Column(
-                      children: [
-                        const SizedBox(
-                          height: 140,
-                          child: BandaMusical(color: _colorSalas),
-                        ),
-                        Text(
-                          'No hay salas abiertas ahora. ¡Crea una!',
-                          textAlign: TextAlign.center,
-                          style: text.bodyMedium?.copyWith(
-                            color: context.paleta.tintaSuave,
-                          ),
-                        ),
-                      ],
-                    );
-                  }
-                  return Column(
-                    children: [
-                      for (final sala in salas)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: _TarjetaSalaPublica(
-                            sala: sala,
-                            onUnirse: () => _unirse(sala.codigo),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              ),
-            ],
+    final intros = tipo == TipoSala.intros;
+    final color = _colorTipo(tipo);
+    final publicas = this.publicas;
+    return LiquidGlassCard(
+      borderRadius: 28,
+      tintColor: color,
+      borderColor: alFrente ? color : null,
+      // Las laterales solo se ven al girar: sin desenfoque, que es caro.
+      blur: alFrente ? LiquidGlass.glassBlur : 0,
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Text(
+            intros ? '🎧' : '🥁🪗🎸',
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 44),
           ),
-        ),
+          Text(
+            intros ? 'Adivina la intro' : 'Adivina la canción',
+            textAlign: TextAlign.center,
+            style: text.headlineSmall?.copyWith(
+              color: context.paleta.tonoTexto(color),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            intros
+                ? 'Crear 🎟️ $precioCrearSalaIntros · entrar '
+                      '🎟️ $precioEntrarSalaIntros · tienes $fichas'
+                : 'Gratis · los 3 primeros ganan 🎟️ 10, 7 y 3',
+            textAlign: TextAlign.center,
+            style: text.bodyMedium?.copyWith(color: context.paleta.tintaSuave),
+          ),
+          const SizedBox(height: 16),
+          LiquidGlassButton(
+            onPressed: onCrear,
+            icon: Icons.add_rounded,
+            label: intros
+                ? 'Crear sala · 🎟️ $precioCrearSalaIntros'
+                : 'Crear sala',
+          ),
+          const SizedBox(height: 8),
+          LiquidGlassButton(
+            variant: LiquidGlassButtonVariant.secondary,
+            onPressed: onUnirseConCodigo,
+            icon: Icons.qr_code_rounded,
+            label: 'Unirse con código o QR',
+          ),
+          const SizedBox(height: 20),
+          Text('Salas abiertas', style: text.titleMedium),
+          const SizedBox(height: 8),
+          if (publicas == null)
+            const Center(child: CircularProgressIndicator())
+          else if (publicas.isEmpty) ...[
+            SizedBox(height: 120, child: BandaMusical(color: color)),
+            Text(
+              'No hay salas abiertas ahora. ¡Crea una!',
+              textAlign: TextAlign.center,
+              style: text.bodyMedium?.copyWith(
+                color: context.paleta.tintaSuave,
+              ),
+            ),
+          ] else
+            for (final sala in publicas)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _TarjetaSalaPublica(
+                  sala: sala,
+                  onUnirse: () => onUnirseA(sala.codigo),
+                ),
+              ),
+        ],
       ),
     );
+  }
+}
+
+/// Pide el código de 6 caracteres o lo lee de un QR; devuelve el código.
+class _DialogoCodigo extends StatefulWidget {
+  const _DialogoCodigo();
+
+  @override
+  State<_DialogoCodigo> createState() => _DialogoCodigoState();
+}
+
+class _DialogoCodigoState extends State<_DialogoCodigo> {
+  final _codigo = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _codigo.dispose();
+    super.dispose();
+  }
+
+  void _unirse() {
+    final codigo = _codigo.text.trim();
+    if (codigo.length != 6) {
+      setState(() => _error = 'El código tiene 6 caracteres.');
+      return;
+    }
+    Navigator.of(context).pop(codigo);
   }
 
   Future<void> _escanear() async {
     final codigo = await Navigator.of(
       context,
     ).push<String>(MaterialPageRoute(builder: (_) => const _EscanerQr()));
-    if (codigo != null) await _unirse(codigo);
+    if (codigo != null && mounted) Navigator.of(context).pop(codigo);
   }
 
-  void _unirseConCodigo() {
-    final codigo = _codigo.text.trim();
-    if (codigo.length != 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('El código tiene 6 caracteres.')),
-      );
-      return;
-    }
-    _unirse(codigo);
-  }
+  @override
+  Widget build(BuildContext context) => LiquidGlassDialog(
+    title: const Text('Unirse a una sala'),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _codigo,
+          autofocus: true,
+          maxLength: 6,
+          textCapitalization: TextCapitalization.characters,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9]')),
+            TextInputFormatter.withFunction(
+              (_, nuevo) => nuevo.copyWith(text: nuevo.text.toUpperCase()),
+            ),
+          ],
+          decoration: InputDecoration(
+            labelText: 'Código de invitación',
+            counterText: '',
+            errorText: _error,
+          ),
+          onSubmitted: (_) => _unirse(),
+        ),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: _escanear,
+          icon: const Icon(Icons.qr_code_scanner_rounded),
+          label: const Text('Escanear código QR'),
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Cancelar'),
+      ),
+      FilledButton(onPressed: _unirse, child: const Text('Unirse')),
+    ],
+  );
 }
 
 /// Cámara a pantalla completa; devuelve el código del primer QR de sala.
@@ -416,8 +456,9 @@ class _TarjetaSalaPublica extends StatelessWidget {
 }
 
 class _DialogoCrearSala extends StatefulWidget {
-  const _DialogoCrearSala({required this.fichas});
+  const _DialogoCrearSala({required this.tipo, required this.fichas});
 
+  final TipoSala tipo;
   final int fichas;
 
   @override
@@ -425,14 +466,13 @@ class _DialogoCrearSala extends StatefulWidget {
 }
 
 class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
-  var _tipo = TipoSala.instrumentos;
   var _modo = ModoSala.contrarreloj;
   var _publica = true;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final intros = _tipo == TipoSala.intros;
+    final intros = widget.tipo == TipoSala.intros;
     final sinFichas = intros && widget.fichas < precioCrearSalaIntros;
     final acento = intros ? AppColors.signalOrange : AppColors.verde;
     Widget titulo(String texto) => Padding(
@@ -457,7 +497,7 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
                 style: TextStyle(fontSize: 40),
               ),
               Text(
-                'Nueva sala',
+                intros ? 'Nueva sala de intros' : 'Nueva sala',
                 textAlign: TextAlign.center,
                 style: text.headlineMedium,
               ),
@@ -467,36 +507,6 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
                 style: text.bodySmall?.copyWith(
                   color: context.paleta.tintaSuave,
                 ),
-              ),
-              titulo('¿Qué se juega?'),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: _Opcion(
-                      emoji: '🥁',
-                      titulo: 'Adivina la canción',
-                      detalle: 'Gratis. Los 3 primeros ganan fichas.',
-                      color: acento,
-                      elegida: !intros,
-                      onTap: () =>
-                          setState(() => _tipo = TipoSala.instrumentos),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _Opcion(
-                      emoji: '🎧',
-                      titulo: 'Intros',
-                      detalle:
-                          'Crear 🎟️ $precioCrearSalaIntros, entrar '
-                          '🎟️ $precioEntrarSalaIntros. Tienes ${widget.fichas}.',
-                      color: acento,
-                      elegida: intros,
-                      onTap: () => setState(() => _tipo = TipoSala.intros),
-                    ),
-                  ),
-                ],
               ),
               titulo('Elige el reto'),
               Row(
@@ -569,7 +579,7 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
               LiquidGlassButton(
                 onPressed: sinFichas
                     ? null
-                    : () => Navigator.of(context).pop((_tipo, _modo, _publica)),
+                    : () => Navigator.of(context).pop((_modo, _publica)),
                 icon: Icons.add_rounded,
                 label: intros
                     ? 'Crear sala · 🎟️ $precioCrearSalaIntros'

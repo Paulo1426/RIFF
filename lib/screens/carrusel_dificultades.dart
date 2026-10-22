@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'dart:ui' show lerpDouble;
@@ -18,6 +19,9 @@ class CarruselGiratorio extends StatefulWidget {
     this.inicial = 0,
     this.onCambio,
     this.colorDe,
+    this.autoGiro,
+    this.compacto = false,
+    this.proporcion = 1.75,
   });
 
   final int itemCount;
@@ -27,6 +31,14 @@ class CarruselGiratorio extends StatefulWidget {
   final ValueChanged<int>? onCambio;
   // Color del punto activo del indicador.
   final Color Function(int index)? colorDe;
+  // Si no es null, gira solo (de izquierda a derecha) cada tanto tiempo;
+  // tocarlo lo pausa una vuelta.
+  final Duration? autoGiro;
+  // En reposo sigue en modo carrusel: tarjetas más pequeñas y las vecinas
+  // asoman atenuadas detrás, a los lados.
+  final bool compacto;
+  // Alto de la tarjeta respecto a su ancho en modo carrusel.
+  final double proporcion;
 
   @override
   State<CarruselGiratorio> createState() => _CarruselGiratorioState();
@@ -45,6 +57,7 @@ class _CarruselGiratorioState extends State<CarruselGiratorio>
   late final _giro = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 250),
+    value: widget.compacto ? 1 : 0,
   );
   late final _movimiento = Listenable.merge([_posicion, _giro]);
   double _anchoArrastre = 300;
@@ -59,8 +72,33 @@ class _CarruselGiratorioState extends State<CarruselGiratorio>
     }
   }
 
+  Timer? _reloj;
+  // Tocarlo salta el siguiente giro automático, para no girar en la mano.
+  bool _pausado = false;
+  bool _arrastrando = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final cada = widget.autoGiro;
+    // Con "reducir movimiento" del sistema no gira solo.
+    if (cada == null || MediaQuery.disableAnimationsOf(context)) {
+      _reloj?.cancel();
+      _reloj = null;
+    } else {
+      _reloj ??= Timer.periodic(cada, (_) {
+        if (_pausado) {
+          _pausado = false;
+        } else if (!_arrastrando && !_posicion.isAnimating) {
+          _irA(_posicion.value.roundToDouble() - 1);
+        }
+      });
+    }
+  }
+
   @override
   void dispose() {
+    _reloj?.cancel();
     _posicion.dispose();
     _giro.dispose();
     super.dispose();
@@ -78,7 +116,7 @@ class _CarruselGiratorioState extends State<CarruselGiratorio>
     );
     if (!mounted) return;
     widget.onCambio?.call(_frente);
-    await _giro.animateTo(0, curve: Curves.easeOutCubic);
+    if (!widget.compacto) await _giro.animateTo(0, curve: Curves.easeOutCubic);
   }
 
   void _soltar(DragEndDetails details) {
@@ -116,12 +154,17 @@ class _CarruselGiratorioState extends State<CarruselGiratorio>
               return GestureDetector(
                 behavior: HitTestBehavior.translucent,
                 onHorizontalDragStart: (_) {
+                  _arrastrando = true;
                   _posicion.stop();
                   _giro.animateTo(1, curve: Curves.easeOut);
                 },
                 onHorizontalDragUpdate: (details) =>
                     _posicion.value -= details.delta.dx / _anchoArrastre,
-                onHorizontalDragEnd: _soltar,
+                onHorizontalDragEnd: (details) {
+                  _arrastrando = false;
+                  _pausado = true;
+                  _soltar(details);
+                },
                 child: AnimatedBuilder(
                   animation: _movimiento,
                   builder: (context, _) {
@@ -148,8 +191,14 @@ class _CarruselGiratorioState extends State<CarruselGiratorio>
           total: _n,
           actual: _frente,
           color: widget.colorDe?.call(_frente) ?? AppColors.signalOrange,
-          onAnterior: () => _irA(_posicion.value.roundToDouble() - 1),
-          onSiguiente: () => _irA(_posicion.value.roundToDouble() + 1),
+          onAnterior: () {
+            _pausado = true;
+            _irA(_posicion.value.roundToDouble() - 1);
+          },
+          onSiguiente: () {
+            _pausado = true;
+            _irA(_posicion.value.roundToDouble() + 1);
+          },
         ),
       ],
     );
@@ -176,7 +225,7 @@ class _CarruselGiratorioState extends State<CarruselGiratorio>
       width: lerpDouble(min(espacio.maxWidth - 16, 640), ancho, g),
       height: lerpDouble(
         espacio.maxHeight - 8,
-        min(espacio.maxHeight - 12, ancho * 1.75),
+        min(espacio.maxHeight - 12, ancho * widget.proporcion),
         g,
       ),
       child: contenido,

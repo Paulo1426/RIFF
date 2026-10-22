@@ -26,7 +26,10 @@ const _colorIntros = AppColors.signalOrange;
 /// "Adivina la intro": cada moneda saca una carta con una intro al azar que
 /// el jugador aún no tiene; las obtenidas quedan en su colección.
 class IntrosScreen extends ConsumerStatefulWidget {
-  const IntrosScreen({super.key});
+  const IntrosScreen({super.key, this.embebida = false});
+
+  // Dentro de una pestaña del menú: sin barra ni fondo propios.
+  final bool embebida;
 
   @override
   ConsumerState<IntrosScreen> createState() => _IntrosScreenState();
@@ -211,124 +214,143 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
   @override
   Widget build(BuildContext context) {
     final estado = _estado;
+    final acciones = [
+      IconButton(
+        tooltip: 'Ver ayuda',
+        icon: const Icon(Icons.help_outline_rounded),
+        onPressed: estado == null
+            ? null
+            : () => mostrarRecorrido(context, _pasos()),
+      ),
+      if (estado != null)
+        Padding(
+          key: _claveMonedas,
+          padding: const EdgeInsets.only(right: 12),
+          child: Semantics(
+            label: '${estado.monedas} monedas',
+            excludeSemantics: true,
+            child: Chip(
+              avatar: const Text('🪙'),
+              label: Text('${estado.monedas}'),
+            ),
+          ),
+        ),
+    ];
+    if (widget.embebida) {
+      return Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 4, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Adivina la intro',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ),
+                ...acciones,
+              ],
+            ),
+          ),
+          Expanded(child: _cuerpo(estado)),
+        ],
+      );
+    }
     return LiquidBackground(
       acento: _colorIntros,
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: LiquidGlassAppBar(
           title: const Text('Adivina la intro'),
-          actions: [
-            IconButton(
-              tooltip: 'Ver ayuda',
-              icon: const Icon(Icons.help_outline_rounded),
-              onPressed: estado == null
-                  ? null
-                  : () => mostrarRecorrido(context, _pasos()),
-            ),
-            if (estado != null)
-              Padding(
-                key: _claveMonedas,
-                padding: const EdgeInsets.only(right: 12),
-                child: Semantics(
-                  label: '${estado.monedas} monedas',
-                  excludeSemantics: true,
-                  child: Chip(
-                    avatar: const Text('🪙'),
-                    label: Text('${estado.monedas}'),
-                  ),
-                ),
-              ),
-          ],
+          actions: acciones,
         ),
-        body: _error != null
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('$_error', textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
-                      LiquidGlassButton(
-                        onPressed: _cargar,
-                        label: 'Reintentar',
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            : estado == null
-            ? const Cargando(texto: 'Cargando intros...')
-            : Column(
-                children: [
-                  Expanded(
-                    key: _claveColeccion,
-                    child: RefreshIndicator(
-                      onRefresh: _cargar,
-                      child: CustomScrollView(
-                        slivers: [
-                          if (estado.intros.isEmpty)
-                            SliverFillRemaining(
-                              hasScrollBody: false,
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const SizedBox(
-                                    height: 160,
-                                    child: BandaMusical(color: _colorIntros),
-                                  ),
-                                  Text(
-                                    'Tu colección está vacía.\nSaca tu primera carta.',
-                                    textAlign: TextAlign.center,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodyLarge,
-                                  ),
-                                ],
-                              ),
-                            )
-                          else
-                            SliverPadding(
-                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-                              sliver: SliverGrid.builder(
-                                gridDelegate:
-                                    const SliverGridDelegateWithMaxCrossAxisExtent(
-                                      maxCrossAxisExtent: 140,
-                                      childAspectRatio: 0.62,
-                                      crossAxisSpacing: 12,
-                                      mainAxisSpacing: 12,
-                                    ),
-                                itemCount: estado.intros.length,
-                                itemBuilder: (context, index) {
-                                  final intro = estado.intros[index];
-                                  final portada =
-                                      _offline?.intros[intro.id]?.coverPath;
-                                  return _TarjetaIntro(
-                                    intro: intro,
-                                    portada: portada == null
-                                        ? null
-                                        : FileImage(File(portada)),
-                                    onTap: () => _abrir(intro),
-                                  );
-                                },
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // El botón para sacar cartas queda abajo, al alcance del
-                  // pulgar.
-                  SafeArea(
-                    top: false,
-                    minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    child: _panelInferior(estado),
-                  ),
-                ],
-              ),
+        body: _cuerpo(estado),
       ),
     );
   }
+
+  Widget _cuerpo(EstadoIntros? estado) => _error != null
+      ? Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('$_error', textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                LiquidGlassButton(onPressed: _cargar, label: 'Reintentar'),
+              ],
+            ),
+          ),
+        )
+      : estado == null
+      ? const Cargando(texto: 'Cargando intros...')
+      : Column(
+          children: [
+            Expanded(
+              key: _claveColeccion,
+              child: RefreshIndicator(
+                onRefresh: _cargar,
+                child: CustomScrollView(
+                  slivers: [
+                    if (estado.intros.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const SizedBox(
+                              height: 160,
+                              child: BandaMusical(color: _colorIntros),
+                            ),
+                            Text(
+                              'Tu colección está vacía.\nSaca tu primera carta.',
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context).textTheme.bodyLarge,
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                        sliver: SliverGrid.builder(
+                          gridDelegate:
+                              const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 140,
+                                childAspectRatio: 0.62,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
+                              ),
+                          itemCount: estado.intros.length,
+                          itemBuilder: (context, index) {
+                            final intro = estado.intros[index];
+                            final portada =
+                                _offline?.intros[intro.id]?.coverPath;
+                            return _TarjetaIntro(
+                              intro: intro,
+                              portada: portada == null
+                                  ? null
+                                  : FileImage(File(portada)),
+                              onTap: () => _abrir(intro),
+                            );
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            // El botón para sacar cartas queda abajo, al alcance del
+            // pulgar.
+            SafeArea(
+              top: false,
+              minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: _panelInferior(estado),
+            ),
+          ],
+        );
 }
 
 /// Color suave y estable para cada artista: el mismo artista principal

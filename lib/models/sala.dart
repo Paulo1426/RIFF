@@ -14,6 +14,27 @@ enum TipoSala { instrumentos, intros }
 const precioCrearSalaIntros = 10;
 const precioEntrarSalaIntros = 5;
 
+/// `users/{uid}/fichas/saldo`: fichas y salas ganadas de cada tipo.
+class SaldoSalas {
+  const SaldoSalas({
+    this.fichas = 0,
+    this.ganadasCancion = 0,
+    this.ganadasIntros = 0,
+  });
+
+  final int fichas;
+  final int ganadasCancion;
+  final int ganadasIntros;
+
+  int get ganadas => ganadasCancion + ganadasIntros;
+
+  factory SaldoSalas.fromMap(Map<String, dynamic>? map) => SaldoSalas(
+    fichas: (map?['fichas'] as num?)?.toInt() ?? 0,
+    ganadasCancion: (map?['ganadasCancion'] as num?)?.toInt() ?? 0,
+    ganadasIntros: (map?['ganadasIntros'] as num?)?.toInt() ?? 0,
+  );
+}
+
 class JugadorSala {
   const JugadorSala({
     required this.uid,

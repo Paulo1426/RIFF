@@ -37,4 +37,28 @@ void main() {
     // Una sola reconstrucción (3 tarjetas) al cambiar el frente, no 40.
     expect(construcciones - inicial, lessThanOrEqualTo(6));
   });
+
+  testWidgets('con autoGiro avanza solo de izquierda a derecha', (
+    tester,
+  ) async {
+    final cambios = <int>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CarruselGiratorio(
+            itemCount: 3,
+            autoGiro: const Duration(seconds: 1),
+            onCambio: cambios.add,
+            itemBuilder: (context, index, alFrente) =>
+                Text('Tarjeta $index ${alFrente ? 'frente' : ''}'),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    // De izquierda a derecha: la tarjeta anterior (la última) pasa al frente.
+    expect(cambios, [2]);
+    expect(find.text('Tarjeta 2 frente'), findsOneWidget);
+  });
 }

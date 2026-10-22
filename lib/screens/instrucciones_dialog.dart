@@ -28,22 +28,7 @@ class InstruccionesDialog extends StatelessWidget {
                 children: [
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
-                    child: Column(
-                      children: [
-                        Image.asset(
-                          'lib/assets/images/logo/riff_logo.png',
-                          height: 120,
-                          semanticLabel: 'Riff',
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '¿Cómo funciona?',
-                          style: text.bodyLarge?.copyWith(
-                            color: context.paleta.tintaSuave,
-                          ),
-                        ),
-                      ],
-                    ),
+                    child: Text('¿Cómo funciona?', style: text.headlineMedium),
                   ),
                   Flexible(
                     child: SingleChildScrollView(

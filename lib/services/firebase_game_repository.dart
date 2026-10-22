@@ -281,14 +281,15 @@ class FirebaseGameRepository {
     );
   }
 
-  /// Fichas del jugador en tiempo real (0 si aún no ha ganado ninguna).
-  Stream<int> fichas() {
+  /// Fichas y salas ganadas del jugador, en tiempo real (todo en 0 si aún
+  /// no tiene saldo).
+  Stream<SaldoSalas> saldoSalas() {
     final uid = this.uid;
-    if (uid == null) return Stream.value(0);
+    if (uid == null) return Stream.value(const SaldoSalas());
     return FirebaseFirestore.instance
         .doc('users/$uid/fichas/saldo')
         .snapshots()
-        .map((doc) => (doc.data()?['fichas'] as num?)?.toInt() ?? 0);
+        .map((doc) => SaldoSalas.fromMap(doc.data()));
   }
 
   Future<PartidaSala> partidaSala(String codigo) async => PartidaSala.fromJson(
