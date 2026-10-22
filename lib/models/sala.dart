@@ -14,25 +14,44 @@ enum TipoSala { instrumentos, intros }
 const precioCrearSalaIntros = 10;
 const precioEntrarSalaIntros = 5;
 
-/// `users/{uid}/fichas/saldo`: fichas y salas ganadas de cada tipo.
+/// `users/{uid}/fichas/saldo`: fichas y estadísticas de salas. Solo el
+/// servidor lo escribe, al terminar cada sala.
 class SaldoSalas {
   const SaldoSalas({
     this.fichas = 0,
     this.ganadasCancion = 0,
     this.ganadasIntros = 0,
+    this.jugadas = 0,
+    this.fichasGanadas = 0,
+    this.noRendirse = 0,
   });
 
   final int fichas;
   final int ganadasCancion;
   final int ganadasIntros;
+  final int jugadas;
+  // Fichas ganadas en total (sin restar lo gastado).
+  final int fichasGanadas;
+  // Veces que quedó último acertando al menos una canción.
+  final int noRendirse;
 
   int get ganadas => ganadasCancion + ganadasIntros;
+  // Las victorias anteriores a contar partidas pueden superar a las jugadas.
+  int get derrotas => jugadas > ganadas ? jugadas - ganadas : 0;
+  double get porcentajeVictorias =>
+      jugadas == 0 ? 0 : (ganadas / jugadas).clamp(0, 1).toDouble();
 
-  factory SaldoSalas.fromMap(Map<String, dynamic>? map) => SaldoSalas(
-    fichas: (map?['fichas'] as num?)?.toInt() ?? 0,
-    ganadasCancion: (map?['ganadasCancion'] as num?)?.toInt() ?? 0,
-    ganadasIntros: (map?['ganadasIntros'] as num?)?.toInt() ?? 0,
-  );
+  factory SaldoSalas.fromMap(Map<String, dynamic>? map) {
+    int campo(String nombre) => (map?[nombre] as num?)?.toInt() ?? 0;
+    return SaldoSalas(
+      fichas: campo('fichas'),
+      ganadasCancion: campo('ganadasCancion'),
+      ganadasIntros: campo('ganadasIntros'),
+      jugadas: campo('jugadas'),
+      fichasGanadas: campo('fichasGanadas'),
+      noRendirse: campo('noRendirse'),
+    );
+  }
 }
 
 class JugadorSala {

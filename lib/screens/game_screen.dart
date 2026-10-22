@@ -627,9 +627,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           }
           return;
         }
-        // La portada se descarga antes de mostrar el reproductor para que
-        // aparezca junto con la canción.
-        await _cargarPortada();
         if (!mounted) return;
         setState(() {
           _ganar(
@@ -653,6 +650,10 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         // Sin await: la canción sigue sonando en el reproductor y la pantalla
         // queda libre (si no, "Comprobando respuesta" duraba toda la canción).
         unawaited(_playSong('fullSong', replaceCurrent: true));
+        // La canción no espera a la portada: aparece cuando termine de bajar.
+        unawaited(
+          _cargarPortada().then((_) => mounted ? setState(() {}) : null),
+        );
       } else {
         setState(() {
           _correct = false;

@@ -82,3 +82,28 @@ export function todosListos(listos: readonly boolean[]): boolean {
 export function nivelDeIndice(levelIds: readonly string[], indice: number) {
   return levelIds[indice % levelIds.length];
 }
+
+/// Lo que suma al saldo de un jugador al terminar una sala: partida jugada,
+/// fichas ganadas, victoria (por tipo) y "no rendirse" (quedó último pero
+/// acertó alguna canción). La victoria usa el mismo criterio que los premios:
+/// no cuenta si abandonó o no acertó nada. [puesto] empieza en 0.
+export function estadisticasSala(
+  jugador: { aciertos: number; abandono: boolean },
+  puesto: number,
+  totalJugadores: number,
+  esGanador: boolean,
+  esIntros: boolean,
+  fichas: number,
+): Record<string, number> {
+  const valido = !jugador.abandono && jugador.aciertos > 0;
+  return {
+    jugadas: 1,
+    ...(fichas > 0 ? { fichas, fichasGanadas: fichas } : {}),
+    ...(esGanador && valido
+      ? { [esIntros ? "ganadasIntros" : "ganadasCancion"]: 1 }
+      : {}),
+    ...(totalJugadores > 1 && puesto === totalJugadores - 1 && valido
+      ? { noRendirse: 1 }
+      : {}),
+  };
+}

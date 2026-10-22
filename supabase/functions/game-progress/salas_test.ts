@@ -1,5 +1,6 @@
 import {
   codigoValido,
+  estadisticasSala,
   eliminadoDeRonda,
   generarCodigo,
   nivelDeIndice,
@@ -60,4 +61,24 @@ Deno.test("arranca solo con 2 o más jugadores y todos listos", () => {
 
 Deno.test("la lista de canciones vuelve a empezar", () => {
   assertEquals(nivelDeIndice(["x", "y"], 3), "y");
+});
+
+Deno.test("estadísticas al terminar una sala", () => {
+  const jugo = { aciertos: 2, abandono: false };
+  assertEquals(estadisticasSala(jugo, 0, 3, true, false, 10), {
+    jugadas: 1,
+    fichas: 10,
+    fichasGanadas: 10,
+    ganadasCancion: 1,
+  });
+  // Último con aciertos: "no rendirse"; en intros no hay fichas.
+  assertEquals(estadisticasSala(jugo, 2, 3, false, true, 0), {
+    jugadas: 1,
+    noRendirse: 1,
+  });
+  // Abandonó: solo cuenta la partida jugada.
+  assertEquals(
+    estadisticasSala({ aciertos: 3, abandono: true }, 0, 2, true, true, 0),
+    { jugadas: 1 },
+  );
 });

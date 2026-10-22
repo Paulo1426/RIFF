@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../models/logros.dart';
 import '../models/nivel.dart';
 import '../models/sala.dart';
 import '../providers/providers.dart';
@@ -816,6 +817,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
                 key: const ValueKey('progreso'),
                 dificultades: estado?.dificultades ?? const [],
                 intros: _introsFuturo,
+                saldo: _saldo,
+                esInvitado: widget.user.isAnonymous,
               ),
               5 => _PestanaConfiguracion(
                 key: const ValueKey('configuracion'),
@@ -1001,35 +1004,44 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   }
 }
 
-/// Orden de las insignias: por artista alfabéticamente, sin distinguir
-/// mayúsculas ni tildes; las que no tienen artista van al final.
-int _porArtista(IntroAsignada a, IntroAsignada b) {
-  final x = a.artista, y = b.artista;
-  if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1;
-  return _sinTildes(x).compareTo(_sinTildes(y));
-}
-
-String _sinTildes(String texto) => texto
-    .toLowerCase()
-    .replaceAll(RegExp('[áàä]'), 'a')
-    .replaceAll(RegExp('[éèë]'), 'e')
-    .replaceAll(RegExp('[íìï]'), 'i')
-    .replaceAll(RegExp('[óòö]'), 'o')
-    .replaceAll(RegExp('[úùü]'), 'u')
-    // La ñ va después de la n, como en el alfabeto.
-    .replaceAll('ñ', 'n~');
-
-/// Pestaña Progreso: avance de niveles e intros, monedas 🪙, fichas 🎟️ y las
-/// canciones de Adivina la intro ya adivinadas (insignias).
+/// Pestaña Progreso: avance de niveles e intros, estadísticas de salas e
+/// insignias.
 class _PestanaProgreso extends StatelessWidget {
   const _PestanaProgreso({
     super.key,
     required this.dificultades,
     required this.intros,
+    required this.saldo,
+    required this.esInvitado,
   });
 
   final List<ProgresoDificultadRemoto> dificultades;
   final Future<EstadoIntros?>? intros;
+  final SaldoSalas saldo;
+  final bool esInvitado;
+
+  AvanceJuego _avance(EstadoIntros? intros) {
+    int completados(Dificultad dificultad) =>
+        dificultades
+            .where((item) => item.dificultad == dificultad)
+            .firstOrNull
+            ?.completados ??
+        0;
+    return AvanceJuego(
+      facil: completados(Dificultad.facil),
+      media: completados(Dificultad.medio),
+      avanzada: completados(Dificultad.avanzado),
+      nivelesPorDificultad: _ProgresoGeneral._nivelesPorDificultad,
+      introsAdivinadas:
+          intros?.intros
+              .where((item) => item.estado == EstadoIntro.completada)
+              .length ??
+          0,
+      totalIntros: intros == null
+          ? _ProgresoGeneral._totalIntros
+          : intros.intros.length + intros.restantes,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1039,10 +1051,8 @@ class _PestanaProgreso extends StatelessWidget {
       builder: (context, snapshot) {
         final estadoIntros = snapshot.data;
         final cargando = snapshot.connectionState != ConnectionState.done;
-        final adivinadas = [
-          for (final intro in estadoIntros?.intros ?? const <IntroAsignada>[])
-            if (intro.estado == EstadoIntro.completada) intro,
-        ]..sort(_porArtista);
+        final logros = logrosDe(saldo, _avance(estadoIntros));
+        final conseguidos = logros.where((logro) => logro.logrado).length;
         return ListView(
           padding: EdgeInsets.symmetric(
             horizontal: max(16, (MediaQuery.sizeOf(context).width - 680) / 2),
@@ -1057,66 +1067,196 @@ class _PestanaProgreso extends StatelessWidget {
                 cargandoIntros: cargando,
               ),
             ),
+            if (!esInvitado) ...[
+              const SizedBox(height: 16),
+              LiquidGlassCard(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text('👥 Salas', style: text.titleMedium),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        _Dato('🎮', '${saldo.jugadas}', 'Jugadas'),
+                        _Dato('🏆', '${saldo.ganadas}', 'Ganadas'),
+                        _Dato('😔', '${saldo.derrotas}', 'Derrotas'),
+                        _Dato(
+                          '📊',
+                          '${(saldo.porcentajeVictorias * 100).round()}%',
+                          'Victorias',
+                        ),
+                        _Dato(
+                          '🎟️',
+                          '${saldo.fichasGanadas}',
+                          'Fichas ganadas',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '🥁 ${saldo.ganadasCancion} ganadas de Adivina la '
+                      'canción · 🎧 ${saldo.ganadasIntros} de intros',
+                      style: text.bodySmall?.copyWith(
+                        color: context.paleta.tintaSuave,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             LiquidGlassCard(
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('🏅 Insignias', style: text.titleMedium),
                   Text(
-                    'Canciones que adivinaste en Adivina la intro',
-                    style: text.bodySmall?.copyWith(
-                      color: context.paleta.tintaSuave,
-                    ),
+                    '🏅 Insignias · $conseguidos de ${logros.length}',
+                    style: text.titleMedium,
                   ),
                   const SizedBox(height: 12),
-                  if (cargando)
-                    const LinearProgressIndicator()
-                  else if (adivinadas.isEmpty)
-                    Text(
-                      estadoIntros == null
-                          ? 'Se desbloquea al completar tu primer nivel.'
-                          : 'Aún no adivinas ninguna intro. ¡Saca una carta!',
-                      textAlign: TextAlign.center,
-                    )
-                  else
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        for (final intro in adivinadas)
-                          Chip(
-                            // Mismo color por artista que las cartas de
-                            // Adivina la intro; texto oscuro porque el color
-                            // es claro en los dos modos.
-                            backgroundColor: colorArtista(intro.artista),
-                            side: BorderSide(
-                              color: Color.lerp(
-                                colorArtista(intro.artista),
-                                AppColors.graphiteInk,
-                                0.3,
-                              )!,
+                  LayoutBuilder(
+                    builder: (context, espacio) {
+                      // Dos por fila en teléfonos, más en tablets.
+                      final columnas = max(2, (espacio.maxWidth / 200).floor());
+                      final ancho =
+                          (espacio.maxWidth - 10 * (columnas - 1)) / columnas;
+                      return Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          for (final logro in logros)
+                            SizedBox(
+                              width: ancho,
+                              child: _TarjetaLogro(logro: logro),
                             ),
-                            labelStyle: const TextStyle(
-                              color: AppColors.graphiteInk,
-                            ),
-                            avatar: const Text('🎵'),
-                            label: Text(
-                              [
-                                intro.titulo ?? 'Intro #${intro.numero}',
-                                ?intro.artista,
-                              ].join(' · '),
-                            ),
-                          ),
-                      ],
-                    ),
+                        ],
+                      );
+                    },
+                  ),
                 ],
               ),
             ),
           ],
         );
       },
+    );
+  }
+}
+
+/// Un número de las estadísticas de salas con su emoji y nombre.
+class _Dato extends StatelessWidget {
+  const _Dato(this.emoji, this.valor, this.nombre);
+
+  final String emoji;
+  final String valor;
+  final String nombre;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Container(
+      width: 96,
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+      decoration: BoxDecoration(
+        color: context.paleta.superficie.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.paleta.borde),
+      ),
+      child: Column(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 22)),
+          Text(valor, style: text.titleLarge),
+          Text(
+            nombre,
+            textAlign: TextAlign.center,
+            style: text.bodySmall?.copyWith(color: context.paleta.tintaSuave),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Insignia: a color si se consiguió; si no, apagada con su avance.
+class _TarjetaLogro extends StatelessWidget {
+  const _TarjetaLogro({required this.logro});
+
+  final Logro logro;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final hecho = logro.logrado;
+    const color = AppColors.medio;
+    return Semantics(
+      label:
+          '${logro.nombre}: ${hecho ? 'conseguida' : 'pendiente, '
+                    '${min(logro.actual, logro.meta)} de ${logro.meta}'}. '
+          '${logro.condicion}',
+      excludeSemantics: true,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: hecho
+              ? color.withValues(alpha: 0.22)
+              : context.paleta.superficie.withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: hecho ? color : context.paleta.borde,
+            width: hecho ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            Opacity(
+              opacity: hecho ? 1 : 0.35,
+              child: Text(logro.emoji, style: const TextStyle(fontSize: 34)),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              logro.nombre,
+              textAlign: TextAlign.center,
+              style: text.titleSmall,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              logro.condicion,
+              textAlign: TextAlign.center,
+              style: text.bodySmall?.copyWith(color: context.paleta.tintaSuave),
+            ),
+            const SizedBox(height: 8),
+            if (hecho)
+              Text(
+                '✅ Conseguida',
+                style: text.labelMedium?.copyWith(
+                  color: context.paleta.tonoTexto(color),
+                  fontWeight: FontWeight.w800,
+                ),
+              )
+            else ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(99),
+                child: LinearProgressIndicator(
+                  value: logro.meta == 0
+                      ? 0
+                      : min(logro.actual, logro.meta) / logro.meta,
+                  minHeight: 5,
+                  color: color,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${min(logro.actual, logro.meta)}/${logro.meta}',
+                style: text.bodySmall,
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

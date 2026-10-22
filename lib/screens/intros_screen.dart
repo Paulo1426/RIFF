@@ -487,6 +487,8 @@ class _CartaReveladaState extends State<_CartaRevelada>
     duration: const Duration(milliseconds: 2600),
   );
   static const _finRuleta = 0.6;
+  // Nota en la que se detiene la ruleta: cambia en cada carta.
+  final _notaElegida = Random().nextInt(_Ruleta.cantidad);
 
   @override
   void didChangeDependencies() {
@@ -557,7 +559,10 @@ class _CartaReveladaState extends State<_CartaRevelada>
           animation: _giro,
           builder: (context, _) {
             if (_giro.value < _finRuleta) {
-              return _Ruleta(avance: _giro.value / _finRuleta);
+              return _Ruleta(
+                avance: _giro.value / _finRuleta,
+                elegida: _notaElegida,
+              );
             }
             final t = Curves.easeInOutBack.transform(
               (_giro.value - _finRuleta) / (1 - _finRuleta),
@@ -609,9 +614,13 @@ class _CartaReveladaState extends State<_CartaRevelada>
 /// Ruleta de notas musicales que gira rápido y frena con una nota bajo el
 /// marcador de arriba; [avance] va de 0 a 1.
 class _Ruleta extends StatelessWidget {
-  const _Ruleta({required this.avance});
+  const _Ruleta({required this.avance, required this.elegida});
 
   final double avance;
+  // Índice de la nota que queda bajo el marcador al terminar.
+  final int elegida;
+
+  static int get cantidad => _notas.length;
 
   static const _notas = [
     Icons.music_note_rounded,
@@ -628,9 +637,11 @@ class _Ruleta extends StatelessWidget {
   Widget build(BuildContext context) {
     const tamano = 250.0;
     const radio = 92.0;
-    // Tres vueltas que frenan al final, terminando con una nota arriba.
-    final giro = Curves.easeOutCubic.transform(avance) * 3 * 2 * pi;
     final paso = 2 * pi / _notas.length;
+    // Tres vueltas que frenan al final y dejan la nota [elegida] arriba
+    // (su ángulo termina en un múltiplo de 2π).
+    final destino = 3 * 2 * pi + (_notas.length - elegida) * paso;
+    final giro = Curves.easeOutCubic.transform(avance) * destino;
     // La nota que queda arriba al terminar se destaca en el último tramo.
     final destaque = ((avance - 0.85) / 0.15).clamp(0.0, 1.0);
     return SizedBox.square(
@@ -654,11 +665,11 @@ class _Ruleta extends StatelessWidget {
                 -radio * cos(giro + i * paso),
               ),
               child: Transform.scale(
-                scale: i == 0 ? 1 + 0.5 * destaque : 1,
+                scale: i == elegida ? 1 + 0.5 * destaque : 1,
                 child: Icon(
                   _notas[i],
                   size: 34,
-                  color: i == 0
+                  color: i == elegida
                       ? Color.lerp(AppColors.paperWhite, _colorIntros, destaque)
                       : AppColors.paperWhite,
                 ),
@@ -944,7 +955,6 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
   Future<void> _ganar(String titulo, String? artista) async {
     _playbackGeneration++;
     await _audioService.detener();
-    await _cargarPortada();
     if (!mounted) return;
     setState(() {
       _won = true;
@@ -955,6 +965,8 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     _confeti.play();
     _iniciarReloj();
     unawaited(_play('fullSong'));
+    // La canción no espera a la portada: aparece cuando termine de bajar.
+    unawaited(_cargarPortada().then((_) => mounted ? setState(() {}) : null));
   }
 
   Widget _vistaGanada() => ReproductorCancion(

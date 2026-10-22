@@ -22,6 +22,7 @@ import {
   nivelDeIndice,
   precioCrearSalaIntros,
   precioEntrarSalaIntros,
+  estadisticasSala,
   premiosSala,
   puntosAcierto,
   todosListos,
@@ -1424,6 +1425,21 @@ function walletWrite(
   };
 }
 
+/// Varios incrementos en el saldo de un jugador en una sola escritura.
+function walletStatsWrite(
+  uid: string,
+  incrementos: Record<string, number>,
+): JsonObject {
+  return {
+    update: { name: documentName(walletPath(uid)), fields: {} },
+    updateMask: { fieldPaths: [] },
+    updateTransforms: Object.entries(incrementos).map(([campo, n]) => ({
+      fieldPath: campo,
+      increment: { integerValue: String(n) },
+    })),
+  };
+}
+
 /// Cobra [precio] fichas por una sala de intros o explica por qué no alcanza.
 async function chargeIntroRoom(
   token: string,
@@ -1503,31 +1519,32 @@ async function updateRoom<T>(
     const { borrar, extra = [], resultado } = cambiado;
     let campos = cambiado.campos;
     const writes = [...extra];
-    // Al terminar una sala se cuenta la victoria del ganador y, si es de
-    // instrumentos, se reparten las fichas; todo en el mismo guardado que la
-    // cierra para que no se cuente ni se pague dos veces.
+    // Al terminar una sala se guardan las estadísticas de cada jugador y,
+    // si es de instrumentos, se reparten las fichas; todo en el mismo
+    // guardado que la cierra para que no se cuente ni se pague dos veces.
     if (campos?.estado === "terminada" && sala.fields.estado !== "terminada") {
       const final = { ...sala.fields, ...campos };
       const ranking = roomRanking(final);
-      const ganador = ranking.find((jugador) => jugador.uid === final.ganadorUid);
-      // Mismo criterio que los premios: no cuenta si abandonó o no acertó.
-      if (ganador && !ganador.abandono && ganador.aciertos > 0) {
+      const premios = final.tipo === "intros" ? {} : premiosSala(ranking);
+      const ganadorUid = ranking.find((jugador) =>
+        jugador.uid === final.ganadorUid
+      )?.uid;
+      for (const [puesto, jugador] of ranking.entries()) {
         writes.push(
-          walletWrite(
-            ganador.uid,
-            1,
-            undefined,
-            final.tipo === "intros" ? "ganadasIntros" : "ganadasCancion",
+          walletStatsWrite(
+            jugador.uid,
+            estadisticasSala(
+              jugador,
+              puesto,
+              ranking.length,
+              jugador.uid === ganadorUid,
+              final.tipo === "intros",
+              premios[jugador.uid] ?? 0,
+            ),
           ),
         );
       }
-      if (final.tipo !== "intros") {
-        const premios = premiosSala(ranking);
-        writes.push(
-          ...Object.entries(premios).map(([id, n]) => walletWrite(id, n)),
-        );
-        campos = { ...campos, premios };
-      }
+      if (final.tipo !== "intros") campos = { ...campos, premios };
     }
     if (borrar) {
       writes.push({
