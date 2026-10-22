@@ -1001,6 +1001,24 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   }
 }
 
+/// Orden de las insignias: por artista alfabéticamente, sin distinguir
+/// mayúsculas ni tildes; las que no tienen artista van al final.
+int _porArtista(IntroAsignada a, IntroAsignada b) {
+  final x = a.artista, y = b.artista;
+  if (x == null || y == null) return x == null ? (y == null ? 0 : 1) : -1;
+  return _sinTildes(x).compareTo(_sinTildes(y));
+}
+
+String _sinTildes(String texto) => texto
+    .toLowerCase()
+    .replaceAll(RegExp('[áàä]'), 'a')
+    .replaceAll(RegExp('[éèë]'), 'e')
+    .replaceAll(RegExp('[íìï]'), 'i')
+    .replaceAll(RegExp('[óòö]'), 'o')
+    .replaceAll(RegExp('[úùü]'), 'u')
+    // La ñ va después de la n, como en el alfabeto.
+    .replaceAll('ñ', 'n~');
+
 /// Pestaña Progreso: avance de niveles e intros, monedas 🪙, fichas 🎟️ y las
 /// canciones de Adivina la intro ya adivinadas (insignias).
 class _PestanaProgreso extends StatelessWidget {
@@ -1024,7 +1042,7 @@ class _PestanaProgreso extends StatelessWidget {
         final adivinadas = [
           for (final intro in estadoIntros?.intros ?? const <IntroAsignada>[])
             if (intro.estado == EstadoIntro.completada) intro,
-        ];
+        ]..sort(_porArtista);
         return ListView(
           padding: EdgeInsets.symmetric(
             horizontal: max(16, (MediaQuery.sizeOf(context).width - 680) / 2),
@@ -1069,6 +1087,20 @@ class _PestanaProgreso extends StatelessWidget {
                       children: [
                         for (final intro in adivinadas)
                           Chip(
+                            // Mismo color por artista que las cartas de
+                            // Adivina la intro; texto oscuro porque el color
+                            // es claro en los dos modos.
+                            backgroundColor: colorArtista(intro.artista),
+                            side: BorderSide(
+                              color: Color.lerp(
+                                colorArtista(intro.artista),
+                                AppColors.graphiteInk,
+                                0.3,
+                              )!,
+                            ),
+                            labelStyle: const TextStyle(
+                              color: AppColors.graphiteInk,
+                            ),
                             avatar: const Text('🎵'),
                             label: Text(
                               [

@@ -126,11 +126,12 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
     }
   }
 
-  Future<void> _abrir(IntroAsignada intro) async {
+  Future<void> _abrir(IntroAsignada intro, {bool reproducir = false}) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => IntroGameScreen(
           intro: intro,
+          reproducirAlAbrir: reproducir,
           sinConexion: _sinConexion,
           offline: _offline?.intros[intro.id],
           onOfflineCompletada: (answer) async {
@@ -167,7 +168,7 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
         context: context,
         builder: (context) => _CartaRevelada(intro: nueva),
       );
-      if (jugar == true && mounted) await _abrir(nueva);
+      if (jugar == true && mounted) await _abrir(nueva, reproducir: true);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -480,10 +481,12 @@ class _CartaRevelada extends StatefulWidget {
 
 class _CartaReveladaState extends State<_CartaRevelada>
     with SingleTickerProviderStateMixin {
+  // 0–0,6: la ruleta de notas gira y frena; 0,6–1: la carta se da vuelta.
   late final _giro = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 900),
+    duration: const Duration(milliseconds: 2600),
   );
+  static const _finRuleta = 0.6;
 
   @override
   void didChangeDependencies() {
@@ -535,9 +538,9 @@ class _CartaReveladaState extends State<_CartaRevelada>
                   color: _colorIntros,
                 ),
                 const SizedBox(height: 12),
-                Text('Intro #${widget.intro.numero}', style: text.titleLarge),
+                Text('¡Lista!', style: text.headlineSmall),
                 const SizedBox(height: 4),
-                Text('¿La reconoces?', style: text.bodyMedium),
+                Text('Descúbrela', style: text.bodyLarge),
               ],
             ),
     );
@@ -553,7 +556,12 @@ class _CartaReveladaState extends State<_CartaRevelada>
         AnimatedBuilder(
           animation: _giro,
           builder: (context, _) {
-            final t = Curves.easeInOutBack.transform(_giro.value);
+            if (_giro.value < _finRuleta) {
+              return _Ruleta(avance: _giro.value / _finRuleta);
+            }
+            final t = Curves.easeInOutBack.transform(
+              (_giro.value - _finRuleta) / (1 - _finRuleta),
+            );
             // De dorso (π) a frente (0); la cara visible cambia a mitad.
             final angulo = pi * (1 - t);
             return Transform(
@@ -572,9 +580,22 @@ class _CartaReveladaState extends State<_CartaRevelada>
           },
         ),
         const SizedBox(height: 24),
-        LiquidGlassButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          label: '¡Jugar ahora!',
+        // Los botones aparecen cuando la carta ya se reveló.
+        AnimatedBuilder(
+          animation: _giro,
+          builder: (context, hijo) => AnimatedOpacity(
+            opacity: _giro.value >= _finRuleta ? 1 : 0,
+            duration: const Duration(milliseconds: 250),
+            child: IgnorePointer(
+              ignoring: _giro.value < _finRuleta,
+              child: hijo,
+            ),
+          ),
+          child: LiquidGlassButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: Icons.play_arrow_rounded,
+            label: '¡Jugar ahora!',
+          ),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
@@ -583,6 +604,80 @@ class _CartaReveladaState extends State<_CartaRevelada>
       ],
     ),
   );
+}
+
+/// Ruleta de notas musicales que gira rápido y frena con una nota bajo el
+/// marcador de arriba; [avance] va de 0 a 1.
+class _Ruleta extends StatelessWidget {
+  const _Ruleta({required this.avance});
+
+  final double avance;
+
+  static const _notas = [
+    Icons.music_note_rounded,
+    Icons.headphones_rounded,
+    Icons.audiotrack_rounded,
+    Icons.album_rounded,
+    Icons.queue_music_rounded,
+    Icons.piano_rounded,
+    Icons.mic_rounded,
+    Icons.library_music_rounded,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    const tamano = 250.0;
+    const radio = 92.0;
+    // Tres vueltas que frenan al final, terminando con una nota arriba.
+    final giro = Curves.easeOutCubic.transform(avance) * 3 * 2 * pi;
+    final paso = 2 * pi / _notas.length;
+    // La nota que queda arriba al terminar se destaca en el último tramo.
+    final destaque = ((avance - 0.85) / 0.15).clamp(0.0, 1.0);
+    return SizedBox.square(
+      dimension: tamano,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: tamano,
+            height: tamano,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: _colorIntros.withValues(alpha: 0.15),
+              border: Border.all(color: _colorIntros, width: 3),
+            ),
+          ),
+          for (var i = 0; i < _notas.length; i++)
+            Transform.translate(
+              offset: Offset(
+                radio * sin(giro + i * paso),
+                -radio * cos(giro + i * paso),
+              ),
+              child: Transform.scale(
+                scale: i == 0 ? 1 + 0.5 * destaque : 1,
+                child: Icon(
+                  _notas[i],
+                  size: 34,
+                  color: i == 0
+                      ? Color.lerp(AppColors.paperWhite, _colorIntros, destaque)
+                      : AppColors.paperWhite,
+                ),
+              ),
+            ),
+          const DiscoGirando(size: 70),
+          // Marcador fijo arriba: señala la nota elegida.
+          const Align(
+            alignment: Alignment.topCenter,
+            child: Icon(
+              Icons.arrow_drop_down_rounded,
+              size: 48,
+              color: _colorIntros,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Una intro: se escucha el fragmento y se escribe el nombre de la canción.
@@ -614,9 +709,12 @@ class IntroGameScreen extends ConsumerStatefulWidget {
     this.offline,
     this.onOfflineCompletada,
     this.sala,
+    this.reproducirAlAbrir = false,
   });
 
   final IntroAsignada intro;
+  // Recién sacada de la ruleta: la intro empieza a sonar al entrar.
+  final bool reproducirAlAbrir;
   final IntroEnSala? sala;
   final bool sinConexion;
   // Datos descargados; permiten validar la respuesta sin internet.
@@ -652,6 +750,10 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     if (_won) {
       _iniciarReloj();
       unawaited(_cargarPortada().then((_) => mounted ? setState(() {}) : null));
+    } else if (widget.reproducirAlAbrir) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _play('intro');
+      });
     }
   }
 
@@ -696,6 +798,7 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       _paused = false;
       _message = null;
     });
+    _iniciarReloj();
     try {
       // Mismas claves que la descarga offline: si ya está, no hace falta red.
       final clave = tipo == 'intro'
@@ -896,6 +999,49 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     ),
   );
 
+  /// Barra de avance de la intro con el tiempo transcurrido y el total.
+  Widget _lineaDeTiempo() {
+    final text = Theme.of(context).textTheme;
+    final posicion = _playing ? _audioService.posicion : Duration.zero;
+    final total = _playing ? _audioService.duracion : null;
+    final avance = total == null || total.inMilliseconds == 0
+        ? 0.0
+        : (posicion.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
+    String tiempo(Duration d) =>
+        '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+    return Semantics(
+      label: 'Avance de la intro',
+      value: total == null
+          ? 'Sin reproducir'
+          : '${tiempo(posicion)} de ${tiempo(total)}',
+      excludeSemantics: true,
+      child: Column(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: avance,
+              minHeight: 6,
+              color: _colorIntros,
+              backgroundColor: _colorIntros.withValues(alpha: 0.2),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Text(tiempo(posicion), style: text.bodySmall),
+              const Spacer(),
+              Text(
+                total == null ? '-:--' : tiempo(total),
+                style: text.bodySmall,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _vistaJuego() {
     final text = Theme.of(context).textTheme;
     return LayoutBuilder(
@@ -924,7 +1070,9 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            _lineaDeTiempo(),
+            const SizedBox(height: 12),
             Text(
               'Escucha la intro y escribe el nombre de la canción.',
               textAlign: TextAlign.center,
