@@ -26,10 +26,12 @@ const _colorIntros = AppColors.signalOrange;
 /// "Adivina la intro": cada moneda saca una carta con una intro al azar que
 /// el jugador aún no tiene; las obtenidas quedan en su colección.
 class IntrosScreen extends ConsumerStatefulWidget {
-  const IntrosScreen({super.key, this.embebida = false});
+  const IntrosScreen({super.key, this.embebida = false, this.onMonedas});
 
-  // Dentro de una pestaña del menú: sin barra ni fondo propios.
+  // Dentro de una pestaña del menú: sin barra ni fondo propios; el título y
+  // las monedas van en la barra del menú (avisadas con [onMonedas]).
   final bool embebida;
+  final ValueChanged<int>? onMonedas;
 
   @override
   ConsumerState<IntrosScreen> createState() => _IntrosScreenState();
@@ -98,6 +100,7 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
         _estado = estado;
         _sinConexion = false;
       });
+      widget.onMonedas?.call(estado.monedas);
       if (uid != null) unawaited(_descargar(uid));
     } catch (error) {
       if (!mounted) return;
@@ -158,6 +161,7 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
           .sacarIntro();
       if (!mounted) return;
       setState(() => _estado = estado);
+      widget.onMonedas?.call(estado.monedas);
       final nueva = estado.intros.firstWhere((item) => item.id == estado.nueva);
       final jugar = await showDialog<bool>(
         context: context,
@@ -236,27 +240,7 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
           ),
         ),
     ];
-    if (widget.embebida) {
-      return Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 4, 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Adivina la intro',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-                ...acciones,
-              ],
-            ),
-          ),
-          Expanded(child: _cuerpo(estado)),
-        ],
-      );
-    }
+    if (widget.embebida) return _cuerpo(estado);
     return LiquidBackground(
       acento: _colorIntros,
       child: Scaffold(

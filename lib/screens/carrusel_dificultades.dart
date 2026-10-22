@@ -214,22 +214,30 @@ class _CarruselGiratorioState extends State<CarruselGiratorio>
     final lejania = d.abs().clamp(0.0, 1.5);
     if (lejania >= 1.5) return const SizedBox.shrink();
     final alFrente = lejania < 0.5;
+    final g = _giro.value;
+    // Tamaño en modo carrusel y, salvo en compacto, a pantalla completa (en
+    // tablets con un ancho máximo).
+    final reducido = Size(
+      ancho,
+      min(espacio.maxHeight - 12, ancho * widget.proporcion),
+    );
+    final completo = widget.compacto
+        ? reducido
+        : Size(min(espacio.maxWidth - 16, 640), espacio.maxHeight - 8);
+    // Encoger con escala y no cambiando el tamaño real: así al girar no se
+    // recalcula el contenido (la lista de niveles) en cada cuadro.
+    final escala = lerpDouble(
+      1,
+      min(reducido.width / completo.width, reducido.height / completo.height),
+      g,
+    )!;
+    final cerca = (1 - 0.12 * lejania) * escala;
     final transform = Matrix4.identity()
       ..setEntry(3, 2, 0.001)
       ..translateByDouble(d * ancho * 0.66, 0, lejania * 520, 1)
       ..rotateY(d * 0.85)
-      ..scaleByDouble(1 - 0.12 * lejania, 1 - 0.12 * lejania, 1, 1);
-    final g = _giro.value;
-    final tarjeta = SizedBox(
-      // A pantalla completa en teléfonos; en tablets con un ancho máximo.
-      width: lerpDouble(min(espacio.maxWidth - 16, 640), ancho, g),
-      height: lerpDouble(
-        espacio.maxHeight - 8,
-        min(espacio.maxHeight - 12, ancho * widget.proporcion),
-        g,
-      ),
-      child: contenido,
-    );
+      ..scaleByDouble(cerca, cerca, 1, 1);
+    final tarjeta = SizedBox.fromSize(size: completo, child: contenido);
     // Las vecinas solo se ven mientras gira.
     final visible = alFrente ? 1.0 : g;
     return Opacity(

@@ -20,12 +20,15 @@ class LiquidGlassButton extends StatefulWidget {
     required this.label,
     this.icon,
     this.variant = LiquidGlassButtonVariant.primary,
+    this.precio,
   });
 
   // null deshabilita el botón.
   final VoidCallback? onPressed;
   final String label;
   final IconData? icon;
+  // Costo resaltado en una píldora al final del botón (p. ej. "🎟️ 10").
+  final String? precio;
   final LiquidGlassButtonVariant variant;
 
   @override
@@ -127,6 +130,32 @@ class _LiquidGlassButtonState extends State<LiquidGlassButton> {
                                   ?.copyWith(color: colorTexto),
                             ),
                           ),
+                          if (widget.precio case final precio?) ...[
+                            const SizedBox(width: 10),
+                            DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: colorTexto.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(99),
+                                border: Border.all(
+                                  color: colorTexto.withValues(alpha: 0.5),
+                                ),
+                              ),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 3,
+                                ),
+                                child: Text(
+                                  precio,
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(
+                                        color: colorTexto,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),

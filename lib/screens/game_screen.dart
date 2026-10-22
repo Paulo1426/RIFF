@@ -251,20 +251,107 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     _balance = nuevo;
   }
 
+  /// Dos bloques: presupuesto restante (con barra de lo que queda) y
+  /// instrumentos comprados de los 3 posibles (con un punto por compra).
   Widget _presupuesto() {
     final text = Theme.of(context).textTheme;
-    // Wrap: en pantallas angostas el monto baja de línea en vez de desbordar.
+    final color = colorDificultad(widget.nivel.dificultad);
+    final etiqueta = text.labelSmall?.copyWith(
+      color: context.paleta.tonoTexto(color),
+      fontWeight: FontWeight.w800,
+      letterSpacing: 1,
+    );
+    const maxCompras = 3;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 3,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('PRESUPUESTO', style: etiqueta),
+              _monto(text),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(99),
+                child: LinearProgressIndicator(
+                  value: _balance / Nivel.presupuestoTotal,
+                  minHeight: 6,
+                  color: color,
+                  backgroundColor: color.withValues(alpha: 0.2),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'de \$${formatearMiles(Nivel.presupuestoTotal)}',
+                style: text.bodySmall?.copyWith(
+                  color: context.paleta.tintaSuave,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          flex: 2,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('INSTRUMENTOS', style: etiqueta),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${_purchased.length} de $maxCompras',
+                  style: text.titleLarge,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  for (var i = 0; i < maxCompras; i++)
+                    Container(
+                      width: 14,
+                      height: 14,
+                      margin: const EdgeInsets.only(right: 6),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: i < _purchased.length ? color : null,
+                        border: Border.all(color: color, width: 2),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'de ${widget.nivel.instrumentos.length} disponibles',
+                style: text.bodySmall?.copyWith(
+                  color: context.paleta.tintaSuave,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Monto restante animado y, al comprar, el descuento que sube y se borra.
+  Widget _monto(TextTheme text) {
+    // Wrap: en pantallas angostas el descuento baja de línea.
     return Wrap(
       crossAxisAlignment: WrapCrossAlignment.end,
       spacing: 8,
       children: [
-        const Text('Presupuesto restante:'),
         TweenAnimationBuilder<int>(
           tween: IntTween(end: _balance),
           duration: const Duration(milliseconds: 900),
           curve: Curves.easeOutCubic,
-          builder: (context, value, _) =>
-              Text('\$${formatearMiles(value)}', style: text.titleMedium),
+          builder: (context, value, _) => FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text('\$${formatearMiles(value)}', style: text.titleLarge),
+          ),
         ),
         if (_descuentoId > 0)
           // La clave reinicia la animación en cada compra.
@@ -879,16 +966,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                           horizontal: 16,
                           vertical: 12,
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _presupuesto(),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Puedes comprar hasta 3 de los ${widget.nivel.instrumentos.length} instrumentos.',
-                            ),
-                          ],
-                        ),
+                        child: _presupuesto(),
                       ),
                       const SizedBox(height: 8),
                       GridView(

@@ -112,6 +112,9 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   EstadoIntros? _resumenIntros;
   SaldoSalas _saldo = const SaldoSalas();
   StreamSubscription<SaldoSalas>? _suscripcionSaldo;
+  // Monedas de Adivina la intro para la barra (null hasta saberlas).
+  int? _monedas;
+  TipoSala _tipoSala = TipoSala.instrumentos;
   // Elementos que resalta el recorrido guiado.
   final _claveMenu = GlobalKey();
   final _clavesPestanas = List.generate(6, (_) => GlobalKey());
@@ -303,7 +306,12 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       if (_introsDisponibles) {
         unawaited(
           _estadoIntros().then((intros) {
-            if (mounted) setState(() => _resumenIntros = intros);
+            if (mounted) {
+              setState(() {
+                _resumenIntros = intros;
+                _monedas = intros?.monedas ?? _monedas;
+              });
+            }
           }),
         );
       }
@@ -782,11 +790,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           backgroundColor: Colors.transparent,
           appBar: LiquidGlassAppBar(
             centerTitle: false,
-            title: Image.asset(
-              'lib/assets/images/logo/riff_logo.png',
-              height: 48,
-              semanticLabel: 'Riff',
-            ),
+            title: _tituloBarra(estado),
+            actions: [..._accionesBarra(), const SizedBox(width: 8)],
           ),
           bottomNavigationBar: LiquidGlassBottomNav(
             claves: _clavesPestanas,
@@ -811,7 +816,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
                 key: const ValueKey('progreso'),
                 dificultades: estado?.dificultades ?? const [],
                 intros: _introsFuturo,
-                saldo: _saldo,
               ),
               5 => _PestanaConfiguracion(
                 key: const ValueKey('configuracion'),
@@ -826,11 +830,48 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     );
   }
 
+  /// Título de la barra de arriba según la pestaña: el logo en el menú y el
+  /// nombre de la sección en las demás.
+  Widget _tituloBarra(EstadoJuegoRemoto? estado) => switch (_pestana) {
+    _pCancion when estado != null => Text(
+      'Dificultad · '
+      '${_nombreDificultad(_seleccionada ?? estado.dificultadActiva)}',
+    ),
+    _pCancion => const Text('Adivina la canción'),
+    _pIntro => const Text('Adivina la intro'),
+    _pSalas => Text(
+      _tipoSala == TipoSala.intros ? 'Adivina la intro' : 'Adivina la canción',
+    ),
+    _pProgreso => const Text('Progreso'),
+    5 => const Text('Ajustes'),
+    _ => Image.asset(
+      'lib/assets/images/logo/riff_logo.png',
+      height: 48,
+      semanticLabel: 'Riff',
+    ),
+  };
+
+  /// Monedas 🪙 en Intro y Progreso; fichas 🎟️ en Salas y Progreso.
+  List<Widget> _accionesBarra() => [
+    if ((_pestana == _pIntro || _pestana == _pProgreso) && _monedas != null)
+      _Saldo('🪙', _monedas!, 'monedas'),
+    if ((_pestana == _pSalas || _pestana == _pProgreso) &&
+        !widget.user.isAnonymous)
+      _Saldo('🎟️', _saldo.fichas, 'fichas'),
+  ];
+
   void _cambiarPestana(int pestana) {
     setState(() {
       _pestana = pestana;
       // Progreso se vuelve a pedir al abrir la pestaña, para que esté al día.
-      if (pestana == _pProgreso) _introsFuturo = _estadoIntros();
+      if (pestana == _pProgreso) {
+        _introsFuturo = _estadoIntros()
+          ..then((intros) {
+            if (mounted && intros != null) {
+              setState(() => _monedas = intros.monedas);
+            }
+          });
+      }
     });
     if (pestana == _pCancion && _estado != null) _recorridoDificultades();
   }
@@ -896,7 +937,11 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
             'Adivina la canción.',
       );
     }
-    return const IntrosScreen(key: ValueKey('intro'), embebida: true);
+    return IntrosScreen(
+      key: const ValueKey('intro'),
+      embebida: true,
+      onMonedas: (monedas) => setState(() => _monedas = monedas),
+    );
   }
 
   Widget _bloqueada(String clave, String motivo) => Center(
@@ -938,7 +983,12 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         : _offlineMode
         ? 'Necesitas conexión a internet para jugar en salas.'
         : null;
-    if (motivo == null) return const SalasPanel(key: ValueKey('salas'));
+    if (motivo == null) {
+      return SalasPanel(
+        key: const ValueKey('salas'),
+        onTipo: (tipo) => setState(() => _tipoSala = tipo),
+      );
+    }
     return _bloqueada('salas-bloqueadas', motivo);
   }
 }
@@ -950,36 +1000,10 @@ class _PestanaProgreso extends StatelessWidget {
     super.key,
     required this.dificultades,
     required this.intros,
-    required this.saldo,
   });
 
   final List<ProgresoDificultadRemoto> dificultades;
   final Future<EstadoIntros?>? intros;
-  final SaldoSalas saldo;
-
-  Widget _saldo(
-    BuildContext context,
-    String emoji,
-    String valor,
-    String nombre,
-  ) {
-    final text = Theme.of(context).textTheme;
-    return LiquidGlassCard(
-      borderRadius: 20,
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
-      child: Column(
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 32)),
-          Text(valor, style: text.headlineSmall),
-          Text(
-            nombre,
-            textAlign: TextAlign.center,
-            style: text.bodySmall?.copyWith(color: context.paleta.tintaSuave),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -999,28 +1023,6 @@ class _PestanaProgreso extends StatelessWidget {
             vertical: 16,
           ),
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: _saldo(
-                    context,
-                    '🪙',
-                    cargando ? '…' : '${estadoIntros?.monedas ?? 0}',
-                    'Monedas para Adivina la intro',
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _saldo(
-                    context,
-                    '🎟️',
-                    '${saldo.fichas}',
-                    'Fichas para las salas',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
             LiquidGlassCard(
               padding: const EdgeInsets.all(20),
               child: _ProgresoGeneral(
@@ -1080,6 +1082,29 @@ class _PestanaProgreso extends StatelessWidget {
 }
 
 /// Pestaña Configuración: instrucciones, música del menú, tema y sesión.
+/// Saldo en la barra de arriba: emoji y número en una píldora.
+class _Saldo extends StatelessWidget {
+  const _Saldo(this.emoji, this.valor, this.nombre);
+
+  final String emoji;
+  final int valor;
+  final String nombre;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(left: 6),
+    child: Semantics(
+      label: '$valor $nombre',
+      excludeSemantics: true,
+      child: Chip(
+        visualDensity: VisualDensity.compact,
+        avatar: Text(emoji),
+        label: Text('$valor'),
+      ),
+    ),
+  );
+}
+
 class _PestanaConfiguracion extends ConsumerStatefulWidget {
   const _PestanaConfiguracion({
     super.key,
@@ -1753,47 +1778,67 @@ class _TarjetaDificultad extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(
-                  child: Text(
-                    'DIFICULTAD',
-                    style: text.labelMedium?.copyWith(
-                      color: context.paleta.tonoTexto(color),
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 2,
-                    ),
+                // Anillo de avance con "3/5" (o candado) en el centro.
+                SizedBox.square(
+                  dimension: 64,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CircularProgressIndicator(
+                        value: progreso.total == 0
+                            ? 0
+                            : progreso.completados / progreso.total,
+                        strokeWidth: 6,
+                        color: color,
+                        backgroundColor: color.withValues(alpha: 0.2),
+                        strokeCap: StrokeCap.round,
+                      ),
+                      Center(
+                        child: bloqueada
+                            ? Icon(
+                                Icons.lock_rounded,
+                                color: context.paleta.tintaSuave,
+                              )
+                            : Text(
+                                '${progreso.completados}/'
+                                '${max(progreso.total, 5)}',
+                                style: text.titleMedium,
+                              ),
+                      ),
+                    ],
                   ),
                 ),
-                Text(
-                  _nombreDificultad(progreso.dificultad),
-                  style: text.displaySmall?.copyWith(
-                    color: context.paleta.tonoTexto(color),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _nombreDificultad(progreso.dificultad),
+                        style: text.headlineMedium?.copyWith(
+                          color: context.paleta.tonoTexto(color),
+                        ),
+                      ),
+                      Text(
+                        bloqueada
+                            ? 'Completa ${_nombreDificultad(anterior?.dificultad ?? progreso.dificultad)} para desbloquearla'
+                            : progreso.total == 0
+                            ? 'Todavía no hay niveles publicados'
+                            : progreso.completados >= progreso.total
+                            ? '¡Completada! 🎉'
+                            : 'Niveles completados',
+                        style: text.bodyMedium?.copyWith(
+                          color: context.paleta.tintaSuave,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
-            Text(
-              bloqueada
-                  ? 'Completa la dificultad ${_nombreDificultad(anterior?.dificultad ?? progreso.dificultad)} para desbloquear estos niveles'
-                  : progreso.total == 0
-                  ? 'Todavía no hay niveles publicados'
-                  : '${progreso.completados}/${progreso.total} niveles completados',
-              style: text.bodyMedium?.copyWith(
-                color: context.paleta.tintaSuave,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(99),
-              child: LinearProgressIndicator(
-                value: progreso.total == 0
-                    ? 0
-                    : progreso.completados / progreso.total,
-                minHeight: 6,
-                color: color,
-              ),
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            Divider(color: color.withValues(alpha: 0.35), height: 1),
+            const SizedBox(height: 12),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: onRefresh,

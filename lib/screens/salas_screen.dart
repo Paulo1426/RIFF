@@ -54,7 +54,10 @@ EdgeInsets _margenLista(BuildContext context) => EdgeInsets.symmetric(
 /// canción e intros). Cada tarjeta crea su sala, se une con código o QR y
 /// lista las salas públicas de ese tipo.
 class SalasPanel extends ConsumerStatefulWidget {
-  const SalasPanel({super.key});
+  const SalasPanel({super.key, this.onTipo});
+
+  // Avisa qué tipo de sala quedó al frente (el título va en la barra).
+  final ValueChanged<TipoSala>? onTipo;
 
   @override
   ConsumerState<SalasPanel> createState() => _SalasPanelState();
@@ -168,12 +171,12 @@ class _SalasPanelState extends ConsumerState<SalasPanel> {
         key: _claveCarrusel,
         itemCount: TipoSala.values.length,
         colorDe: (index) => _colorTipo(TipoSala.values[index]),
+        onCambio: (index) => widget.onTipo?.call(TipoSala.values[index]),
         itemBuilder: (context, index, alFrente) {
           final tipo = TipoSala.values[index];
           return _TarjetaTipoSala(
             tipo: tipo,
             alFrente: alFrente,
-            fichas: _fichas,
             publicas: _publicas?.where((sala) => sala.tipo == tipo).toList(),
             onCrear: () => _crear(tipo),
             onUnirseConCodigo: _unirseConCodigo,
@@ -193,7 +196,6 @@ class _TarjetaTipoSala extends StatelessWidget {
   const _TarjetaTipoSala({
     required this.tipo,
     required this.alFrente,
-    required this.fichas,
     required this.publicas,
     required this.onCrear,
     required this.onUnirseConCodigo,
@@ -202,7 +204,6 @@ class _TarjetaTipoSala extends StatelessWidget {
 
   final TipoSala tipo;
   final bool alFrente;
-  final int fichas;
   final List<Sala>? publicas;
   final VoidCallback onCrear;
   final VoidCallback onUnirseConCodigo;
@@ -229,28 +230,24 @@ class _TarjetaTipoSala extends StatelessWidget {
             style: const TextStyle(fontSize: 44),
           ),
           Text(
-            intros ? 'Adivina la intro' : 'Adivina la canción',
+            'Salas',
             textAlign: TextAlign.center,
             style: text.headlineSmall?.copyWith(
               color: context.paleta.tonoTexto(color),
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            intros
-                ? 'Crear 🎟️ $precioCrearSalaIntros · entrar '
-                      '🎟️ $precioEntrarSalaIntros · tienes $fichas'
-                : 'Gratis · los 3 primeros ganan 🎟️ 10, 7 y 3',
-            textAlign: TextAlign.center,
-            style: text.bodyMedium?.copyWith(color: context.paleta.tintaSuave),
-          ),
+          if (!intros) ...[
+            const SizedBox(height: 10),
+            Center(
+              child: _Precio('Premios', '🥇10 🥈7 🥉3', color, destacado: true),
+            ),
+          ],
           const SizedBox(height: 16),
           LiquidGlassButton(
             onPressed: onCrear,
             icon: Icons.add_rounded,
-            label: intros
-                ? 'Crear sala · 🎟️ $precioCrearSalaIntros'
-                : 'Crear sala',
+            label: 'Crear sala',
+            precio: intros ? '🎟️ $precioCrearSalaIntros' : null,
           ),
           const SizedBox(height: 8),
           LiquidGlassButton(
@@ -258,6 +255,7 @@ class _TarjetaTipoSala extends StatelessWidget {
             onPressed: onUnirseConCodigo,
             icon: Icons.qr_code_rounded,
             label: 'Unirse con código o QR',
+            precio: intros ? '🎟️ $precioEntrarSalaIntros' : null,
           ),
           const SizedBox(height: 20),
           Text('Salas abiertas', style: text.titleMedium),
@@ -282,6 +280,43 @@ class _TarjetaTipoSala extends StatelessWidget {
                   onUnirse: () => onUnirseA(sala.codigo),
                 ),
               ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Etiqueta de precio o saldo bien visible: nombre arriba, valor grande.
+class _Precio extends StatelessWidget {
+  const _Precio(this.nombre, this.valor, this.color, {this.destacado = false});
+
+  final String nombre;
+  final String valor;
+  final Color color;
+  final bool destacado;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: destacado ? 0.3 : 0.14),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.7), width: 1.5),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            nombre.toUpperCase(),
+            style: text.labelSmall?.copyWith(
+              color: context.paleta.tonoTexto(color),
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1,
+            ),
+          ),
+          Text(valor, style: text.titleLarge),
         ],
       ),
     );
@@ -581,9 +616,8 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
                     ? null
                     : () => Navigator.of(context).pop((_modo, _publica)),
                 icon: Icons.add_rounded,
-                label: intros
-                    ? 'Crear sala · 🎟️ $precioCrearSalaIntros'
-                    : 'Crear sala',
+                label: 'Crear sala',
+                precio: intros ? '🎟️ $precioCrearSalaIntros' : null,
               ),
               TextButton(
                 onPressed: () => Navigator.of(context).pop(),
