@@ -114,6 +114,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   // 3 salas, 4 progreso, 5 configuración.
   int _pestana = 0;
   static const _pCancion = 1, _pIntro = 2, _pSalas = 3, _pProgreso = 4;
+  static const _pAjustes = 5;
   Future<EstadoIntros?>? _introsFuturo;
   // Para las tarjetas del menú: cuántas intros tiene y salas ganadas.
   EstadoIntros? _resumenIntros;
@@ -166,9 +167,11 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           'ya adivinaste.',
     ),
     PasoRecorrido(
-      clave: _clavesPestanas[5],
+      clave: _clavesPestanas[_pAjustes],
       titulo: '⚙️ Ajustes',
-      texto: 'Instrucciones, música del menú, modo oscuro y cerrar sesión.',
+      texto:
+          'Desde este botón: instrucciones, música del menú, modo oscuro, '
+          'reiniciar el progreso y cerrar sesión.',
     ),
   ];
 
@@ -888,6 +891,14 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           backgroundColor: Colors.transparent,
           appBar: LiquidGlassAppBar(
             centerTitle: false,
+            // Ajustes no está en la barra de abajo: se vuelve con la flecha.
+            leading: _pestana == _pAjustes
+                ? IconButton(
+                    tooltip: 'Volver al menú',
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    onPressed: () => _cambiarPestana(0),
+                  )
+                : null,
             title: _tituloBarra(estado),
             actions: [..._accionesBarra(), const SizedBox(width: 8)],
           ),
@@ -901,7 +912,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
               (icon: Icons.headphones_rounded, label: 'Intro'),
               (icon: Icons.groups_rounded, label: 'Salas'),
               (icon: Icons.insights_rounded, label: 'Progreso'),
-              (icon: Icons.settings_rounded, label: 'Ajustes'),
             ],
           ),
           body: AnimatedSwitcher(
@@ -917,7 +927,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
                 saldo: _saldo,
                 esInvitado: widget.user.isAnonymous,
               ),
-              5 => _PestanaConfiguracion(
+              _pAjustes => _PestanaConfiguracion(
                 key: const ValueKey('configuracion'),
                 onRecorrido: _verRecorrido,
                 onCerrarSesion: _cerrarSesion,
@@ -946,7 +956,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       _tipoSala == TipoSala.intros ? 'Adivina la intro' : 'Adivina la canción',
     ),
     _pProgreso => const Text('Progreso'),
-    5 => const Text('Ajustes'),
+    _pAjustes => const Text('Ajustes'),
     _ => Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -964,6 +974,14 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
 
   /// Monedas 🪙 en Intro y Progreso; fichas 🎟️ en Salas y Progreso.
   List<Widget> _accionesBarra() => [
+    // Ajustes solo se abre desde la barra de arriba del menú principal.
+    if (_pestana == 0)
+      IconButton(
+        key: _clavesPestanas[_pAjustes],
+        tooltip: 'Ajustes',
+        icon: const Icon(Icons.settings_rounded),
+        onPressed: () => _cambiarPestana(_pAjustes),
+      ),
     if ((_pestana == _pIntro || _pestana == _pProgreso) && _monedas != null)
       _Saldo('🪙', _monedas!, 'monedas'),
     if ((_pestana == _pSalas || _pestana == _pProgreso) &&

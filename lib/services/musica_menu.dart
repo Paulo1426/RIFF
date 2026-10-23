@@ -23,7 +23,7 @@ class MusicaMenu with WidgetsBindingObserver {
     'lib/assets/audio/menu/intro2.mp3',
     'lib/assets/audio/menu/intro3.mp3',
   ];
-  static const _volumen = 0.05;
+  static const _volumen = 0.02;
   // Fundido entre canciones (pausar y reanudar usan uno más corto).
   static const _cruce = Duration(milliseconds: 2500);
   static const _rapido = Duration(milliseconds: 800);
