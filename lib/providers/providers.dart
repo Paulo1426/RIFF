@@ -17,7 +17,7 @@ import '../services/validation_service.dart';
 final gameServiceProvider = Provider((ref) => GameService());
 final audioServiceProvider = Provider((ref) => AudioService());
 final musicaMenuProvider = Provider((ref) {
-  final musica = MusicaMenu(ref.read(audioServiceProvider));
+  final musica = MusicaMenu();
   ref.onDispose(musica.dispose);
   return musica;
 });

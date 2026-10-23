@@ -6,32 +6,22 @@ import 'package:flutter/widgets.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 
-import 'audio_service.dart';
 
-/// Música de fondo del menú: varias canciones en orden aleatorio. Cada una
-/// empieza subiendo el volumen y termina bajándolo antes de pasar a la
-/// siguiente, sin cortes de golpe.
 class MusicaMenu with WidgetsBindingObserver {
-  MusicaMenu(this._cache);
-
-  static const _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
-
-  static const _ruta =
-      '/storage/v1/object/public/music_menu/music_menu/intro.mp3';
-  // Incluidas en la app: suenan también sin conexión.
-  static const _pistasIncluidas = [
-    'lib/assets/audio/menu/intro2.mp3',
-    'lib/assets/audio/menu/intro3.mp3',
-  ];
-  static const _volumen = 0.02;
-  // Fundido entre canciones (pausar y reanudar usan uno más corto).
+  // Incluidas en la app: suenan también sin conexión. El valor ajusta el
+  // volumen de cada una (intro.mp3 está grabada más fuerte).
+  static const _pistas = {
+    'lib/assets/audio/menu/intro2.mp3': 1.0,
+    'lib/assets/audio/menu/intro3.mp3': 1.0,
+    'lib/assets/audio/menu/intro.mp3': 0.8,
+  };
+  static const _volumen = 0.009;
+  
   static const _cruce = Duration(milliseconds: 2500);
   static const _rapido = Duration(milliseconds: 800);
 
-  final AudioService _cache;
   final _azar = Random();
   AudioPlayer? _player;
-  final List<AudioSource> _pistas = [];
   int _actual = 0;
   bool _silenciada = false;
   bool _enSegundoPlano = false;
@@ -44,6 +34,8 @@ class MusicaMenu with WidgetsBindingObserver {
 
   bool get silenciada => _silenciada;
 
+  double get _volumenPista => _volumen * _pistas.values.elementAt(_actual);
+
   bool get _debeSonar =>
       !_silenciada && !_enSegundoPlano && _nivelesAbiertos == 0;
 
@@ -54,21 +46,8 @@ class MusicaMenu with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     try {
       _silenciada = await (await _archivoSilencio()).exists();
-      _pistas.addAll(_pistasIncluidas.map(AudioSource.asset));
-      // La original se descarga una vez; sin conexión se juega con las demás.
-      if (_supabaseUrl.isNotEmpty) {
-        try {
-          final file = await _cache.descargarYGuardar(
-            '$_supabaseUrl$_ruta',
-            'menu:intro',
-          );
-          _pistas.add(AudioSource.file(file.path));
-        } catch (error) {
-          debugPrint('No se pudo descargar la música del menú: $error');
-        }
-      }
       _actual = _azar.nextInt(_pistas.length);
-      await player.setAudioSource(_pistas[_actual]);
+      await player.setAsset(_pistas.keys.elementAt(_actual));
       await player.setLoopMode(LoopMode.off);
       await player.setVolume(0);
       // Cerca del final de cada canción empieza el fundido a la siguiente.
@@ -149,7 +128,7 @@ class MusicaMenu with WidgetsBindingObserver {
         unawaited(player.setVolume(0));
         unawaited(player.play());
       }
-      _fundir(player, _volumen, _rapido);
+      _fundir(player, _volumenPista, _rapido);
     }
   }
 
@@ -168,10 +147,10 @@ class MusicaMenu with WidgetsBindingObserver {
           _actual = otra >= _actual ? otra + 1 : otra;
         }
         try {
-          await player.setAudioSource(_pistas[_actual]);
+          await player.setAsset(_pistas.keys.elementAt(_actual));
           if (_debeSonar) {
             unawaited(player.play());
-            _fundir(player, _volumen, _cruce);
+            _fundir(player, _volumenPista, _cruce);
           }
         } catch (error) {
           debugPrint('No se pudo pasar a la siguiente canción: $error');
