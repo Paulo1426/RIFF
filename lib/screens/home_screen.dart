@@ -1336,6 +1336,9 @@ class _PestanaProgreso extends StatelessWidget {
                       final columnas = max(2, (espacio.maxWidth / 200).floor());
                       final ancho =
                           (espacio.maxWidth - 10 * (columnas - 1)) / columnas;
+                      // Todas del mismo alto: cabe nombre en 2 líneas y
+                      // condición en 4; crece con la letra del sistema.
+                      final alto = MediaQuery.textScalerOf(context).scale(224);
                       return Wrap(
                         spacing: 10,
                         runSpacing: 10,
@@ -1343,7 +1346,8 @@ class _PestanaProgreso extends StatelessWidget {
                           for (final logro in logros)
                             SizedBox(
                               width: ancho,
-                              child: _TarjetaLogro(logro: logro),
+                              height: alto,
+                              child: TarjetaLogro(logro: logro),
                             ),
                         ],
                       );
@@ -1395,8 +1399,9 @@ class _Dato extends StatelessWidget {
 
 /// Insignia con el color de su dificultad: llena si se consiguió; si no,
 /// apagada con su avance. Vallenatólogo conseguida va en dorado.
-class _TarjetaLogro extends StatelessWidget {
-  const _TarjetaLogro({required this.logro});
+@visibleForTesting
+class TarjetaLogro extends StatelessWidget {
+  const TarjetaLogro({super.key, required this.logro});
 
   final Logro logro;
 
@@ -1444,13 +1449,19 @@ class _TarjetaLogro extends StatelessWidget {
                       fontWeight: FontWeight.w800,
                     )
                   : text.titleSmall,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: 2),
             Text(
               logro.condicion,
               textAlign: TextAlign.center,
               style: text.bodySmall?.copyWith(color: context.paleta.tintaSuave),
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
             ),
+            // El avance queda abajo en todas, aunque el texto sea corto.
+            const Spacer(),
             const SizedBox(height: 8),
             if (hecho)
               Text(
