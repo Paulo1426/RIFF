@@ -27,12 +27,12 @@ const _colorIntros = AppColors.signalOrange;
 /// "Adivina la intro": cada moneda saca una carta con una intro al azar que
 /// el jugador aún no tiene; las obtenidas quedan en su colección.
 class IntrosScreen extends ConsumerStatefulWidget {
-  const IntrosScreen({super.key, this.embebida = false, this.onMonedas});
+  const IntrosScreen({super.key, this.embebida = false, this.onEstado});
 
   // Dentro de una pestaña del menú: sin barra ni fondo propios; el título y
-  // las monedas van en la barra del menú (avisadas con [onMonedas]).
+  // las monedas van en la barra del menú (avisadas con [onEstado]).
   final bool embebida;
-  final ValueChanged<int>? onMonedas;
+  final ValueChanged<EstadoIntros>? onEstado;
 
   @override
   ConsumerState<IntrosScreen> createState() => _IntrosScreenState();
@@ -101,7 +101,7 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
         _estado = estado;
         _sinConexion = false;
       });
-      widget.onMonedas?.call(estado.monedas);
+      widget.onEstado?.call(estado);
       if (uid != null) unawaited(_descargar(uid));
     } catch (error) {
       if (!mounted) return;
@@ -163,7 +163,7 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
           .sacarIntro();
       if (!mounted) return;
       setState(() => _estado = estado);
-      widget.onMonedas?.call(estado.monedas);
+      widget.onEstado?.call(estado);
       final uid = ref.read(firebaseGameRepositoryProvider).uid;
       // Precarga la portada (y los audios) de la carta nueva mientras se
       // juega, para que al acertar salga junto con la canción.

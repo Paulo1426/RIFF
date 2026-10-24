@@ -83,6 +83,8 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   final Map<String, int> _prices = {};
   bool _melodyFound = false;
   bool _won = false;
+  // Lo ganado al acertar; se muestra en la barra de arriba.
+  (String, int, String)? _premio;
   bool _avanzando = false;
   // Canción revelada al acertar, para el reproductor final.
   String? _titulo;
@@ -641,18 +643,12 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           );
           _correct = true;
           _message = '¡Correcto! Reproduciendo la canción original.';
+          _premio = resultado.puntos > 0
+              ? ('🏆', resultado.puntos, 'puntos')
+              : resultado.monedas > 0
+              ? ('🪙', resultado.monedas, 'monedas para Adivina la intro')
+              : null;
         });
-        if (resultado.monedas > 0 || resultado.puntos > 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                resultado.puntos > 0
-                    ? '🏆 +${resultado.puntos} puntos'
-                    : '🪙 +${resultado.monedas} monedas para Adivina la intro',
-              ),
-            ),
-          );
-        }
       } else {
         setState(() {
           _correct = false;
@@ -997,6 +993,8 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                 'Nivel ${widget.numeroVisible ?? widget.nivel.numero}',
           ),
           actions: [
+            if (_premio case (final emoji, final cantidad, final nombre))
+              _Premio(emoji: emoji, cantidad: cantidad, nombre: nombre),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 250),
               child: _playing
@@ -1161,3 +1159,46 @@ String _emojiDe(TipoInstrumento tipo) => switch (tipo) {
   TipoInstrumento.guitarra => '🎸',
   TipoInstrumento.bajo => '🎵',
 };
+
+/// Lo ganado al acertar, en la barra de arriba: aparece con un rebote junto a
+/// su nombre para que se entienda qué se ganó.
+class _Premio extends StatelessWidget {
+  const _Premio({
+    required this.emoji,
+    required this.cantidad,
+    required this.nombre,
+  });
+
+  final String emoji;
+  final int cantidad;
+  final String nombre;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(right: 8),
+    child: TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 900),
+      curve: Curves.elasticOut,
+      builder: (context, t, hijo) => Transform.scale(scale: t, child: hijo),
+      child: Semantics(
+        liveRegion: true,
+        label: 'Ganaste $cantidad $nombre',
+        excludeSemantics: true,
+        child: Tooltip(
+          message: '+$cantidad $nombre',
+          child: Chip(
+            visualDensity: VisualDensity.compact,
+            backgroundColor: AppColors.medio.withValues(alpha: 0.3),
+            side: const BorderSide(color: AppColors.medio, width: 1.5),
+            avatar: Text(emoji),
+            label: Text(
+              '+$cantidad',
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}

@@ -14,9 +14,12 @@ import '../providers/providers.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/offline_game_store.dart';
 import '../animations/liquid_ripple_effect.dart';
+import '../widgets/aviso_insignia.dart';
 import '../widgets/boton_tema.dart';
 import '../widgets/dialogo_contrasena.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
+import '../services/insignias_vistas.dart';
+import '../services/recordatorios.dart';
 import '../theme.dart';
 import '../theme/liquid_glass_theme.dart';
 import '../widgets/liquid_glass/liquid_glass_appbar.dart';
@@ -122,7 +125,13 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   StreamSubscription<SaldoSalas>? _suscripcionSaldo;
   // Monedas de Adivina la intro para la barra (null hasta saberlas).
   int? _monedas;
-  TipoSala _tipoSala = TipoSala.instrumentos;
+  // El saldo de salas ya llegó (antes es todo cero y no sirve para insignias).
+  bool _saldoCargado = false;
+  // Revisando insignias o mostrando avisos al terminar un nivel.
+  bool _avisando = false;
+  bool _revisarOtraVez = false;
+  // El paquete offline se actualiza en segundo plano, uno tras otro.
+  Future<void> _paquete = Future.value();
   // Elementos que resalta el recorrido guiado.
   final _claveMenu = GlobalKey();
   final _clavesPestanas = List.generate(6, (_) => GlobalKey());
@@ -231,6 +240,43 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       );
     }
     if (!_avisoCerrado.isCompleted) _avisoCerrado.complete();
+    unawaited(Recordatorios.programar());
+  }
+
+  /// Avisa de las insignias conseguidas desde la última vez. Solo con todos
+  /// los datos cargados, para no tomar como nueva una que ya se tenía.
+  Future<void> _revisarInsignias() async {
+    final estado = _estado;
+    if (estado == null || _loading) return;
+    if (!widget.user.isAnonymous && !_saldoCargado) return;
+    if (_introsDisponibles && _resumenIntros == null) return;
+    if (_avisando) {
+      _revisarOtraVez = true;
+      return;
+    }
+    _avisando = true;
+    try {
+      final logrados = {
+        for (final logro in logrosDe(
+          _saldo,
+          _avanceDe(estado.dificultades, _resumenIntros),
+        ))
+          if (logro.logrado) logro.nombre: logro,
+      };
+      final nuevas = await InsigniasVistas(
+        widget.user.uid,
+      ).registrar(logrados.keys.toSet());
+      for (final nombre in nuevas) {
+        if (!mounted) break;
+        await mostrarInsignia(context, logrados[nombre]!);
+      }
+    } finally {
+      _avisando = false;
+    }
+    if (_revisarOtraVez && mounted) {
+      _revisarOtraVez = false;
+      await _revisarInsignias();
+    }
   }
 
   @override
@@ -242,7 +288,13 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           .read(firebaseGameRepositoryProvider)
           .saldoSalas()
           .listen(
-            (saldo) => setState(() => _saldo = saldo),
+            (saldo) {
+              setState(() {
+                _saldo = saldo;
+                _saldoCargado = true;
+              });
+              _revisarInsignias();
+            },
             onError: (Object error) =>
                 debugPrint('No se pudo leer el saldo de salas: $error'),
           );
@@ -313,6 +365,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         _offlineMode = false;
         _loading = false;
       });
+      unawaited(_revisarInsignias());
       if (_introsDisponibles) {
         unawaited(
           _estadoIntros().then((intros) {
@@ -321,6 +374,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
                 _resumenIntros = intros;
                 _monedas = intros?.monedas ?? _monedas;
               });
+              _revisarInsignias();
             }
           }),
         );
@@ -338,30 +392,38 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
               ),
         );
       }
-      try {
-        final bundle = await repository.descargarPaqueteOffline();
-        final refreshed = await _cacheOfflineBundle(
-          bundle,
-          widget.user.uid,
-          widget.user.isAnonymous,
-        );
-        if (!mounted) return;
-        setState(() => _offlineSnapshot = refreshed);
-      } catch (error) {
-        debugPrint('No se pudo actualizar el paquete offline: $error');
-        if (snapshot == null && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'No se pudieron descargar todos los niveles para usarlos sin conexión.',
-              ),
-            ),
-          );
-        }
-      }
+      // En segundo plano: los avisos tras un nivel no esperan la descarga.
+      final sinCopia = snapshot == null;
+      _paquete = _paquete.then((_) => _actualizarPaquete(sinCopia));
     } catch (error) {
       if (!mounted) return;
       await _loadOfflineSnapshot(error);
+    }
+  }
+
+  Future<void> _actualizarPaquete(bool sinCopia) async {
+    try {
+      final bundle = await ref
+          .read(firebaseGameRepositoryProvider)
+          .descargarPaqueteOffline();
+      final refreshed = await _cacheOfflineBundle(
+        bundle,
+        widget.user.uid,
+        widget.user.isAnonymous,
+      );
+      if (!mounted) return;
+      setState(() => _offlineSnapshot = refreshed);
+    } catch (error) {
+      debugPrint('No se pudo actualizar el paquete offline: $error');
+      if (sinCopia && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No se pudieron descargar todos los niveles para usarlos sin conexión.',
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -595,6 +657,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       final antes = _desbloqueadas();
       final terminadoAntes = _juegoTerminado();
       final introsAntes = _introsDisponibles;
+      // Las insignias esperan a que salgan estos avisos.
+      _avisando = true;
       await _cargar();
       if (!introsAntes && _introsDisponibles && mounted) {
         await _avisarIntros();
@@ -607,6 +671,9 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       if (!terminadoAntes && _juegoTerminado() && mounted) {
         await _avisarJuegoTerminado();
       }
+      _avisando = false;
+      _revisarOtraVez = false;
+      await _revisarInsignias();
     }
     return resultado;
   }
@@ -817,6 +884,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       await ref.read(firebaseGameRepositoryProvider).reiniciarProgreso();
       await _offlineStore.borrar(user.uid);
       await ref.read(offlineIntroStoreProvider).borrar(user.uid);
+      await InsigniasVistas(user.uid).borrar();
       if (!mounted) return;
       setState(() {
         _offlineSnapshot = null;
@@ -946,15 +1014,9 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   /// Título de la barra de arriba según la pestaña: el logo en el menú y el
   /// nombre de la sección en las demás.
   Widget _tituloBarra(EstadoJuegoRemoto? estado) => switch (_pestana) {
-    _pCancion when estado != null => Text(
-      'Dificultad · '
-      '${_nombreDificultad(_seleccionada ?? estado.dificultadActiva)}',
-    ),
     _pCancion => const Text('Adivina la canción'),
     _pIntro => const Text('Adivina la intro'),
-    _pSalas => Text(
-      _tipoSala == TipoSala.intros ? 'Adivina la intro' : 'Adivina la canción',
-    ),
+    _pSalas => const Text('Salas'),
     _pProgreso => const Text('Progreso'),
     _pAjustes => const Text('Ajustes'),
     _ => Row(
@@ -997,7 +1059,11 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         _introsFuturo = _estadoIntros()
           ..then((intros) {
             if (mounted && intros != null) {
-              setState(() => _monedas = intros.monedas);
+              setState(() {
+                _monedas = intros.monedas;
+                _resumenIntros = intros;
+              });
+              _revisarInsignias();
             }
           });
       }
@@ -1069,7 +1135,13 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     return IntrosScreen(
       key: const ValueKey('intro'),
       embebida: true,
-      onMonedas: (monedas) => setState(() => _monedas = monedas),
+      onEstado: (intros) {
+        setState(() {
+          _monedas = intros.monedas;
+          _resumenIntros = intros;
+        });
+        _revisarInsignias();
+      },
     );
   }
 
@@ -1113,13 +1185,41 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         ? 'Necesitas conexión a internet para jugar en salas.'
         : null;
     if (motivo == null) {
-      return SalasPanel(
-        key: const ValueKey('salas'),
-        onTipo: (tipo) => setState(() => _tipoSala = tipo),
-      );
+      return const SalasPanel(key: ValueKey('salas'));
     }
     return _bloqueada('salas-bloqueadas', motivo);
   }
+}
+
+/// Avance del jugador para calcular las insignias.
+AvanceJuego _avanceDe(
+  List<ProgresoDificultadRemoto> dificultades,
+  EstadoIntros? intros,
+) {
+  int completados(Dificultad dificultad) =>
+      dificultades
+          .where((item) => item.dificultad == dificultad)
+          .firstOrNull
+          ?.completados ??
+      0;
+  return AvanceJuego(
+    facil: completados(Dificultad.facil),
+    media: completados(Dificultad.medio),
+    avanzada: completados(Dificultad.avanzado),
+    nivelesPorDificultad: _ProgresoGeneral._nivelesPorDificultad,
+    introsAdivinadas:
+        intros?.intros
+            .where((item) => item.estado == EstadoIntro.completada)
+            .length ??
+        0,
+    totalIntros: intros == null
+        ? _ProgresoGeneral._totalIntros
+        : intros.intros.length + intros.restantes,
+    unInstrumento: dificultades.fold(
+      0,
+      (total, item) => total + item.unInstrumento,
+    ),
+  );
 }
 
 /// Pestaña Progreso: avance de niveles e intros, estadísticas de salas e
@@ -1138,33 +1238,6 @@ class _PestanaProgreso extends StatelessWidget {
   final SaldoSalas saldo;
   final bool esInvitado;
 
-  AvanceJuego _avance(EstadoIntros? intros) {
-    int completados(Dificultad dificultad) =>
-        dificultades
-            .where((item) => item.dificultad == dificultad)
-            .firstOrNull
-            ?.completados ??
-        0;
-    return AvanceJuego(
-      facil: completados(Dificultad.facil),
-      media: completados(Dificultad.medio),
-      avanzada: completados(Dificultad.avanzado),
-      nivelesPorDificultad: _ProgresoGeneral._nivelesPorDificultad,
-      introsAdivinadas:
-          intros?.intros
-              .where((item) => item.estado == EstadoIntro.completada)
-              .length ??
-          0,
-      totalIntros: intros == null
-          ? _ProgresoGeneral._totalIntros
-          : intros.intros.length + intros.restantes,
-      unInstrumento: dificultades.fold(
-        0,
-        (total, item) => total + item.unInstrumento,
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
@@ -1173,7 +1246,7 @@ class _PestanaProgreso extends StatelessWidget {
       builder: (context, snapshot) {
         final estadoIntros = snapshot.data;
         final cargando = snapshot.connectionState != ConnectionState.done;
-        final logros = logrosDe(saldo, _avance(estadoIntros));
+        final logros = logrosDe(saldo, _avanceDe(dificultades, estadoIntros));
         final conseguidos = logros.where((logro) => logro.logrado).length;
         return ListView(
           padding: EdgeInsets.symmetric(
@@ -1320,7 +1393,8 @@ class _Dato extends StatelessWidget {
   }
 }
 
-/// Insignia: a color si se consiguió; si no, apagada con su avance.
+/// Insignia con el color de su dificultad: llena si se consiguió; si no,
+/// apagada con su avance. Vallenatólogo conseguida va en dorado.
 class _TarjetaLogro extends StatelessWidget {
   const _TarjetaLogro({required this.logro});
 
@@ -1330,7 +1404,8 @@ class _TarjetaLogro extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final hecho = logro.logrado;
-    const color = AppColors.medio;
+    final color = colorInsignia(logro.nivel);
+    final dorada = hecho && logro.dorada;
     return Semantics(
       label:
           '${logro.nombre}: ${hecho ? 'conseguida' : 'pendiente, '
@@ -1345,8 +1420,12 @@ class _TarjetaLogro extends StatelessWidget {
               : context.paleta.superficie.withValues(alpha: 0.35),
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
-            color: hecho ? color : context.paleta.borde,
-            width: hecho ? 2 : 1,
+            color: dorada
+                ? AppColors.oro
+                : hecho
+                ? color
+                : color.withValues(alpha: 0.45),
+            width: dorada ? 3 : (hecho ? 2 : 1),
           ),
         ),
         child: Column(
@@ -1359,7 +1438,12 @@ class _TarjetaLogro extends StatelessWidget {
             Text(
               logro.nombre,
               textAlign: TextAlign.center,
-              style: text.titleSmall,
+              style: dorada
+                  ? text.titleSmall?.copyWith(
+                      color: context.paleta.tonoTexto(AppColors.oro),
+                      fontWeight: FontWeight.w800,
+                    )
+                  : text.titleSmall,
             ),
             const SizedBox(height: 2),
             Text(

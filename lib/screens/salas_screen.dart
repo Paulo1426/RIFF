@@ -54,10 +54,7 @@ EdgeInsets _margenLista(BuildContext context) => EdgeInsets.symmetric(
 /// canción e intros). Cada tarjeta crea su sala, se une con código o QR y
 /// lista las salas públicas de ese tipo.
 class SalasPanel extends ConsumerStatefulWidget {
-  const SalasPanel({super.key, this.onTipo});
-
-  // Avisa qué tipo de sala quedó al frente (el título va en la barra).
-  final ValueChanged<TipoSala>? onTipo;
+  const SalasPanel({super.key});
 
   @override
   ConsumerState<SalasPanel> createState() => _SalasPanelState();
@@ -171,7 +168,6 @@ class _SalasPanelState extends ConsumerState<SalasPanel> {
         key: _claveCarrusel,
         itemCount: TipoSala.values.length,
         colorDe: (index) => _colorTipo(TipoSala.values[index]),
-        onCambio: (index) => widget.onTipo?.call(TipoSala.values[index]),
         itemBuilder: (context, index, alFrente) {
           final tipo = TipoSala.values[index];
           return _TarjetaTipoSala(
@@ -225,12 +221,7 @@ class _TarjetaTipoSala extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         children: [
           Text(
-            intros ? '🎧' : '🥁🪗🎸',
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 44),
-          ),
-          Text(
-            'Salas',
+            intros ? 'Adivina la intro' : 'Adivina la canción',
             textAlign: TextAlign.center,
             style: text.headlineSmall?.copyWith(
               color: context.paleta.tonoTexto(color),
