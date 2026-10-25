@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/nivel.dart';
+import '../models/pista.dart';
 import '../models/sala.dart';
 
 class GameRepositoryException implements Exception {
@@ -326,6 +327,18 @@ class FirebaseGameRepository {
       'instrument': instrumento,
     });
     return ResultadoCompraInstrumento.fromJson(response);
+  }
+
+  Future<ResultadoPista> pedirPista({
+    required String gameId,
+    required TipoPista tipo,
+  }) async {
+    final response = await _post({
+      'action': 'requestHint',
+      'gameId': gameId,
+      'hintType': tipo.id,
+    });
+    return ResultadoPista.fromJson(response);
   }
 
   /// URL firmada y versión del archivo (cambia si se reemplaza en Storage).
