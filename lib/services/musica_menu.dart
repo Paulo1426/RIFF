@@ -6,7 +6,6 @@ import 'package:flutter/widgets.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 
-
 class MusicaMenu with WidgetsBindingObserver {
   // Incluidas en la app: suenan también sin conexión. El valor ajusta el
   // volumen de cada una (intro.mp3 está grabada más fuerte).
@@ -16,7 +15,7 @@ class MusicaMenu with WidgetsBindingObserver {
     'lib/assets/audio/menu/intro.mp3': 0.8,
   };
   static const _volumen = 0.009;
-  
+
   static const _cruce = Duration(milliseconds: 2500);
   static const _rapido = Duration(milliseconds: 800);
 

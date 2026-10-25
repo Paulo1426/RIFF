@@ -925,6 +925,8 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
   late final MusicaMenu _musicaMenu;
   bool _playing = false;
   bool _paused = false;
+  // Adivinada sin internet: no suena la original, solo las felicitaciones.
+  bool _ganadaSinConexion = false;
   bool _sending = false;
   String? _message;
   bool? _correct;
@@ -998,6 +1000,16 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
           ? 'intro:${widget.intro.id}'
           : 'intro:${widget.intro.id}:full';
       final guardado = await _audioService.cachedFile(clave);
+      // La original solo se descarga después de adivinarla con conexión.
+      if (guardado == null && tipo == 'fullSong' && widget.sinConexion) {
+        if (mounted) {
+          setState(
+            () => _message =
+                'La canción original sonará cuando tengas conexión a internet.',
+          );
+        }
+        return;
+      }
       final url = guardado != null
           ? Uri.file(guardado.path).toString()
           : await _urlRemota(tipo);
@@ -1131,6 +1143,7 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       return;
     }
     await widget.onOfflineCompletada?.call(answer);
+    _ganadaSinConexion = true;
     await _ganar(offline.titulo ?? answer, offline.artista);
   }
 
@@ -1138,10 +1151,12 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     _playbackGeneration++;
     await _audioService.detener();
     if (!mounted) return;
-    // Canción y portada a la vez; la portada suele estar ya descargada desde
-    // que se sacó la carta, así que salen juntas.
-    unawaited(_play('fullSong'));
-    await _cargarPortada();
+    // Sin conexión la original no está descargada: solo las felicitaciones.
+    if (!_ganadaSinConexion) {
+      // Canción y portada a la vez; así salen juntas.
+      unawaited(_play('fullSong'));
+      await _cargarPortada();
+    }
     if (!mounted) return;
     setState(() {
       _won = true;
@@ -1171,6 +1186,11 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     onDetener: _playing ? () => _audioService.detener() : null,
     onBuscar: _playing ? _audioService.buscar : null,
     confeti: _confeti,
+    sinConexion: _ganadaSinConexion,
+    nota: _ganadaSinConexion
+        ? '¡Felicitaciones! La canción original sonará cuando tengas '
+              'conexión a internet.'
+        : null,
     botones: Row(
       children: [
         Expanded(

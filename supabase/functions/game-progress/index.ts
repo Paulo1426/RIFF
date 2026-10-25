@@ -443,6 +443,19 @@ function normalizeAnswer(value: string): string {
     .replace(/\s+/g, " ");
 }
 
+/// Huella de la respuesta para los paquetes offline: el teléfono comprueba
+/// el acierto sin recibir el texto. El id evita comparar huellas entre
+/// canciones; el servidor vuelve a validar el acierto al sincronizar.
+async function answerHash(id: string, answer: string): Promise<string> {
+  const bytes = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${id}:${normalizeAnswer(answer)}`),
+  );
+  return [...new Uint8Array(bytes)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
 function shuffled<T>(items: T[]): T[] {
   const result = [...items];
   for (let index = result.length - 1; index > 0; index--) {
@@ -837,9 +850,12 @@ async function createOfflineBundle(
   ];
   const eligible = [...new Map(
     entries
+      // Solo niveles ya jugables: los que aún no se pueden iniciar no
+      // viajan al teléfono (ni sus audios ni su respuesta).
       .filter((entry) => {
         const nivel = entry.nivel as JsonObject;
-        return !guest || nivel.dificultad === "facil";
+        return (entry.completado === true || entry.puede_iniciar === true) &&
+          (!guest || nivel.dificultad === "facil");
       })
       .map((entry) => {
         const nivel = entry.nivel as JsonObject;
@@ -905,7 +921,10 @@ async function createOfflineBundle(
     );
     return {
       entry,
-      respuesta: answer.fields.respuestaCancionNormalizada,
+      respuestaHash: await answerHash(
+        levelId,
+        String(answer.fields.respuestaCancionNormalizada),
+      ),
       audioUrls,
       audioVersions,
       instrumentalAudioUrl: await createOfflineAudioUrl(
@@ -2305,9 +2324,9 @@ async function drawIntro(
   return { ...introSummary({ ...state, unlocked }), nueva: introId };
 }
 
-/// Paquete para jugar sin conexión las intros ya obtenidas: enlaces de
-/// descarga (intro, original y portada) y la respuesta normalizada, igual que
-/// el paquete offline de los niveles.
+/// Paquete para jugar sin conexión las intros ya obtenidas: enlace de la
+/// intro y la huella de la respuesta. Título, artista, original y portada
+/// revelan la canción: solo van de las intros ya adivinadas.
 async function introOfflineBundle(
   token: string,
   uid: string,
@@ -2327,17 +2346,22 @@ async function introOfflineBundle(
       if (typeof expected !== "string") {
         throw new HttpError(500, `La intro ${id} no tiene respuesta`);
       }
+      const done = state.completed.has(id);
       const [intro, fullSong, cover] = await Promise.all([
         createOfflineAudioUrl(pathOf("intro"), bucket),
-        createOfflineAudioUrl(pathOf("fullSong"), bucket),
+        done ? createOfflineAudioUrl(pathOf("fullSong"), bucket) : null,
         // Sin portada subida se juega igual: el reproductor muestra el disco.
-        createOfflineAudioUrl(pathOf("cover"), bucket).catch(() => null),
+        done
+          ? createOfflineAudioUrl(pathOf("cover"), bucket).catch(() => null)
+          : null,
       ]);
       return {
         id,
-        titulo: typeof fields.titulo === "string" ? fields.titulo : null,
-        artista: typeof fields.artista === "string" ? fields.artista : null,
-        respuesta: normalizeAnswer(expected),
+        titulo: done && typeof fields.titulo === "string" ? fields.titulo : null,
+        artista: done && typeof fields.artista === "string"
+          ? fields.artista
+          : null,
+        respuestaHash: await answerHash(id, expected),
         urls: { intro, fullSong, cover },
       };
     }),
@@ -2504,13 +2528,12 @@ async function handle(request: Request): Promise<Response> {
     const guest = firebaseClaim !== null &&
       typeof firebaseClaim === "object" &&
       (firebaseClaim as JsonObject).sign_in_provider === "anonymous";
-    // Nombre visible en las salas: el de Google o la parte local del correo.
-    const { name, email } = verified.payload;
+    // Nombre visible en las salas: el de la cuenta (Google) o uno genérico.
+    // Nunca el correo: las salas públicas las ve cualquier jugador.
+    const { name } = verified.payload;
     const playerName = typeof name === "string" && name.trim()
       ? name.trim().slice(0, 30)
-      : typeof email === "string"
-      ? email.split("@")[0].slice(0, 30)
-      : "Jugador";
+      : `Jugador ${uid.slice(0, 4).toUpperCase()}`;
     let rawBody: unknown;
     try {
       rawBody = await request.json();

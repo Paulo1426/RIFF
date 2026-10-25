@@ -694,9 +694,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     if (offlineLevel == null) {
       throw StateError('El nivel no está guardado para jugar offline');
     }
-    final correct =
-        OfflineGameStore.normalizeAnswer(answer) ==
-        OfflineGameStore.normalizeAnswer(offlineLevel.respuesta);
+    final correct = offlineLevel.acierta(answer);
     if (!mounted) return;
     if (!correct) {
       setState(() {
@@ -855,8 +853,10 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     onDetener: _playing ? () => _audioService.detener() : null,
     onBuscar: _playing ? _audioService.buscar : null,
     confeti: _confeti,
+    sinConexion: _playingOffline,
     nota: _playingOffline
-        ? 'La canción original se reproducirá cuando tengas conexión a internet.'
+        ? '¡Felicitaciones! La canción original sonará cuando tengas '
+              'conexión a internet.'
         : null,
     botones: _botonesFinales(),
   );

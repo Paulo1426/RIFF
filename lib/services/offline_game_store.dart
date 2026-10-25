@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../models/nivel.dart';
@@ -11,7 +12,7 @@ class OfflineLevelData {
     required this.nivel,
     required this.completado,
     required this.puedeIniciar,
-    required this.respuesta,
+    required this.respuestaHash,
     required this.audioPaths,
     this.instrumentalAudioPath,
   });
@@ -19,7 +20,11 @@ class OfflineLevelData {
   final Nivel nivel;
   final bool completado;
   final bool puedeIniciar;
-  final String respuesta;
+  // Huella de la respuesta (el servidor no envía el texto).
+  final String respuestaHash;
+
+  bool acierta(String answer) =>
+      OfflineGameStore.huella(nivel.id, answer) == respuestaHash;
   final Map<String, String> audioPaths;
   final String? instrumentalAudioPath;
 
@@ -28,11 +33,15 @@ class OfflineLevelData {
     final audioPaths = (json['audioPaths'] as Map<String, dynamic>).map(
       (key, value) => MapEntry(key, value as String),
     );
+    final nivel = Nivel.fromJson(entry['nivel'] as Map<String, dynamic>);
     return OfflineLevelData(
-      nivel: Nivel.fromJson(entry['nivel'] as Map<String, dynamic>),
+      nivel: nivel,
       completado: entry['completado'] as bool? ?? false,
       puedeIniciar: entry['puede_iniciar'] as bool? ?? false,
-      respuesta: entry['respuesta'] as String,
+      // Copias guardadas antes de la huella traen la respuesta en texto.
+      respuestaHash:
+          entry['respuestaHash'] as String? ??
+          OfflineGameStore.huella(nivel.id, entry['respuesta'] as String),
       audioPaths: Map.unmodifiable(audioPaths),
       instrumentalAudioPath: json['instrumentalAudioPath'] as String?,
     );
@@ -50,7 +59,7 @@ class OfflineLevelData {
         nivel: nivel,
         completado: completado ?? this.completado,
         puedeIniciar: puedeIniciar ?? this.puedeIniciar,
-        respuesta: respuesta,
+        respuestaHash: respuestaHash,
         audioPaths: audioPaths,
         instrumentalAudioPath: instrumentalAudioPath,
       );
@@ -205,7 +214,7 @@ class OfflineGameSnapshot {
       'nivel': stateData.nivel.toJson(),
       'completado': stateData.completado,
       'puede_iniciar': stateData.puedeIniciar,
-      'respuesta': stateData.respuesta,
+      'respuestaHash': stateData.respuestaHash,
     };
   }
 }
@@ -248,6 +257,12 @@ class OfflineGameStore {
       throw FormatException('El perfil offline guardado no es válido: $error');
     }
   }
+
+  /// Huella de [respuesta] para [id]: SHA-256 de "id:respuesta normalizada",
+  /// igual que `answerHash` en game-progress.
+  static String huella(String id, String respuesta) => sha256
+      .convert(utf8.encode('$id:${normalizeAnswer(respuesta)}'))
+      .toString();
 
   static String normalizeAnswer(String value) => value
       .toLowerCase()

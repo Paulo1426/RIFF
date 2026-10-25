@@ -13,33 +13,38 @@ class OfflineIntroData {
     required this.id,
     required this.titulo,
     required this.artista,
-    required this.respuesta,
+    required this.respuestaHash,
     required this.introPath,
-    required this.fullPath,
+    this.fullPath,
     this.coverPath,
   });
 
   final String id;
+  // Título, artista, original y portada solo llegan de intros ya adivinadas.
   final String? titulo;
   final String? artista;
-  // Respuesta normalizada por el servidor.
-  final String respuesta;
+  final String respuestaHash;
   final String introPath;
-  final String fullPath;
+  final String? fullPath;
   final String? coverPath;
 
   bool acierta(String answer) =>
-      OfflineGameStore.normalizeAnswer(answer) ==
-      OfflineGameStore.normalizeAnswer(respuesta);
+      OfflineGameStore.huella(id, answer) == respuestaHash;
 
   factory OfflineIntroData.fromJson(Map<String, dynamic> json) =>
       OfflineIntroData(
         id: json['id'] as String,
         titulo: json['titulo'] as String?,
         artista: json['artista'] as String?,
-        respuesta: json['respuesta'] as String,
+        // Copias guardadas antes de la huella traen la respuesta en texto.
+        respuestaHash:
+            json['respuestaHash'] as String? ??
+            OfflineGameStore.huella(
+              json['id'] as String,
+              json['respuesta'] as String,
+            ),
         introPath: json['introPath'] as String,
-        fullPath: json['fullPath'] as String,
+        fullPath: json['fullPath'] as String?,
         coverPath: json['coverPath'] as String?,
       );
 
@@ -47,7 +52,7 @@ class OfflineIntroData {
     'id': id,
     'titulo': titulo,
     'artista': artista,
-    'respuesta': respuesta,
+    'respuestaHash': respuestaHash,
     'introPath': introPath,
     'fullPath': fullPath,
     'coverPath': coverPath,
@@ -204,23 +209,29 @@ class OfflineIntroStore {
       final item = Map<String, dynamic>.from(raw as Map);
       final id = item['id'] as String;
       final urls = Map<String, dynamic>.from(item['urls'] as Map);
+      final full = urls['fullSong'] as String?;
       final cover = urls['cover'] as String?;
-      final archivos = await Future.wait([
+      final (introFile, fullFile, coverFile) = await (
         _audio.descargarYGuardar(urls['intro'] as String, 'intro:$id'),
-        _audio.descargarYGuardar(urls['fullSong'] as String, 'intro:$id:full'),
-        if (cover != null)
-          _audio
-              .descargarYGuardar(cover, 'intro:$id:cover')
-              .then<File?>((file) => file, onError: (_) => null),
-      ]);
+        full == null
+            ? Future<File?>.value()
+            : _audio.descargarYGuardar(full, 'intro:$id:full'),
+        cover == null
+            ? Future<File?>.value()
+            : _audio
+                  .descargarYGuardar(cover, 'intro:$id:cover')
+                  .then<File?>((file) => file, onError: (_) => null),
+      ).wait;
       intros[id] = OfflineIntroData(
         id: id,
         titulo: item['titulo'] as String?,
         artista: item['artista'] as String?,
-        respuesta: item['respuesta'] as String,
-        introPath: archivos[0]!.path,
-        fullPath: archivos[1]!.path,
-        coverPath: archivos.length > 2 ? archivos[2]?.path : null,
+        respuestaHash:
+            item['respuestaHash'] as String? ??
+            OfflineGameStore.huella(id, item['respuesta'] as String),
+        introPath: introFile.path,
+        fullPath: fullFile?.path,
+        coverPath: coverFile?.path,
       );
     }
     final snapshot = OfflineIntroSnapshot(

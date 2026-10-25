@@ -1,13 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:riff/services/firebase_game_repository.dart';
+import 'package:riff/services/offline_game_store.dart';
 import 'package:riff/services/offline_intro_store.dart';
 
 void main() {
-  const data = OfflineIntroData(
+  final data = OfflineIntroData(
     id: 'cancion-26',
     titulo: 'La Suerte Está Echada',
     artista: 'Diomedes Díaz',
-    respuesta: 'la suerte esta echada',
+    respuestaHash: OfflineGameStore.huella(
+      'cancion-26',
+      'la suerte esta echada',
+    ),
     introPath: 'intro.mp3',
     fullPath: 'original.mp3',
   );
@@ -21,7 +25,7 @@ void main() {
         {'id': 'cancion-26', 'numero': 1, 'estado': 'desbloqueada'},
       ],
     },
-    intros: const {'cancion-26': data},
+    intros: {'cancion-26': data},
     pendientes: const [],
   );
 
