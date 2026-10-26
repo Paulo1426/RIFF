@@ -272,82 +272,82 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     setState(() => _cargandoPista = tipo);
     try {
       if (_playingOffline) {
-        if (_monedasDisponibles < tipo.costoMonedas &&
-            !_pistasDesbloqueadas.containsKey(tipo)) {
-          throw Exception('No tienes monedas suficientes');
-        }
-        String valor = '';
-        if (tipo == TipoPista.artista) {
-          valor = widget.offlineLevel?.artista ?? 'Artista no disponible offline';
-        } else if (tipo == TipoPista.iniciales) {
-          valor = OfflineGameStore.maskInitials(
-            widget.offlineLevel?.nivel.cancionTitulo ?? widget.nivel.cancionTitulo,
-          );
-        } else if (tipo == TipoPista.cuartoInstrumento) {
-          final faltante = widget.nivel.instrumentos.firstWhere(
-            (inst) => !_purchased.contains(inst.id),
-            orElse: () => widget.nivel.instrumentos.first,
-          );
-          _purchased.add(faltante.id);
-          valor = faltante.tipo.nombre;
-        }
-
-        if (!_pistasDesbloqueadas.containsKey(tipo)) {
-          _monedasDisponibles = max(0, _monedasDisponibles - tipo.costoMonedas);
-        }
-        if (mounted) {
-          setState(() {
-            _pistasDesbloqueadas[tipo] = valor;
-          });
-        }
+        _resolverPistaLocal(tipo);
       } else {
-        final resultado = await ref.read(firebaseGameRepositoryProvider).pedirPista(
-              gameId: widget.gameId,
-              tipo: tipo,
-            );
-        if (!mounted) return;
-        setState(() {
-          _monedasDisponibles = resultado.monedasRestantes;
-          _pistasDesbloqueadas[tipo] = resultado.valor;
-          if (tipo == TipoPista.cuartoInstrumento &&
-              resultado.cuartoInstrumento != null) {
-            _purchased.add(resultado.cuartoInstrumento!);
-          }
-        });
+        try {
+          final resultado =
+              await ref.read(firebaseGameRepositoryProvider).pedirPista(
+                    gameId: widget.gameId,
+                    tipo: tipo,
+                  );
+          if (!mounted) return;
+          setState(() {
+            _monedasDisponibles = resultado.monedasRestantes;
+            _pistasDesbloqueadas[tipo] = resultado.valor;
+            if (tipo == TipoPista.cuartoInstrumento &&
+                resultado.cuartoInstrumento != null) {
+              _purchased.add(resultado.cuartoInstrumento!);
+            }
+          });
+        } catch (error) {
+          debugPrint('Backend no respondió para la pista; usando resolución local: $error');
+          _resolverPistaLocal(tipo);
+        }
       }
     } catch (error) {
-      if (widget.offlineLevel != null && mounted) {
-        debugPrint('Error online al pedir pista; intentando offline: $error');
-        setState(() => _playingOffline = true);
-        await _pedirPista(tipo);
-        return;
-      }
       if (mounted) {
-        showDialog<void>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Error al pedir pista'),
-            content: Text(
-              error.toString().contains('desconocida') ||
-                      error.toString().contains('requestHint')
-                  ? 'La función de pistas aún no se ha desplegado en Supabase.\n\n'
-                    'Para activarla en el servidor remoto, ejecuta en tu terminal:\n'
-                    'npx supabase functions deploy game-progress --project-ref hwjvwabvuavkexgibzps'
-                  : 'No se pudo obtener la pista: $error',
-            ),
-            actions: [
-              FilledButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('Aceptar'),
-              ),
-            ],
-          ),
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('No se pudo obtener la pista: $error')),
         );
       }
     } finally {
       if (mounted) {
         setState(() => _cargandoPista = null);
       }
+    }
+  }
+
+  void _resolverPistaLocal(TipoPista tipo) {
+    if (_monedasDisponibles < tipo.costoMonedas &&
+        !_pistasDesbloqueadas.containsKey(tipo)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No tienes monedas suficientes')),
+        );
+      }
+      return;
+    }
+
+    final catalogInfo = catalogoCancionesFallback[widget.nivel.id] ??
+        catalogoCancionesFallback[widget.nivel.cancionId];
+
+    String valor = '';
+    if (tipo == TipoPista.artista) {
+      valor = widget.offlineLevel?.artista ??
+          catalogInfo?.artista ??
+          'Artista desconocido';
+    } else if (tipo == TipoPista.iniciales) {
+      final titulo = catalogInfo?.titulo ??
+          (widget.nivel.cancionTitulo != 'Canción misteriosa'
+              ? widget.nivel.cancionTitulo
+              : (widget.offlineLevel?.nivel.cancionTitulo ?? ''));
+      valor = maskInitials(titulo.isNotEmpty ? titulo : 'Canción');
+    } else if (tipo == TipoPista.cuartoInstrumento) {
+      final faltante = widget.nivel.instrumentos.firstWhere(
+        (inst) => !_purchased.contains(inst.id),
+        orElse: () => widget.nivel.instrumentos.first,
+      );
+      _purchased.add(faltante.id);
+      valor = faltante.tipo.nombre;
+    }
+
+    if (!_pistasDesbloqueadas.containsKey(tipo)) {
+      _monedasDisponibles = max(0, _monedasDisponibles - tipo.costoMonedas);
+    }
+    if (mounted) {
+      setState(() {
+        _pistasDesbloqueadas[tipo] = valor;
+      });
     }
   }
 

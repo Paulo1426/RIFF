@@ -87,6 +87,20 @@ String maskInitials(String title) {
   }).join(' ');
 }
 
+/// Catálogo de canciones y artistas para resolución de pistas local/fallback.
+const Map<String, ({String titulo, String artista})> catalogoCancionesFallback = {
+  'facil-01': (titulo: 'Por supuesto que no', artista: 'Martín Elías Díaz'),
+  'facil-02': (titulo: 'A blanco y negro', artista: 'Silvestre Dangond'),
+  'facil-03': (titulo: 'Tira que jala', artista: 'Kvrass'),
+  'facil-04': (titulo: 'Los caminos de la vida', artista: 'Los Diablitos'),
+  'facil-05': (titulo: 'Obsesión', artista: 'Peter Manjarrés'),
+  'cancion-001': (titulo: 'Por supuesto que no', artista: 'Martín Elías Díaz'),
+  'cancion-002': (titulo: 'A blanco y negro', artista: 'Silvestre Dangond'),
+  'cancion-003': (titulo: 'Tira que jala', artista: 'Kvrass'),
+  'cancion-004': (titulo: 'Los caminos de la vida', artista: 'Los Diablitos'),
+  'cancion-005': (titulo: 'Obsesión', artista: 'Peter Manjarrés'),
+};
+
 class ResultadoPista {
   final TipoPista tipo;
   final String valor;
