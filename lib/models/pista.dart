@@ -63,6 +63,30 @@ extension TipoPistaExtension on TipoPista {
   }
 }
 
+/// Oculta letras manteniendo las iniciales visibles y respetando puntuación/espacios
+/// (ej: "L__ c______ d_ l_ v___").
+String maskInitials(String title) {
+  return title.split(' ').map((word) {
+    var firstLetterSeen = false;
+    final buffer = StringBuffer();
+    for (var i = 0; i < word.length; i++) {
+      final char = word[i];
+      final isAlphaNum = RegExp(r'[\p{L}\p{N}]', unicode: true).hasMatch(char);
+      if (isAlphaNum) {
+        if (!firstLetterSeen) {
+          firstLetterSeen = true;
+          buffer.write(char);
+        } else {
+          buffer.write('_');
+        }
+      } else {
+        buffer.write(char);
+      }
+    }
+    return buffer.toString();
+  }).join(' ');
+}
+
 class ResultadoPista {
   final TipoPista tipo;
   final String valor;
