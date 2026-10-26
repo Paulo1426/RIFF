@@ -1061,13 +1061,108 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                             : const SizedBox(width: double.infinity),
                       ),
                       const Divider(height: 24),
+                      if (_pistasDesbloqueadas.containsKey(TipoPista.artista))
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.signalOrange.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: AppColors.signalOrange.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.person_rounded,
+                                size: 16,
+                                color: AppColors.signalOrange,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Artista: ${_pistasDesbloqueadas[TipoPista.artista]}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (_pistasDesbloqueadas.containsKey(TipoPista.iniciales))
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.verde.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: AppColors.verde.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.text_fields_rounded,
+                                size: 16,
+                                color: AppColors.verde,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Iniciales: ${_pistasDesbloqueadas[TipoPista.iniciales]}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    letterSpacing: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (_pistasDesbloqueadas.containsKey(TipoPista.cuartoInstrumento))
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.blue.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.music_note_rounded,
+                                size: 16,
+                                color: Colors.blue,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '4to instrumento desbloqueado: ${_pistasDesbloqueadas[TipoPista.cuartoInstrumento]}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       TextField(
                         controller: _answerController,
                         enabled: !_sending,
                         textInputAction: TextInputAction.done,
                         onSubmitted: (_) => _submitAnswer(),
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: '¿Qué canción es?',
+                          hintText: _pistasDesbloqueadas[TipoPista.iniciales],
                         ),
                       ),
                       if (_message != null) ...[
