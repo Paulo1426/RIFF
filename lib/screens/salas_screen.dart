@@ -13,6 +13,7 @@ import '../providers/providers.dart';
 import '../services/firebase_game_repository.dart';
 import '../theme.dart';
 import '../theme/liquid_glass_theme.dart';
+import '../widgets/con_reflejo.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
 import '../widgets/liquid_glass/liquid_glass_appbar.dart';
 import '../widgets/liquid_glass/liquid_glass_button.dart';
@@ -68,6 +69,12 @@ class _SalasPanelState extends ConsumerState<SalasPanel> {
   StreamSubscription<SaldoSalas>? _suscripcionFichas;
   StreamSubscription<List<Sala>>? _suscripcionSalas;
   final _claveCarrusel = GlobalKey();
+  // Tipo de sala al frente del carrusel: sus salas abiertas van debajo.
+  // null con la tarjeta de Historial al frente.
+  TipoSala? _frente = TipoSala.values.first;
+  // null mientras carga el historial.
+  List<HistorialSala>? _historial;
+  StreamSubscription<List<HistorialSala>>? _suscripcionHistorial;
 
   FirebaseGameRepository get _repo => ref.read(firebaseGameRepositoryProvider);
 
@@ -77,6 +84,13 @@ class _SalasPanelState extends ConsumerState<SalasPanel> {
     _suscripcionFichas = _repo.saldoSalas().listen(
       (saldo) => setState(() => _fichas = saldo.fichas),
       onError: (Object error) => debugPrint('No se pudo leer fichas: $error'),
+    );
+    _suscripcionHistorial = _repo.historialSalas().listen(
+      (historial) => setState(() => _historial = historial),
+      onError: (Object error) {
+        debugPrint('No se pudo leer el historial de salas: $error');
+        setState(() => _historial = const []);
+      },
     );
     _suscripcionSalas = _repo.salasPublicas().listen(
       (salas) => setState(() => _publicas = salas),
@@ -110,6 +124,7 @@ class _SalasPanelState extends ConsumerState<SalasPanel> {
   void dispose() {
     _suscripcionFichas?.cancel();
     _suscripcionSalas?.cancel();
+    _suscripcionHistorial?.cancel();
     super.dispose();
   }
 
@@ -159,137 +174,464 @@ class _SalasPanelState extends ConsumerState<SalasPanel> {
   }
 
   @override
-  Widget build(BuildContext context) => ConCarga(
-    cargando: _ocupado,
-    texto: 'Entrando a la sala...',
-    child: Padding(
-      padding: const EdgeInsets.only(top: 12),
-      child: CarruselGiratorio(
-        key: _claveCarrusel,
-        itemCount: TipoSala.values.length,
-        colorDe: (index) => _colorTipo(TipoSala.values[index]),
-        itemBuilder: (context, index, alFrente) {
-          final tipo = TipoSala.values[index];
-          return _TarjetaTipoSala(
-            tipo: tipo,
-            alFrente: alFrente,
-            publicas: _publicas?.where((sala) => sala.tipo == tipo).toList(),
-            onCrear: () => _crear(tipo),
-            onUnirseConCodigo: _unirseConCodigo,
-            onUnirseA: _unirse,
-          );
-        },
-      ),
-    ),
-  );
-}
-
-Color _colorTipo(TipoSala tipo) =>
-    tipo == TipoSala.intros ? AppColors.signalOrange : AppColors.verde;
-
-/// Tarjeta de un tipo de sala dentro del carrusel de la pestaña Salas.
-class _TarjetaTipoSala extends StatelessWidget {
-  const _TarjetaTipoSala({
-    required this.tipo,
-    required this.alFrente,
-    required this.publicas,
-    required this.onCrear,
-    required this.onUnirseConCodigo,
-    required this.onUnirseA,
-  });
-
-  final TipoSala tipo;
-  final bool alFrente;
-  final List<Sala>? publicas;
-  final VoidCallback onCrear;
-  final VoidCallback onUnirseConCodigo;
-  final ValueChanged<String> onUnirseA;
-
-  @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final intros = tipo == TipoSala.intros;
-    final color = _colorTipo(tipo);
-    final publicas = this.publicas;
-    return LiquidGlassCard(
-      borderRadius: 28,
-      tintColor: color,
-      borderColor: alFrente ? color : null,
-      // Las laterales solo se ven al girar: sin desenfoque, que es caro.
-      blur: alFrente ? LiquidGlass.glassBlur : 0,
-      child: ListView(
-        padding: const EdgeInsets.all(20),
+    final frente = _frente;
+    final color = frente == null ? _colorSalas : _colorTipo(frente);
+    final publicas = _publicas?.where((sala) => sala.tipo == frente).toList();
+    return ConCarga(
+      cargando: _ocupado,
+      texto: 'Entrando a la sala...',
+      child: Column(
         children: [
-          Text(
-            intros ? 'Adivina la intro' : 'Adivina la canción',
-            textAlign: TextAlign.center,
-            style: text.headlineSmall?.copyWith(
-              color: context.paleta.tonoTexto(color),
-            ),
-          ),
-          if (!intros) ...[
-            const SizedBox(height: 10),
-            Center(
-              child: _Precio(
-                'Premios',
-                '🥇 🎟️10   🥈 🎟️7   🥉 🎟️3',
-                color,
-                destacado: true,
-              ),
-            ),
-          ],
-          const SizedBox(height: 16),
-          LiquidGlassButton(
-            onPressed: onCrear,
-            icon: Icons.add_rounded,
-            label: 'Crear sala',
-            precio: intros ? '🎟️ $precioCrearSalaIntros' : null,
-          ),
-          const SizedBox(height: 8),
-          LiquidGlassButton(
-            variant: LiquidGlassButtonVariant.secondary,
-            onPressed: onUnirseConCodigo,
-            icon: Icons.qr_code_rounded,
-            label: 'Unirse con código o QR',
-            precio: intros ? '🎟️ $precioEntrarSalaIntros' : null,
-          ),
-          const SizedBox(height: 20),
-          Text('Salas abiertas', style: text.titleMedium),
-          const SizedBox(height: 8),
-          if (publicas == null)
-            const Center(child: CircularProgressIndicator())
-          else if (publicas.isEmpty) ...[
-            SizedBox(height: 120, child: BandaMusical(color: color)),
-            Text(
-              'No hay salas abiertas ahora. ¡Crea una!',
-              textAlign: TextAlign.center,
-              style: text.bodyMedium?.copyWith(
-                color: context.paleta.tintaSuave,
-              ),
-            ),
-          ] else
-            for (final sala in publicas)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: _TarjetaSalaPublica(
-                  sala: sala,
-                  onUnirse: () => onUnirseA(sala.codigo),
+          Expanded(
+            flex: 5,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: CarruselGiratorio(
+                key: _claveCarrusel,
+                // Los dos tipos de sala y el historial: con tres, detrás
+                // asoma una a cada lado, como en el menú.
+                itemCount: TipoSala.values.length + 1,
+                // Como el menú principal: compactas, con reflejo y las
+                // otras asomando detrás.
+                compacto: true,
+                proporcion: 1.2,
+                colorDe: (index) => index < TipoSala.values.length
+                    ? _colorTipo(TipoSala.values[index])
+                    : _colorSalas,
+                onCambio: (index) => setState(
+                  () => _frente = index < TipoSala.values.length
+                      ? TipoSala.values[index]
+                      : null,
                 ),
+                itemBuilder: (context, index, alFrente) {
+                  if (index >= TipoSala.values.length) {
+                    Widget tarjeta(bool alFrente) => _TarjetaHistorial(
+                      alFrente: alFrente,
+                      historial: _historial,
+                      onVerTodas: _verHistorial,
+                    );
+                    return ConReflejo(
+                      color: _colorSalas,
+                      tarjeta: _SobreFondo(child: tarjeta(alFrente)),
+                      reflejo: tarjeta(false),
+                    );
+                  }
+                  final tipo = TipoSala.values[index];
+                  Widget tarjeta(bool alFrente) => _TarjetaTipoSala(
+                    tipo: tipo,
+                    alFrente: alFrente,
+                    onCrear: () => _crear(tipo),
+                    onUnirseConCodigo: _unirseConCodigo,
+                  );
+                  return ConReflejo(
+                    color: _colorTipo(tipo),
+                    tarjeta: _SobreFondo(child: tarjeta(alFrente)),
+                    // La copia del reflejo va sin desenfoque.
+                    reflejo: tarjeta(false),
+                  );
+                },
               ),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: ListView(
+              padding: _margenLista(context).copyWith(top: 4),
+              children: [
+                if (frente == null)
+                  Text(
+                    'Toca la tarjeta Historial para ver todas tus partidas.',
+                    textAlign: TextAlign.center,
+                    style: text.bodyMedium?.copyWith(
+                      color: context.paleta.tintaSuave,
+                    ),
+                  )
+                else ...[
+                  Text(
+                    'Salas abiertas · '
+                    '${frente == TipoSala.intros ? 'Adivina la intro' : 'Adivina la canción'}',
+                    style: text.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  if (publicas == null)
+                    const Center(child: CircularProgressIndicator())
+                  else if (publicas.isEmpty) ...[
+                    SizedBox(height: 100, child: BandaMusical(color: color)),
+                    Text(
+                      'No hay salas abiertas ahora. ¡Crea una!',
+                      textAlign: TextAlign.center,
+                      style: text.bodyMedium?.copyWith(
+                        color: context.paleta.tintaSuave,
+                      ),
+                    ),
+                  ] else
+                    for (final sala in publicas)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: _TarjetaSalaPublica(
+                          sala: sala,
+                          onUnirse: () => _unirse(sala.codigo),
+                        ),
+                      ),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-/// Etiqueta de precio o saldo bien visible: nombre arriba, valor grande.
-class _Precio extends StatelessWidget {
-  const _Precio(this.nombre, this.valor, this.color, {this.destacado = false});
+extension on _SalasPanelState {
+  /// Todas las salas terminadas, con ganador, modo y puesto del jugador.
+  void _verHistorial() {
+    final historial = _historial ?? const <HistorialSala>[];
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: context.paleta.fondo,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.85,
+        maxChildSize: 0.95,
+        builder: (context, desplazamiento) => ListView(
+          controller: desplazamiento,
+          padding: _margenLista(context),
+          children: [
+            Text(
+              '📜 Tus partidas en salas',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 16),
+            if (historial.isEmpty)
+              Text(
+                'Aquí aparecerán las salas que termines.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: context.paleta.tintaSuave),
+              )
+            else
+              for (final sala in historial)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _FilaHistorial(sala: sala),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
-  final String nombre;
-  final String valor;
+/// Fondo sólido del color de la app bajo una tarjeta del carrusel: el vidrio
+/// deja de transparentar las tarjetas de atrás.
+class _SobreFondo extends StatelessWidget {
+  const _SobreFondo({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: context.paleta.fondo,
+      borderRadius: BorderRadius.circular(28),
+    ),
+    child: child,
+  );
+}
+
+Color _colorTipo(TipoSala tipo) =>
+    tipo == TipoSala.intros ? AppColors.signalOrange : AppColors.verde;
+
+/// Tarjeta de un tipo de sala dentro del carrusel de la pestaña Salas:
+/// título, premios o precios y los botones para crear o unirse.
+class _TarjetaTipoSala extends StatelessWidget {
+  const _TarjetaTipoSala({
+    required this.tipo,
+    required this.alFrente,
+    required this.onCrear,
+    required this.onUnirseConCodigo,
+  });
+
+  final TipoSala tipo;
+  final bool alFrente;
+  final VoidCallback onCrear;
+  final VoidCallback onUnirseConCodigo;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final intros = tipo == TipoSala.intros;
+    final color = _colorTipo(tipo);
+    return LiquidGlassCard(
+      borderRadius: 28,
+      // Como en el menú: lo bastante opaca para que no se vea la de atrás.
+      opacity: 0.6,
+      tintColor: color,
+      borderColor: alFrente ? color : null,
+      // Las laterales solo se ven al girar: sin desenfoque, que es caro.
+      blur: alFrente ? LiquidGlass.glassBlur : 0,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Center(
+          // Con letra grande o pantallas bajas se encoge en vez de desbordarse.
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: SizedBox(
+              width: 300,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    intros ? 'Adivina la intro' : 'Adivina la canción',
+                    textAlign: TextAlign.center,
+                    style: text.headlineSmall?.copyWith(
+                      color: context.paleta.tonoTexto(color),
+                    ),
+                  ),
+                  if (!intros) ...[
+                    const SizedBox(height: 10),
+                    Center(child: _Premios(color: color)),
+                  ],
+                  const SizedBox(height: 16),
+                  LiquidGlassButton(
+                    onPressed: onCrear,
+                    icon: Icons.add_rounded,
+                    label: 'Crear sala',
+                    precio: intros ? '🎟️ $precioCrearSalaIntros' : null,
+                  ),
+                  const SizedBox(height: 8),
+                  LiquidGlassButton(
+                    variant: LiquidGlassButtonVariant.secondary,
+                    onPressed: onUnirseConCodigo,
+                    icon: Icons.qr_code_rounded,
+                    label: 'Unirse con código o QR',
+                    precio: intros ? '🎟️ $precioEntrarSalaIntros' : null,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tarjeta del historial en el carrusel: las últimas 4 partidas; al
+/// tocarla se ven todas con sus detalles.
+class _TarjetaHistorial extends StatelessWidget {
+  const _TarjetaHistorial({
+    required this.alFrente,
+    required this.historial,
+    required this.onVerTodas,
+  });
+
+  final bool alFrente;
+  final List<HistorialSala>? historial;
+  final VoidCallback onVerTodas;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final historial = this.historial;
+    final tono = context.paleta.tonoTexto(_colorSalas);
+    return LiquidGlassCard(
+      borderRadius: 28,
+      opacity: 0.6,
+      tintColor: _colorSalas,
+      borderColor: alFrente ? _colorSalas : null,
+      blur: alFrente ? LiquidGlass.glassBlur : 0,
+      child: LiquidRippleEffect(
+        onTap: onVerTodas,
+        borderRadius: BorderRadius.circular(28),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: SizedBox(
+                width: 290,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      '📜 Historial',
+                      textAlign: TextAlign.center,
+                      style: text.headlineSmall?.copyWith(color: tono),
+                    ),
+                    const SizedBox(height: 12),
+                    if (historial == null)
+                      const Center(child: CircularProgressIndicator())
+                    else if (historial.isEmpty)
+                      Text(
+                        'Aquí aparecerán las salas que termines.',
+                        textAlign: TextAlign.center,
+                        style: text.bodyMedium?.copyWith(
+                          color: context.paleta.tintaSuave,
+                        ),
+                      )
+                    else
+                      for (final sala in historial.take(4))
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: _FilaCorta(sala: sala),
+                        ),
+                    if (historial != null && historial.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              'Ver todas (${historial.length})',
+                              style: text.labelLarge?.copyWith(color: tono),
+                            ),
+                            Icon(Icons.chevron_right_rounded, color: tono),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Partida en la tarjeta del historial: tipo, nombre de la sala y puesto.
+class _FilaCorta extends StatelessWidget {
+  const _FilaCorta({required this.sala});
+
+  final HistorialSala sala;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final color = _colorTipo(sala.tipo);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        children: [
+          Text(sala.tipo == TipoSala.intros ? '🎧' : '🥁'),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              sala.nombre,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: text.bodyMedium,
+            ),
+          ),
+          Text(
+            sala.ganaste ? '🏆 1.º' : '${sala.puesto}.º',
+            style: text.labelLarge?.copyWith(fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Una partida con todos sus detalles: ganador, tipo y modo, y el puesto del
+/// jugador.
+class _FilaHistorial extends StatelessWidget {
+  const _FilaHistorial({required this.sala});
+
+  final HistorialSala sala;
+
+  static String _fecha(DateTime? fecha) {
+    if (fecha == null) return '';
+    final local = fecha.toLocal();
+    String dos(int n) => n.toString().padLeft(2, '0');
+    return '${dos(local.day)}/${dos(local.month)}/${local.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final color = _colorTipo(sala.tipo);
+    final suave = text.bodyMedium?.copyWith(color: context.paleta.tintaSuave);
+    return LiquidGlassCard(
+      borderRadius: 18,
+      tintColor: color,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          // Puesto del jugador en grande.
+          Container(
+            width: 52,
+            height: 52,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: color.withValues(alpha: 0.2),
+              border: Border.all(color: color, width: 2),
+            ),
+            child: Text(
+              sala.ganaste ? '🏆' : '${sala.puesto}.º',
+              style: text.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(sala.nombre, style: text.titleMedium),
+                const SizedBox(height: 2),
+                Text(
+                  sala.ganaste
+                      ? '¡Ganaste tú!'
+                      : sala.ganadorNombre == null
+                      ? 'Nadie ganó esta sala'
+                      : 'Ganador: ${sala.ganadorNombre}',
+                  style: text.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: context.paleta.tonoTexto(color),
+                  ),
+                ),
+                Text(
+                  '${sala.tipo == TipoSala.intros ? '🎧 Adivina la intro' : '🥁 Adivina la canción'}'
+                  '${sala.modo == null ? '' : ' · ${_nombreModo(sala.modo!)}'}',
+                  style: suave,
+                ),
+                Text(
+                  'Tu posición: ${sala.puesto} de ${sala.jugadores} · '
+                  '${_fecha(sala.terminadaEn)}',
+                  style: suave,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Premios de las salas de Adivina la canción, uno debajo del otro.
+class _Premios extends StatelessWidget {
+  const _Premios({required this.color});
+
   final Color color;
-  final bool destacado;
 
   @override
   Widget build(BuildContext context) {
@@ -297,7 +639,7 @@ class _Precio extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: destacado ? 0.12 : 0.08),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: color.withValues(alpha: 0.7), width: 1.5),
       ),
@@ -305,14 +647,35 @@ class _Precio extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            nombre.toUpperCase(),
+            'PREMIOS',
             style: text.labelSmall?.copyWith(
               color: context.paleta.tonoTexto(color),
               fontWeight: FontWeight.w800,
               letterSpacing: 1,
             ),
           ),
-          Text(valor, style: text.titleLarge),
+          const SizedBox(height: 4),
+          for (final (medalla, puesto, fichas) in const [
+            ('🥇', '1.º', 10),
+            ('🥈', '2.º', 7),
+            ('🥉', '3.º', 3),
+          ])
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('$medalla $puesto', style: text.titleMedium),
+                  const SizedBox(width: 16),
+                  Text(
+                    '🎟️ $fichas fichas',
+                    style: text.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );

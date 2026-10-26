@@ -315,6 +315,22 @@ class FirebaseGameRepository {
       .snapshots()
       .map((doc) => doc.exists ? Sala.fromMap(doc.data()!) : null);
 
+  /// Últimas salas terminadas del jugador, la más reciente primero.
+  Stream<List<HistorialSala>> historialSalas() {
+    final uid = this.uid;
+    if (uid == null) return Stream.value(const []);
+    return FirebaseFirestore.instance
+        .collection('users/$uid/historialSalas')
+        .orderBy('terminadaEn', descending: true)
+        .limit(30)
+        .snapshots()
+        .map(
+          (query) => [
+            for (final doc in query.docs) HistorialSala.fromMap(doc.data()),
+          ],
+        );
+  }
+
   /// Salas públicas que aún esperan jugadores.
   Stream<List<Sala>> salasPublicas() => FirebaseFirestore.instance
       .collection('salas')

@@ -74,4 +74,28 @@ void main() {
     });
     expect(sala.clasificacion.map((j) => j.nombre), ['Beto', 'Caro', 'Ana']);
   });
+
+  test('lee una sala del historial y tolera campos que faltan', () {
+    final sala = HistorialSala.fromMap({
+      'codigo': 'ABC234',
+      'nombre': 'Sala de Ana',
+      'tipo': 'intros',
+      'modo': 'eliminacion',
+      'ganadorNombre': 'Luis',
+      'ganaste': false,
+      'puesto': 2,
+      'jugadores': 4,
+      'terminadaEn': '2026-10-26T20:00:00.000Z',
+    });
+    expect(sala.tipo, TipoSala.intros);
+    expect(sala.modo, ModoSala.eliminacion);
+    expect(sala.ganadorNombre, 'Luis');
+    expect(sala.puesto, 2);
+    expect(sala.terminadaEn, DateTime.utc(2026, 10, 26, 20));
+
+    final vacia = HistorialSala.fromMap({'tipo': 'otro'});
+    expect(vacia.tipo, TipoSala.instrumentos);
+    expect(vacia.modo, isNull);
+    expect(vacia.ganadorNombre, isNull);
+  });
 }

@@ -1569,17 +1569,40 @@ async function updateRoom<T>(
     const { borrar, extra = [], resultado } = cambiado;
     let campos = cambiado.campos;
     const writes = [...extra];
-    // Al terminar una sala se guardan las estadísticas de cada jugador y,
-    // si es de instrumentos, se reparten las fichas; todo en el mismo
-    // guardado que la cierra para que no se cuente ni se pague dos veces.
+    // Al terminar una sala se guardan las estadísticas y el historial de
+    // cada jugador y, si es de instrumentos, se reparten las fichas; todo en
+    // el mismo guardado que la cierra para que no se cuente ni se pague dos
+    // veces.
     if (campos?.estado === "terminada" && sala.fields.estado !== "terminada") {
       const final = { ...sala.fields, ...campos };
       const ranking = roomRanking(final);
       const premios = final.tipo === "intros" ? {} : premiosSala(ranking);
-      const ganadorUid = ranking.find((jugador) =>
+      const ganador = ranking.find((jugador) =>
         jugador.uid === final.ganadorUid
-      )?.uid;
+      );
+      const ganadorUid = ganador?.uid;
+      const creador = roomPlayers(final)[final.creadorUid as string];
+      const terminadaEn = new Date().toISOString();
       for (const [puesto, jugador] of ranking.entries()) {
+        // Historial del jugador: users/{uid}/historialSalas/{codigo}.
+        writes.push({
+          update: {
+            name: documentName(
+              `users/${jugador.uid}/historialSalas/${codigo}`,
+            ),
+            fields: toFields({
+              codigo,
+              nombre: `Sala de ${creador?.nombre ?? "Alguien"}`,
+              tipo: final.tipo ?? "instrumentos",
+              modo: final.modo ?? null,
+              ganadorNombre: ganador?.nombre ?? null,
+              ganaste: jugador.uid === ganadorUid,
+              puesto: puesto + 1,
+              jugadores: ranking.length,
+              terminadaEn,
+            }),
+          },
+        });
         writes.push(
           walletStatsWrite(
             jugador.uid,

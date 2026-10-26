@@ -182,6 +182,45 @@ class Sala {
   }
 }
 
+/// Una sala terminada en el historial del jugador
+/// (`users/{uid}/historialSalas/{codigo}`, la escribe el servidor al cerrarla).
+class HistorialSala {
+  const HistorialSala({
+    required this.codigo,
+    required this.nombre,
+    required this.tipo,
+    required this.modo,
+    required this.ganadorNombre,
+    required this.ganaste,
+    required this.puesto,
+    required this.jugadores,
+    required this.terminadaEn,
+  });
+
+  final String codigo;
+  final String nombre;
+  final TipoSala tipo;
+  final ModoSala? modo;
+  // null si nadie ganó (todos abandonaron o nadie acertó).
+  final String? ganadorNombre;
+  final bool ganaste;
+  final int puesto;
+  final int jugadores;
+  final DateTime? terminadaEn;
+
+  factory HistorialSala.fromMap(Map<String, dynamic> map) => HistorialSala(
+    codigo: map['codigo'] as String? ?? '',
+    nombre: map['nombre'] as String? ?? 'Sala',
+    tipo: TipoSala.values.asNameMap()[map['tipo']] ?? TipoSala.instrumentos,
+    modo: ModoSala.values.asNameMap()[map['modo']],
+    ganadorNombre: map['ganadorNombre'] as String?,
+    ganaste: map['ganaste'] as bool? ?? false,
+    puesto: (map['puesto'] as num?)?.toInt() ?? 0,
+    jugadores: (map['jugadores'] as num?)?.toInt() ?? 0,
+    terminadaEn: DateTime.tryParse(map['terminadaEn'] as String? ?? ''),
+  );
+}
+
 /// Canción que le toca al jugador en la sala, o por qué no tiene ninguna.
 class PartidaSala {
   const PartidaSala({
