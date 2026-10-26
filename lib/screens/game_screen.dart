@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/instrumento.dart';
 import '../models/nivel.dart';
 import '../models/partida.dart';
+import '../models/pista.dart';
 import '../providers/providers.dart';
 import '../services/audio_service.dart';
 import '../services/firebase_game_repository.dart';
@@ -21,6 +22,7 @@ import '../theme.dart';
 import '../widgets/liquid_glass/liquid_glass_appbar.dart';
 import '../widgets/liquid_glass/liquid_glass_button.dart';
 import '../widgets/liquid_glass/liquid_glass_card.dart';
+import '../widgets/liquid_glass/pistas_dialog.dart';
 import '../widgets/reproductor_cancion.dart';
 
 enum ResultadoNivel { terminar, siguiente }
@@ -93,6 +95,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   late bool _playingOffline;
   int _playbackGeneration = 0;
   late final Partida? _offlinePartida;
+  int _monedasDisponibles = 0;
+  final Map<TipoPista, String> _pistasDesbloqueadas = {};
+  TipoPista? _cargandoPista;
 
   @override
   void initState() {
@@ -111,6 +116,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             random: Random.secure(),
           )
         : null;
+    unawaited(_cargarMonedas());
   }
 
   @override
@@ -240,6 +246,106 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     } finally {
       if (mounted) setState(() => _buying = false);
     }
+  }
+
+  Future<void> _cargarMonedas() async {
+    try {
+      if (!_playingOffline) {
+        final estado = await ref.read(firebaseGameRepositoryProvider).cargarIntros();
+        if (mounted) {
+          setState(() => _monedasDisponibles = estado.monedas);
+        }
+      } else {
+        final uid = ref.read(usuarioProvider).id;
+        final store = await ref.read(offlineIntroStoreProvider).load(uid);
+        if (mounted && store != null) {
+          setState(() => _monedasDisponibles = store.estado.monedas);
+        }
+      }
+    } catch (e) {
+      debugPrint('No se pudieron cargar las monedas del usuario: $e');
+    }
+  }
+
+  Future<void> _pedirPista(TipoPista tipo) async {
+    if (_cargandoPista != null) return;
+    setState(() => _cargandoPista = tipo);
+    try {
+      if (_playingOffline) {
+        if (_monedasDisponibles < tipo.costoMonedas &&
+            !_pistasDesbloqueadas.containsKey(tipo)) {
+          throw Exception('No tienes monedas suficientes');
+        }
+        String valor = '';
+        if (tipo == TipoPista.artista) {
+          valor = widget.offlineLevel?.artista ?? 'Artista no disponible offline';
+        } else if (tipo == TipoPista.iniciales) {
+          valor = OfflineGameStore.maskInitials(
+            widget.offlineLevel?.nivel.cancionTitulo ?? widget.nivel.cancionTitulo,
+          );
+        } else if (tipo == TipoPista.cuartoInstrumento) {
+          final faltante = widget.nivel.instrumentos.firstWhere(
+            (inst) => !_purchased.contains(inst.id),
+            orElse: () => widget.nivel.instrumentos.first,
+          );
+          _purchased.add(faltante.id);
+          valor = faltante.tipo.nombre;
+        }
+
+        if (!_pistasDesbloqueadas.containsKey(tipo)) {
+          _monedasDisponibles = max(0, _monedasDisponibles - tipo.costoMonedas);
+        }
+        if (mounted) {
+          setState(() {
+            _pistasDesbloqueadas[tipo] = valor;
+          });
+        }
+      } else {
+        final resultado = await ref.read(firebaseGameRepositoryProvider).pedirPista(
+              gameId: widget.gameId,
+              tipo: tipo,
+            );
+        if (!mounted) return;
+        setState(() {
+          _monedasDisponibles = resultado.monedasRestantes;
+          _pistasDesbloqueadas[tipo] = resultado.valor;
+          if (tipo == TipoPista.cuartoInstrumento &&
+              resultado.cuartoInstrumento != null) {
+            _purchased.add(resultado.cuartoInstrumento!);
+          }
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al pedir pista: $error')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _cargandoPista = null);
+      }
+    }
+  }
+
+  Future<void> _abrirDialogoPistas() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => PistasDialog(
+          saldoMonedas: _monedasDisponibles,
+          pistasDesbloqueadas: _pistasDesbloqueadas,
+          cargandoTipo: _cargandoPista,
+          onComprarPista: (tipo) async {
+            setDialogState(() => _cargandoPista = tipo);
+            await _pedirPista(tipo);
+            if (context.mounted) {
+              setDialogState(() {});
+            }
+          },
+        ),
+      ),
+    );
   }
 
   // Llamar dentro de setState: guarda el descuento para animarlo.
@@ -829,6 +935,17 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                 'Nivel ${widget.numeroVisible ?? widget.nivel.numero}',
           ),
           actions: [
+            if (!_won)
+              IconButton(
+                tooltip: 'Pistas y comodines (🪙 $_monedasDisponibles)',
+                icon: Badge(
+                  label: Text('$_monedasDisponibles'),
+                  isLabelVisible: _monedasDisponibles > 0,
+                  backgroundColor: AppColors.signalOrange,
+                  child: const Icon(Icons.lightbulb_rounded),
+                ),
+                onPressed: _abrirDialogoPistas,
+              ),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 250),
               child: _playing
