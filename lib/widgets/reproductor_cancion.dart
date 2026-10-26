@@ -4,6 +4,7 @@ import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 
 import '../animations/liquid_shimmer.dart';
+import '../animations/refresco.dart';
 import '../theme.dart';
 import 'liquid_glass/liquid_glass_card.dart';
 
@@ -41,8 +42,10 @@ class ReproductorCancion extends StatelessWidget {
   final ImageProvider? portada;
   final bool reproduciendo;
   final bool enPausa;
-  final Duration posicion;
-  final Duration duracion;
+  // Se leen en cada refresco de la barra mientras suena: así no hace falta
+  // reconstruir la pantalla entera para moverla.
+  final ValueGetter<Duration> posicion;
+  final ValueGetter<Duration> duracion;
   // null deshabilita el botón (p. ej. sin conexión).
   final VoidCallback? onReproducirPausar;
   final VoidCallback? onDesdeInicio;
@@ -111,7 +114,6 @@ class ReproductorCancion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final total = max(duracion.inMilliseconds, 1).toDouble();
     return LayoutBuilder(
       builder: (context, espacio) {
         final lado = min(
@@ -212,32 +214,47 @@ class ReproductorCancion extends StatelessWidget {
                 ),
               ),
               if (!sinConexion) ...[
-                SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    activeTrackColor: color,
-                    inactiveTrackColor: context.paleta.borde,
-                    thumbColor: color,
-                    overlayColor: color.withValues(alpha: 0.15),
-                    trackHeight: 4,
-                  ),
-                  child: Slider(
-                    value: posicion.inMilliseconds.clamp(0, total).toDouble(),
-                    max: total,
-                    onChanged: onBuscar == null
-                        ? null
-                        : (valor) =>
-                              onBuscar!(Duration(milliseconds: valor.round())),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(_tiempo(posicion), style: text.bodySmall),
-                      Text(_tiempo(duracion), style: text.bodySmall),
-                    ],
-                  ),
+                Refresco(
+                  activo: reproduciendo && !enPausa,
+                  builder: (context) {
+                    final posicion = this.posicion();
+                    final duracion = this.duracion();
+                    final total = max(duracion.inMilliseconds, 1).toDouble();
+                    return Column(
+                      children: [
+                        SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            activeTrackColor: color,
+                            inactiveTrackColor: context.paleta.borde,
+                            thumbColor: color,
+                            overlayColor: color.withValues(alpha: 0.15),
+                            trackHeight: 4,
+                          ),
+                          child: Slider(
+                            value: posicion.inMilliseconds
+                                .clamp(0, total)
+                                .toDouble(),
+                            max: total,
+                            onChanged: onBuscar == null
+                                ? null
+                                : (valor) => onBuscar!(
+                                    Duration(milliseconds: valor.round()),
+                                  ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(_tiempo(posicion), style: text.bodySmall),
+                              Text(_tiempo(duracion), style: text.bodySmall),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 8),
                 Row(

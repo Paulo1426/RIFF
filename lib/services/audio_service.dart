@@ -134,7 +134,15 @@ class AudioService {
     return File('${cacheDirectory.path}/$fileName.mp3');
   }
 
-  Future<File> _ensureCached(String url, String key) async {
+  // Descargas en curso por clave: si dos niveles piden el mismo archivo a la
+  // vez (misma canción), comparten una descarga en vez de escribir los dos el
+  // mismo .download y dañarlo.
+  final Map<String, Future<File>> _enCurso = {};
+
+  Future<File> _ensureCached(String url, String key) => _enCurso[key] ??=
+      _descargar(url, key).whenComplete(() => _enCurso.remove(key));
+
+  Future<File> _descargar(String url, String key) async {
     final file = await _cacheFile(key);
     if (await file.exists() && await file.length() > 0) return file;
 

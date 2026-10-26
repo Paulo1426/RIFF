@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../animations/liquid_ripple_effect.dart';
+import '../animations/refresco.dart';
 import '../animations/sound_wave_animation.dart';
 import '../providers/providers.dart';
 import '../models/artistas.dart';
@@ -934,7 +935,6 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
   late String? _titulo = widget.intro.titulo;
   late String? _artista = widget.intro.artista;
   ImageProvider? _portada;
-  Timer? _reloj;
   int _playbackGeneration = 0;
 
   @override
@@ -943,7 +943,6 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     _audioService = ref.read(audioServiceProvider);
     _musicaMenu = ref.read(musicaMenuProvider)..entrarNivel();
     if (_won) {
-      _iniciarReloj();
       unawaited(_cargarPortada().then((_) => mounted ? setState(() {}) : null));
     } else if (widget.reproducirAlAbrir) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -955,7 +954,6 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
   @override
   void dispose() {
     _musicaMenu.salirNivel();
-    _reloj?.cancel();
     _confeti.dispose();
     _playbackGeneration++;
     _answerController.dispose();
@@ -979,12 +977,6 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
           );
   }
 
-  // Refresca la barra de progreso del reproductor mientras suena.
-  void _iniciarReloj() =>
-      _reloj ??= Timer.periodic(const Duration(milliseconds: 300), (_) {
-        if (mounted && _playing && !_paused) setState(() {});
-      });
-
   /// [tipo]: 'intro' o 'fullSong'.
   Future<void> _play(String tipo) async {
     final generation = ++_playbackGeneration;
@@ -993,7 +985,6 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       _paused = false;
       _message = null;
     });
-    _iniciarReloj();
     try {
       // Mismas claves que la descarga offline: si ya está, no hace falta red.
       final clave = tipo == 'intro'
@@ -1165,7 +1156,6 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       _artista = artista;
     });
     _confeti.play();
-    _iniciarReloj();
   }
 
   Widget _vistaGanada() => ReproductorCancion(
@@ -1176,10 +1166,9 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     portada: _portada,
     reproduciendo: _playing,
     enPausa: _paused,
-    posicion: _playing ? _audioService.posicion : Duration.zero,
-    duracion: _playing
-        ? (_audioService.duracion ?? Duration.zero)
-        : Duration.zero,
+    posicion: () => _playing ? _audioService.posicion : Duration.zero,
+    duracion: () =>
+        _playing ? (_audioService.duracion ?? Duration.zero) : Duration.zero,
     onReproducirPausar: () => _playing ? _togglePause() : _play('fullSong'),
     onDesdeInicio: () =>
         _playing ? _audioService.buscar(Duration.zero) : _play('fullSong'),
@@ -1215,8 +1204,12 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     ),
   );
 
-  /// Barra de avance de la intro con el tiempo transcurrido y el total.
-  Widget _lineaDeTiempo() {
+  /// Barra de avance de la intro con el tiempo transcurrido y el total. Se
+  /// refresca sola mientras suena, sin reconstruir la pantalla.
+  Widget _lineaDeTiempo() =>
+      Refresco(activo: _playing && !_paused, builder: (_) => _barraDeTiempo());
+
+  Widget _barraDeTiempo() {
     final text = Theme.of(context).textTheme;
     final posicion = _playing ? _audioService.posicion : Duration.zero;
     final total = _playing ? _audioService.duracion : null;

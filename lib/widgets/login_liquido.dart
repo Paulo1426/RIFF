@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../animations/ciclo_lento.dart';
 import '../theme.dart';
 import 'liquid_glass/liquid_glass_card.dart';
 
@@ -19,8 +20,7 @@ class FondoLogin extends StatefulWidget {
   State<FondoLogin> createState() => _FondoLoginState();
 }
 
-class _FondoLoginState extends State<FondoLogin>
-    with SingleTickerProviderStateMixin {
+class _FondoLoginState extends State<FondoLogin> {
   // (emoji, posición, color del brillo, tamaño, desfase de la animación)
   // En los bordes y esquinas: asoman alrededor de la tarjeta del login.
   static const _instrumentos = [
@@ -33,20 +33,16 @@ class _FondoLoginState extends State<FondoLogin>
     ('🥁', Alignment(-0.55, 1.0), AppColors.signalOrange, 44.0, 0.6),
   ];
 
-  late final _ciclo = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 6),
-  );
+  // Flotan despacio: basta el reloj compartido de 30 cuadros.
+  final _ciclo = CicloLento(periodo: const Duration(seconds: 6));
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Con "reducir animaciones" del sistema los instrumentos se quedan quietos.
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _ciclo.stop();
-    } else if (!_ciclo.isAnimating) {
-      _ciclo.repeat();
-    }
+    // Quieto con "reducir movimiento" o con la pantalla tapada por otra.
+    _ciclo.activo =
+        !MediaQuery.disableAnimationsOf(context) &&
+        TickerMode.valuesOf(context).enabled;
   }
 
   @override
@@ -56,18 +52,22 @@ class _FondoLoginState extends State<FondoLogin>
   }
 
   @override
-  Widget build(BuildContext context) => ExcludeSemantics(
-    child: ColoredBox(
-      color: context.paleta.oscuro
-          ? const Color(0xFF0B0F17)
-          : context.paleta.fondo,
-      child: AnimatedBuilder(
-        animation: _ciclo,
-        builder: (context, _) => Stack(
-          children: [
-            for (final (emoji, donde, color, tamano, desfase) in _instrumentos)
-              _instrumento(emoji, donde, color, tamano, desfase),
-          ],
+  // Capa propia: mover los instrumentos no repinta el formulario de encima.
+  Widget build(BuildContext context) => RepaintBoundary(
+    child: ExcludeSemantics(
+      child: ColoredBox(
+        color: context.paleta.oscuro
+            ? const Color(0xFF0B0F17)
+            : context.paleta.fondo,
+        child: AnimatedBuilder(
+          animation: _ciclo,
+          builder: (context, _) => Stack(
+            children: [
+              for (final (emoji, donde, color, tamano, desfase)
+                  in _instrumentos)
+                _instrumento(emoji, donde, color, tamano, desfase),
+            ],
+          ),
         ),
       ),
     ),

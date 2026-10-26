@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../../animations/ciclo_lento.dart';
 import '../../theme.dart';
 import 'liquid_glass_card.dart';
 
@@ -28,28 +29,23 @@ class LiquidGlassBottomNav extends StatefulWidget {
   State<LiquidGlassBottomNav> createState() => _LiquidGlassBottomNavState();
 }
 
-class _LiquidGlassBottomNavState extends State<LiquidGlassBottomNav>
-    with SingleTickerProviderStateMixin {
+class _LiquidGlassBottomNavState extends State<LiquidGlassBottomNav> {
   // Rebote al llegar a la pestaña: se pasa un poco y vuelve.
   static const _salto = Cubic(0.68, -0.55, 0.27, 1.55);
   // Colores de la app: verde para el menú, naranja para las demás.
   static Color _colorDe(int index) =>
       index == 0 ? AppColors.verde : AppColors.signalOrange;
 
-  late final _reposo = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 4),
-  );
+  // Deformación en reposo: lenta, con el reloj compartido de 30 cuadros.
+  final _reposo = CicloLento(periodo: const Duration(seconds: 4));
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Con "reducir animaciones" del sistema la gota se queda quieta.
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _reposo.stop();
-    } else if (!_reposo.isAnimating) {
-      _reposo.repeat();
-    }
+    // Quieta con "reducir animaciones" o con la pantalla tapada por otra.
+    _reposo.activo =
+        !MediaQuery.disableAnimationsOf(context) &&
+        TickerMode.valuesOf(context).enabled;
   }
 
   @override

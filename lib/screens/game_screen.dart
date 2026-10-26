@@ -90,7 +90,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   String? _titulo;
   String? _artista;
   String? _portadaUrl;
-  Timer? _reloj;
   final _confeti = ConfettiController(duration: const Duration(seconds: 2));
   // Al descubrir la melodía: confeti y el aviso que se desvanece (cada
   // descubrimiento cambia la clave y reinicia la animación).
@@ -124,7 +123,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   @override
   void dispose() {
     _musicaMenu.salirNivel();
-    _reloj?.cancel();
     _confeti.dispose();
     _confetiMelodia.dispose();
     _playbackGeneration++;
@@ -721,10 +719,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     _titulo = titulo;
     _artista = artista;
     _confeti.play();
-    // Refresca la barra de progreso del reproductor mientras suena.
-    _reloj ??= Timer.periodic(const Duration(milliseconds: 300), (_) {
-      if (mounted && _playing && !_paused) setState(() {});
-    });
   }
 
   Future<void> _cargarPortada() async {
@@ -840,10 +834,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     portada: _portadaUrl == null ? null : NetworkImage(_portadaUrl!),
     reproduciendo: _playing,
     enPausa: _paused,
-    posicion: _playing ? _audioService.posicion : Duration.zero,
-    duracion: _playing
-        ? (_audioService.duracion ?? Duration.zero)
-        : Duration.zero,
+    posicion: () => _playing ? _audioService.posicion : Duration.zero,
+    duracion: () =>
+        _playing ? (_audioService.duracion ?? Duration.zero) : Duration.zero,
     onReproducirPausar: _playingOffline ? null : _playPauseFinal,
     onDesdeInicio: _playingOffline
         ? null

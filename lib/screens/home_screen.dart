@@ -13,6 +13,7 @@ import '../models/sala.dart';
 import '../providers/providers.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/offline_game_store.dart';
+import '../animations/ciclo_lento.dart';
 import '../animations/liquid_ripple_effect.dart';
 import '../widgets/aviso_insignia.dart';
 import '../widgets/boton_tema.dart';
@@ -477,54 +478,62 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     final state = Map<String, dynamic>.from(bundle['estado'] as Map);
     final rawLevels = bundle['levels'] as List<dynamic>;
     final audioService = ref.read(audioServiceProvider);
-    final levels = await Future.wait(
-      rawLevels.map((rawLevel) async {
-        final data = Map<String, dynamic>.from(rawLevel as Map);
-        final entry = Map<String, dynamic>.from(data['entry'] as Map);
-        final nivelJson = Map<String, dynamic>.from(entry['nivel'] as Map);
-        final nivel = Nivel.fromJson(nivelJson);
-        final urls = Map<String, dynamic>.from(data['audioUrls'] as Map);
-        // Versión de cada archivo: si se reemplaza en Storage se baja otra vez.
-        final versiones = Map<String, dynamic>.from(
-          data['audioVersions'] as Map? ?? const {},
-        );
-        final paths = <String, String>{};
-        for (final instrument in nivel.instrumentos) {
-          final url = urls[instrument.id];
-          if (url is! String || url.isEmpty) {
-            throw FormatException(
-              'Falta el enlace offline del instrumento ${instrument.id} en ${nivel.id}',
-            );
-          }
-          final key =
-              'level:${nivel.id}:stem:${instrument.id}:'
-              '${versiones[instrument.id] ?? ''}';
-          final file = await audioService.descargarYGuardar(url, key);
-          paths[instrument.id] = file.path;
-        }
-        final instrumentalUrl = data['instrumentalAudioUrl'];
-        if (instrumentalUrl is! String || instrumentalUrl.isEmpty) {
+    Future<OfflineLevelData> descargarNivel(dynamic rawLevel) async {
+      final data = Map<String, dynamic>.from(rawLevel as Map);
+      final entry = Map<String, dynamic>.from(data['entry'] as Map);
+      final nivelJson = Map<String, dynamic>.from(entry['nivel'] as Map);
+      final nivel = Nivel.fromJson(nivelJson);
+      final urls = Map<String, dynamic>.from(data['audioUrls'] as Map);
+      // Versión de cada archivo: si se reemplaza en Storage se baja otra vez.
+      final versiones = Map<String, dynamic>.from(
+        data['audioVersions'] as Map? ?? const {},
+      );
+      final paths = <String, String>{};
+      for (final instrument in nivel.instrumentos) {
+        final url = urls[instrument.id];
+        if (url is! String || url.isEmpty) {
           throw FormatException(
-            'Falta el enlace offline de la pista instrumental de ${nivel.id}',
+            'Falta el enlace offline del instrumento ${instrument.id} en ${nivel.id}',
           );
         }
-        final instrumentalFile = await audioService.descargarYGuardar(
-          instrumentalUrl,
-          'song:${nivel.cancionId}:instrumentalSong:'
-          '${versiones['instrumental'] ?? ''}',
+        final key =
+            'level:${nivel.id}:stem:${instrument.id}:'
+            '${versiones[instrument.id] ?? ''}';
+        final file = await audioService.descargarYGuardar(url, key);
+        paths[instrument.id] = file.path;
+      }
+      final instrumentalUrl = data['instrumentalAudioUrl'];
+      if (instrumentalUrl is! String || instrumentalUrl.isEmpty) {
+        throw FormatException(
+          'Falta el enlace offline de la pista instrumental de ${nivel.id}',
         );
-        return OfflineLevelData(
-          nivel: nivel,
-          completado: entry['completado'] as bool? ?? false,
-          puedeIniciar: entry['puede_iniciar'] as bool? ?? false,
-          respuestaHash:
-              data['respuestaHash'] as String? ??
-              OfflineGameStore.huella(nivel.id, data['respuesta'] as String),
-          audioPaths: paths,
-          instrumentalAudioPath: instrumentalFile.path,
-        );
-      }),
-    );
+      }
+      final instrumentalFile = await audioService.descargarYGuardar(
+        instrumentalUrl,
+        'song:${nivel.cancionId}:instrumentalSong:'
+        '${versiones['instrumental'] ?? ''}',
+      );
+      return OfflineLevelData(
+        nivel: nivel,
+        completado: entry['completado'] as bool? ?? false,
+        puedeIniciar: entry['puede_iniciar'] as bool? ?? false,
+        respuestaHash:
+            data['respuestaHash'] as String? ??
+            OfflineGameStore.huella(nivel.id, data['respuesta'] as String),
+        audioPaths: paths,
+        instrumentalAudioPath: instrumentalFile.path,
+      );
+    }
+
+    // De a 3 niveles: no satura la red, el disco ni la batería mientras el
+    // jugador ya está usando la app (corre en segundo plano).
+    const lote = 3;
+    final levels = <OfflineLevelData>[];
+    for (var i = 0; i < rawLevels.length; i += lote) {
+      levels.addAll(
+        await Future.wait(rawLevels.skip(i).take(lote).map(descargarNivel)),
+      );
+    }
     final snapshot = OfflineGameSnapshot(
       uid: uid,
       guest: guest,
@@ -2124,13 +2133,13 @@ class _MenuPrincipal extends StatelessWidget {
           color: _colores[index],
           tarjeta: _cuadro(index, alFrente),
           // La copia del reflejo va sin desenfoque: es lo más caro de pintar.
-          reflejo: _cuadro(index, false),
+          reflejo: _cuadro(index, false, animar: false),
         ),
       ),
     );
   }
 
-  Widget _cuadro(int index, bool alFrente) {
+  Widget _cuadro(int index, bool alFrente, {bool animar = true}) {
     final introsBloqueadas = !introsDisponibles;
     final salasBloqueadas = esInvitado || offlineMode;
     return switch (index) {
@@ -2142,6 +2151,8 @@ class _MenuPrincipal extends StatelessWidget {
         info: infoCancion,
         color: AppColors.verde,
         alFrente: alFrente,
+        // Solo la del frente se mueve; laterales y reflejo, quietas.
+        animar: animar && alFrente,
         onTap: onInstrumentos,
       ),
       1 => _CuadroModo(
@@ -2156,6 +2167,8 @@ class _MenuPrincipal extends StatelessWidget {
         info: salasBloqueadas ? null : infoSalas,
         color: AppColors.medio,
         alFrente: alFrente,
+        // Solo la del frente se mueve; laterales y reflejo, quietas.
+        animar: animar && alFrente,
         bloqueado: salasBloqueadas,
         onTap: salasBloqueadas ? null : onSalas,
       ),
@@ -2171,6 +2184,8 @@ class _MenuPrincipal extends StatelessWidget {
         info: introsBloqueadas ? null : infoIntros,
         color: AppColors.signalOrange,
         alFrente: alFrente,
+        // Solo la del frente se mueve; laterales y reflejo, quietas.
+        animar: animar && alFrente,
         bloqueado: introsBloqueadas,
         onTap: introsBloqueadas ? null : onIntros,
       ),
@@ -2189,6 +2204,7 @@ class _CuadroModo extends StatelessWidget {
     this.info,
     this.alFrente = true,
     this.bloqueado = false,
+    this.animar = true,
   });
 
   final String emoji;
@@ -2201,6 +2217,7 @@ class _CuadroModo extends StatelessWidget {
   final String? info;
   final bool alFrente;
   final bool bloqueado;
+  final bool animar;
 
   @override
   Widget build(BuildContext context) {
@@ -2231,7 +2248,7 @@ class _CuadroModo extends StatelessWidget {
                         emoji: emoji,
                         animacion: animacion,
                         // Bloqueado se queda quieto: no invita a tocarlo.
-                        activo: !bloqueado,
+                        activo: !bloqueado && animar,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -2320,12 +2337,8 @@ class _EmojiAnimado extends StatefulWidget {
   State<_EmojiAnimado> createState() => _EmojiAnimadoState();
 }
 
-class _EmojiAnimadoState extends State<_EmojiAnimado>
-    with SingleTickerProviderStateMixin {
-  late final _ciclo = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1600),
-  );
+class _EmojiAnimadoState extends State<_EmojiAnimado> {
+  final _ciclo = CicloLento(periodo: const Duration(milliseconds: 1600));
 
   @override
   void didChangeDependencies() {
@@ -2339,16 +2352,12 @@ class _EmojiAnimadoState extends State<_EmojiAnimado>
     _actualizar();
   }
 
-  // Con "reducir movimiento" del sistema o bloqueado, quieto.
-  void _actualizar() {
-    if (!widget.activo || MediaQuery.disableAnimationsOf(context)) {
-      _ciclo
-        ..stop()
-        ..value = 0;
-    } else if (!_ciclo.isAnimating) {
-      _ciclo.repeat();
-    }
-  }
+  // Quieto si está bloqueado, con "reducir movimiento" o con la pantalla
+  // tapada por otra.
+  void _actualizar() => _ciclo.activo =
+      widget.activo &&
+      !MediaQuery.disableAnimationsOf(context) &&
+      TickerMode.valuesOf(context).enabled;
 
   @override
   void dispose() {
@@ -2359,39 +2368,45 @@ class _EmojiAnimadoState extends State<_EmojiAnimado>
   @override
   Widget build(BuildContext context) {
     final emojis = widget.emoji.characters.toList();
-    return ExcludeSemantics(
-      child: AnimatedBuilder(
-        animation: _ciclo,
-        builder: (context, _) {
-          final t = _ciclo.value * 2 * pi;
-          return Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final (i, emoji) in emojis.indexed)
-                Transform.translate(
-                  offset: Offset(0, switch (widget.animacion) {
-                    // Cada instrumento rebota desfasado, como una banda.
-                    _Animacion.tocar => -sin(t + i * 2).abs() * 6,
-                    _Animacion.saltar => -sin(t).abs() * 10,
-                    _Animacion.mecer => 0,
-                  }),
-                  child: Transform.rotate(
-                    angle: switch (widget.animacion) {
-                      _Animacion.tocar => sin(t + i * 2) * 0.15,
-                      _Animacion.saltar => sin(t * 2) * 0.05,
-                      _Animacion.mecer => sin(t) * 0.25,
-                    },
-                    child: Transform.scale(
-                      scale: widget.animacion == _Animacion.saltar
-                          ? 1 + sin(t).abs() * 0.08
-                          : 1,
-                      child: Text(emoji, style: const TextStyle(fontSize: 48)),
+    // Capa propia: el rebote no repinta la tarjeta de vidrio ni su sombra.
+    return RepaintBoundary(
+      child: ExcludeSemantics(
+        child: AnimatedBuilder(
+          animation: _ciclo,
+          builder: (context, _) {
+            final t = _ciclo.value * 2 * pi;
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final (i, emoji) in emojis.indexed)
+                  Transform.translate(
+                    offset: Offset(0, switch (widget.animacion) {
+                      // Cada instrumento rebota desfasado, como una banda.
+                      _Animacion.tocar => -sin(t + i * 2).abs() * 6,
+                      _Animacion.saltar => -sin(t).abs() * 10,
+                      _Animacion.mecer => 0,
+                    }),
+                    child: Transform.rotate(
+                      angle: switch (widget.animacion) {
+                        _Animacion.tocar => sin(t + i * 2) * 0.15,
+                        _Animacion.saltar => sin(t * 2) * 0.05,
+                        _Animacion.mecer => sin(t) * 0.25,
+                      },
+                      child: Transform.scale(
+                        scale: widget.animacion == _Animacion.saltar
+                            ? 1 + sin(t).abs() * 0.08
+                            : 1,
+                        child: Text(
+                          emoji,
+                          style: const TextStyle(fontSize: 48),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }

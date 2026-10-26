@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../../animations/ciclo_lento.dart';
 import '../../theme.dart';
 
 /// Fondo líquido: gris claro con manchas verdes/menta muy suaves que flotan
@@ -18,23 +19,18 @@ class LiquidBackground extends StatefulWidget {
   State<LiquidBackground> createState() => _LiquidBackgroundState();
 }
 
-class _LiquidBackgroundState extends State<LiquidBackground>
-    with SingleTickerProviderStateMixin {
-  // Un ciclo completo dura 24 s: el movimiento casi no se nota.
-  late final _ciclo = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 24),
-  );
+class _LiquidBackgroundState extends State<LiquidBackground> {
+  // Un ciclo completo dura 24 s: el movimiento casi no se nota, así que basta
+  // con el reloj lento compartido.
+  final _ciclo = CicloLento(periodo: const Duration(seconds: 24));
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Con "reducir movimiento" del sistema las manchas quedan quietas.
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _ciclo.stop();
-    } else if (!_ciclo.isAnimating) {
-      _ciclo.repeat();
-    }
+    // Quieto con "reducir movimiento" o con la pantalla tapada por otra.
+    _ciclo.activo =
+        !MediaQuery.disableAnimationsOf(context) &&
+        TickerMode.valuesOf(context).enabled;
   }
 
   @override
@@ -70,7 +66,7 @@ class _LiquidBackgroundState extends State<LiquidBackground>
 class _BlobsPainter extends CustomPainter {
   _BlobsPainter(this.ciclo, this.acento) : super(repaint: ciclo);
 
-  final Animation<double> ciclo;
+  final CicloLento ciclo;
   final Color acento;
 
   // Menta suave de la paleta.
