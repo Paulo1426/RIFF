@@ -316,9 +316,32 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         });
       }
     } catch (error) {
+      if (widget.offlineLevel != null && mounted) {
+        debugPrint('Error online al pedir pista; intentando offline: $error');
+        setState(() => _playingOffline = true);
+        await _pedirPista(tipo);
+        return;
+      }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al pedir pista: $error')),
+        showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Error al pedir pista'),
+            content: Text(
+              error.toString().contains('desconocida') ||
+                      error.toString().contains('requestHint')
+                  ? 'La función de pistas aún no se ha desplegado en Supabase.\n\n'
+                    'Para activarla en el servidor remoto, ejecuta en tu terminal:\n'
+                    'npx supabase functions deploy game-progress --project-ref hwjvwabvuavkexgibzps'
+                  : 'No se pudo obtener la pista: $error',
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Aceptar'),
+              ),
+            ],
+          ),
         );
       }
     } finally {
