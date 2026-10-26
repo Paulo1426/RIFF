@@ -51,17 +51,25 @@ class LiquidGlassCard extends StatelessWidget {
     );
     Widget contenido = DecoratedBox(
       decoration: BoxDecoration(
-        color: relleno,
-        gradient: LiquidGlass.glassGradient(paleta),
+        // Con degradado, BoxDecoration ignora [color]: el relleno va en una
+        // capa propia debajo cuando se pide más opacidad que la estándar
+        // (diálogos, tarjetas del menú), para que de verdad tape el fondo.
+        color: opacity > LiquidGlass.glassOpacity ? relleno : null,
         borderRadius: forma,
       ),
-      child: CustomPaint(
-        foregroundPainter: _BordeLuzPainter(
-          radio: borderRadius,
-          paleta: paleta,
-          color: borderColor,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LiquidGlass.glassGradient(paleta),
+          borderRadius: forma,
         ),
-        child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
+        child: CustomPaint(
+          foregroundPainter: _BordeLuzPainter(
+            radio: borderRadius,
+            paleta: paleta,
+            color: borderColor,
+          ),
+          child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
+        ),
       ),
     );
     if (blur > 0) {

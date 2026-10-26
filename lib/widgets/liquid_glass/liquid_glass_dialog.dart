@@ -37,7 +37,8 @@ class LiquidGlassDialog extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
         child: LiquidGlassCard(
-          opacity: 0.8,
+          // Casi sólido: el fondo apenas se adivina y el texto se lee bien.
+          opacity: 0.92,
           padding: child == null ? const EdgeInsets.all(24) : null,
           child:
               child ??
