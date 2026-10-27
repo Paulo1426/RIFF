@@ -267,38 +267,31 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     }
   }
 
-  Future<void> _pedirPista(TipoPista tipo) async {
-    if (_cargandoPista != null) return;
-    setState(() => _cargandoPista = tipo);
-    try {
-      // 1. Resolución inmediata en cliente (cero latencia ni esperas de red)
-      _resolverPistaLocal(tipo);
+  void _pedirPista(TipoPista tipo) {
+    debugPrint('==> Solicitando pista ${tipo.id} para nivel ${widget.nivel.id} (${widget.nivel.numero})');
+    // 1. Resolución inmediata en cliente (sin spinners ni demoras de red)
+    _resolverPistaLocal(tipo);
 
-      // 2. Sincronización opcional en segundo plano con el servidor (sin bloquear la UI)
-      if (!_playingOffline) {
-        unawaited(
-          ref
-              .read(firebaseGameRepositoryProvider)
-              .pedirPista(gameId: widget.gameId, tipo: tipo)
-              .timeout(const Duration(seconds: 2))
-              .then((resultado) {
-            if (mounted) {
-              setState(() {
-                _monedasDisponibles = resultado.monedasRestantes;
-                if (resultado.valor.isNotEmpty) {
-                  _pistasDesbloqueadas[tipo] = resultado.valor;
-                }
-              });
-            }
-          }).catchError((_) {
-            // Silencioso: la pista ya fue resuelta localmente de forma instantánea.
-          }),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _cargandoPista = null);
-      }
+    // 2. Sincronización opcional en segundo plano con el servidor
+    if (!_playingOffline) {
+      unawaited(
+        ref
+            .read(firebaseGameRepositoryProvider)
+            .pedirPista(gameId: widget.gameId, tipo: tipo)
+            .timeout(const Duration(seconds: 2))
+            .then((resultado) {
+          if (mounted) {
+            setState(() {
+              _monedasDisponibles = resultado.monedasRestantes;
+              if (resultado.valor.isNotEmpty) {
+                _pistasDesbloqueadas[tipo] = resultado.valor;
+              }
+            });
+          }
+        }).catchError((_) {
+          // Silencioso: la pista ya fue entregada localmente de inmediato.
+        }),
+      );
     }
   }
 
@@ -322,7 +315,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     if (tipo == TipoPista.artista) {
       valor = widget.offlineLevel?.artista ??
           catalogInfo?.artista ??
-          'Artista desconocido';
+          'Artista de la canción';
     } else if (tipo == TipoPista.iniciales) {
       final titulo = catalogInfo?.titulo ??
           (widget.nivel.cancionTitulo != 'Canción misteriosa'
@@ -349,17 +342,17 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   }
 
   Future<void> _abrirDialogoPistas() async {
+    unawaited(_cargarMonedas());
     await showDialog<void>(
       context: context,
-      builder: (context) => StatefulBuilder(
+      builder: (dialogCtx) => StatefulBuilder(
         builder: (context, setDialogState) => PistasDialog(
           saldoMonedas: _monedasDisponibles,
           pistasDesbloqueadas: _pistasDesbloqueadas,
           cargandoTipo: _cargandoPista,
-          onComprarPista: (tipo) async {
-            setDialogState(() => _cargandoPista = tipo);
-            await _pedirPista(tipo);
-            if (context.mounted) {
+          onComprarPista: (tipo) {
+            _pedirPista(tipo);
+            if (dialogCtx.mounted) {
               setDialogState(() {});
             }
           },
