@@ -9,7 +9,13 @@ import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 
 class AudioService {
-  final http.Client _httpClient = http.Client();
+  // [carpeta] y [cliente] se cambian solo en los tests.
+  AudioService({Future<Directory> Function()? carpeta, http.Client? cliente})
+    : _carpeta = carpeta ?? getApplicationSupportDirectory,
+      _httpClient = cliente ?? http.Client();
+
+  final Future<Directory> Function() _carpeta;
+  final http.Client _httpClient;
   final List<AudioPlayer> _players = [];
   bool _reproduciendo = false;
   Completer<void>? _cancelPlayback;
@@ -127,7 +133,7 @@ class AudioService {
   }
 
   Future<File> _cacheFile(String key) async {
-    final directory = await getApplicationSupportDirectory();
+    final directory = await _carpeta();
     final cacheDirectory = Directory('${directory.path}/audio_cache');
     await cacheDirectory.create(recursive: true);
     final fileName = sha256.convert(utf8.encode(key)).toString();
@@ -139,8 +145,18 @@ class AudioService {
   // mismo .download y dañarlo.
   final Map<String, Future<File>> _enCurso = {};
 
-  Future<File> _ensureCached(String url, String key) => _enCurso[key] ??=
-      _descargar(url, key).whenComplete(() => _enCurso.remove(key));
+  Future<File> _ensureCached(String url, String key) {
+    final enCurso = _enCurso[key];
+    if (enCurso != null) return enCurso;
+    final descarga = _descargar(url, key);
+    _enCurso[key] = descarga;
+    // Con llaves: una flecha devolvería el Future quitado del mapa y
+    // whenComplete lo esperaría, colgando la descarga para siempre.
+    descarga.whenComplete(() {
+      _enCurso.remove(key);
+    }).ignore();
+    return descarga;
+  }
 
   Future<File> _descargar(String url, String key) async {
     final file = await _cacheFile(key);
