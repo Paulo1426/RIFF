@@ -5,12 +5,18 @@ import 'package:riff/services/firebase_game_repository.dart';
 
 void main() {
   test('TipoPista extension properties and parsing work correctly', () {
+    expect(TipoPista.sorpresa.id, 'random');
+    expect(TipoPista.sorpresa.costoMonedas, 3);
     expect(TipoPista.artista.id, 'artist');
-    expect(TipoPista.artista.costoMonedas, 1);
     expect(TipoPista.iniciales.id, 'initials');
-    expect(TipoPista.iniciales.costoMonedas, 2);
+    expect(TipoPista.iniciales.costoMonedas, 4);
     expect(TipoPista.cuartoInstrumento.id, 'fourth_instrument');
-    expect(TipoPista.cuartoInstrumento.costoMonedas, 3);
+    expect(TipoPista.cuartoInstrumento.costoMonedas, 5);
+
+    // La sorpresa vuelve con el tipo que salió.
+    expect(TipoPistaExtension.fromId('random'), TipoPista.sorpresa);
+    expect(TipoPistaExtension.fromId('first_letter'), TipoPista.primeraLetra);
+    expect(TipoPistaExtension.fromId('last_letter'), TipoPista.ultimaLetra);
 
     expect(TipoPistaExtension.fromId('artist'), TipoPista.artista);
     expect(TipoPistaExtension.fromId('initials'), TipoPista.iniciales);

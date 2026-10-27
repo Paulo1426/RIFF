@@ -43,7 +43,7 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('con conexión, el botón abre las cinco pistas sin desbordarse', (
+  testWidgets('con conexión, el botón abre las pistas sin desbordarse', (
     tester,
   ) async {
     await abrir(tester);
@@ -52,7 +52,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.byType(PistasDialog), findsOneWidget);
-    for (final tipo in TipoPista.values) {
+    for (final tipo in TipoPistaExtension.comprables) {
       expect(find.text(tipo.titulo), findsOneWidget);
     }
     expect(tester.takeException(), isNull);

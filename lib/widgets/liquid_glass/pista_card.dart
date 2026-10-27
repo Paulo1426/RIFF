@@ -125,7 +125,9 @@ class PistaCard extends StatelessWidget {
               ),
             ],
           ),
-          if (desbloqueada && valor != null && valor!.isNotEmpty) ...[
+          // La sorpresa muestra lo que ya salió y sigue a la venta hasta
+          // agotarse, así que valor y botón pueden ir juntos.
+          if (valor != null && valor!.isNotEmpty) ...[
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -157,7 +159,8 @@ class PistaCard extends StatelessWidget {
                 ],
               ),
             ),
-          ] else if (!desbloqueada) ...[
+          ],
+          if (!desbloqueada) ...[
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerRight,

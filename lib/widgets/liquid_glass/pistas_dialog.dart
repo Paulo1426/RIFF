@@ -20,6 +20,16 @@ class PistasDialog extends StatelessWidget {
   final void Function(TipoPista tipo) onComprarPista;
   final TipoPista? cargandoTipo;
 
+  /// "Empieza por: P · Artista: ..." con las sorpresas que ya salieron.
+  String? _sorpresasReveladas() {
+    final reveladas = [
+      for (final tipo in TipoPistaExtension.sorpresas)
+        if (pistasDesbloqueadas[tipo] case final valor?)
+          '${tipo.etiqueta}: $valor',
+    ];
+    return reveladas.isEmpty ? null : reveladas.join(' · ');
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -72,12 +82,19 @@ class PistasDialog extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          for (final tipo in TipoPista.values)
+          for (final tipo in TipoPistaExtension.comprables)
             PistaCard(
               tipo: tipo,
               saldoMonedas: saldoMonedas,
-              desbloqueada: pistasDesbloqueadas.containsKey(tipo),
-              valor: pistasDesbloqueadas[tipo],
+              desbloqueada: tipo == TipoPista.sorpresa
+                  // La sorpresa se agota cuando ya salieron las tres.
+                  ? TipoPistaExtension.sorpresas.every(
+                      pistasDesbloqueadas.containsKey,
+                    )
+                  : pistasDesbloqueadas.containsKey(tipo),
+              valor: tipo == TipoPista.sorpresa
+                  ? _sorpresasReveladas()
+                  : pistasDesbloqueadas[tipo],
               cargando: cargandoTipo == tipo,
               onComprar: () => onComprarPista(tipo),
             ),

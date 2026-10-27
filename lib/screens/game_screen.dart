@@ -297,7 +297,10 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   /// Pide la pista al servidor, que la calcula y cobra las monedas. La app
   /// solo la muestra cuando llega: no tiene el título ni el artista.
   Future<void> _pedirPista(TipoPista tipo) async {
-    if (_cargandoPista != null || _pistasDesbloqueadas.containsKey(tipo)) {
+    // La sorpresa se puede pedir varias veces (cada vez sale otra).
+    if (_cargandoPista != null ||
+        (tipo != TipoPista.sorpresa &&
+            _pistasDesbloqueadas.containsKey(tipo))) {
       return;
     }
     setState(() => _cargandoPista = tipo);
@@ -308,15 +311,22 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       if (!mounted) return;
       setState(() {
         _monedasDisponibles = resultado.monedasRestantes;
-        _pistasDesbloqueadas[tipo] = tipo == TipoPista.cuartoInstrumento
+        // Se guarda con el tipo que salió (la sorpresa trae el suyo).
+        _pistasDesbloqueadas[resultado.tipo] =
+            resultado.tipo == TipoPista.cuartoInstrumento
             ? _nombreInstrumento(resultado.valor)
             : resultado.valor;
-        if (tipo == TipoPista.cuartoInstrumento) {
+        if (resultado.tipo == TipoPista.cuartoInstrumento) {
+          // El que falta tiene la melodía: se descubre como al comprarlo.
           _purchased
             ..clear()
             ..addAll(resultado.instrumentosComprados);
+          _melodyFound = true;
+          _message =
+              '¡Encontraste la melodía! Se desbloquearon todos los instrumentos.';
         }
       });
+      if (resultado.tipo == TipoPista.cuartoInstrumento) _celebrarMelodia();
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -673,11 +683,14 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    _paused ? 'En pausa' : 'Reproduciendo',
-                    style: _nowPlaying.isEmpty
-                        ? Theme.of(context).textTheme.titleSmall
-                        : Theme.of(context).textTheme.labelSmall,
+                  // Las ondas indican que suena (quietas en pausa); así la
+                  // barra de arriba queda libre para el botón de pistas.
+                  Semantics(
+                    label: _paused ? 'En pausa' : 'Reproduciendo',
+                    child: SoundWaveAnimation(
+                      activo: !_paused,
+                      color: colorDificultad(widget.nivel.dificultad),
+                    ),
                   ),
                   if (_nowPlaying.isNotEmpty)
                     Text(
@@ -1110,18 +1123,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
               ),
             if (_premio case (final emoji, final cantidad, final nombre))
               _Premio(emoji: emoji, cantidad: cantidad, nombre: nombre),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              child: _playing
-                  ? Padding(
-                      padding: const EdgeInsets.only(right: 16),
-                      child: SoundWaveAnimation(
-                        activo: !_paused,
-                        color: colorDificultad(widget.nivel.dificultad),
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-            ),
+            const SizedBox(width: 8),
           ],
         ),
         body: ConCarga(
@@ -1196,6 +1198,8 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                             label: 'Escuchar instrumentos comprados',
                           ),
                         ],
+                        // Al descubrir la melodía (comprando o con la pista
+                        // del instrumento faltante) se escucha sin voz.
                         if (_melodyFound) ...[
                           const SizedBox(height: 8),
                           LiquidGlassButton(
@@ -1204,7 +1208,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                                 ? null
                                 : () => _playSong('instrumentalSong'),
                             icon: Icons.queue_music,
-                            label: 'Escuchar canción',
+                            label: 'Escuchar canción sin voz',
                           ),
                         ],
                         AnimatedSize(

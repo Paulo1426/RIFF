@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 /// Pistas que se compran con monedas de Adivina la intro. El servidor las
 /// calcula y cobra; la app nunca tiene el título ni el artista.
 enum TipoPista {
+  // Se compra; el servidor la convierte en primera letra, última o artista.
+  sorpresa,
   primeraLetra,
   ultimaLetra,
   artista,
@@ -11,8 +13,24 @@ enum TipoPista {
 }
 
 extension TipoPistaExtension on TipoPista {
+  /// Las que aparecen en el diálogo para comprar.
+  static const comprables = [
+    TipoPista.sorpresa,
+    TipoPista.iniciales,
+    TipoPista.cuartoInstrumento,
+  ];
+
+  /// Lo que puede salir en la pista sorpresa.
+  static const sorpresas = [
+    TipoPista.primeraLetra,
+    TipoPista.ultimaLetra,
+    TipoPista.artista,
+  ];
+
   String get id {
     switch (this) {
+      case TipoPista.sorpresa:
+        return 'random';
       case TipoPista.primeraLetra:
         return 'first_letter';
       case TipoPista.ultimaLetra:
@@ -28,20 +46,22 @@ extension TipoPistaExtension on TipoPista {
 
   int get costoMonedas {
     switch (this) {
+      case TipoPista.sorpresa:
       case TipoPista.primeraLetra:
       case TipoPista.ultimaLetra:
-        return 1;
       case TipoPista.artista:
-        return 1;
-      case TipoPista.iniciales:
-        return 2;
-      case TipoPista.cuartoInstrumento:
         return 3;
+      case TipoPista.iniciales:
+        return 4;
+      case TipoPista.cuartoInstrumento:
+        return 5;
     }
   }
 
   String get titulo {
     switch (this) {
+      case TipoPista.sorpresa:
+        return 'Pista sorpresa';
       case TipoPista.primeraLetra:
         return 'Primera letra';
       case TipoPista.ultimaLetra:
@@ -51,12 +71,14 @@ extension TipoPistaExtension on TipoPista {
       case TipoPista.iniciales:
         return 'Iniciales del Título';
       case TipoPista.cuartoInstrumento:
-        return '4to Instrumento';
+        return 'Instrumento faltante';
     }
   }
 
   String get descripcion {
     switch (this) {
+      case TipoPista.sorpresa:
+        return 'Revela al azar la primera letra, la última letra o el artista.';
       case TipoPista.primeraLetra:
         return 'Revela con qué letra empieza el título.';
       case TipoPista.ultimaLetra:
@@ -66,13 +88,16 @@ extension TipoPistaExtension on TipoPista {
       case TipoPista.iniciales:
         return 'Muestra la primera letra de cada palabra del título.';
       case TipoPista.cuartoInstrumento:
-        return 'Desbloquea el instrumento faltante para escuchar.';
+        return 'Si con 3 instrumentos no encontraste la melodía, desbloquea '
+            'el que falta: tiene la melodía.';
     }
   }
 
   /// Texto corto que acompaña al valor en la pantalla del nivel.
   String get etiqueta {
     switch (this) {
+      case TipoPista.sorpresa:
+        return 'Sorpresa';
       case TipoPista.primeraLetra:
         return 'Empieza por';
       case TipoPista.ultimaLetra:
@@ -88,6 +113,8 @@ extension TipoPistaExtension on TipoPista {
 
   IconData get icono {
     switch (this) {
+      case TipoPista.sorpresa:
+        return Icons.casino_rounded;
       case TipoPista.primeraLetra:
         return Icons.first_page_rounded;
       case TipoPista.ultimaLetra:
@@ -103,6 +130,8 @@ extension TipoPistaExtension on TipoPista {
 
   static TipoPista fromId(String value) {
     switch (value) {
+      case 'random':
+        return TipoPista.sorpresa;
       case 'first_letter':
         return TipoPista.primeraLetra;
       case 'last_letter':

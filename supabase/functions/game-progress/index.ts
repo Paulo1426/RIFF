@@ -40,6 +40,7 @@ import {
   hintTypes,
   type HintType,
   maskInitials,
+  pickRandomHint,
   titleLetter,
 } from "./hints.ts";
 import { objectVersion } from "../_shared/storage_version.ts";
@@ -1424,6 +1425,19 @@ async function handleRequestHint(
     }
   };
 
+  // La sorpresa se convierte en una pista que aún no tenga; se cobra igual.
+  if (hintType === "random") {
+    const elegida = pickRandomHint(pistasUsadas, (max) => {
+      const azar = new Uint32Array(1);
+      crypto.getRandomValues(azar);
+      return azar[0] % max;
+    });
+    if (!elegida) {
+      throw new HttpError(409, "Ya tienes todas las pistas sorpresa");
+    }
+    return await cobrarPista(elegida, hintCosts.random);
+  }
+
   // Si ya se compró esta pista en esta partida, devolverla sin volver a cobrar
   if (pistasUsadas.includes(hintType)) {
     const cuartoInstrumento = hintType === "fourth_instrument" &&
@@ -1445,80 +1459,102 @@ async function handleRequestHint(
     };
   }
 
-  const cost = hintCosts[hintType as HintType];
-  if (currentCoins < cost) {
-    throw new HttpError(
-      409,
-      `No tienes suficientes monedas (${currentCoins} de ${cost})`,
-    );
-  }
+  return await cobrarPista(hintType, hintCosts[hintType as HintType]);
 
-  let valor = valorDe(hintType);
-  let cuartoInstrumento: string | null = null;
-  let updatedPurchased = [...purchased];
-
-  if (hintType === "fourth_instrument") {
-    const missing = levelInstruments.find((inst) => !purchased.includes(inst));
-    if (!missing) {
-      throw new HttpError(409, "Todos los instrumentos ya están desbloqueados");
+  /// Cobra [cost] monedas y guarda la pista [tipo] en la partida.
+  async function cobrarPista(
+    tipo: string,
+    cost: number,
+  ): Promise<JsonObject> {
+    if (currentCoins < cost) {
+      throw new HttpError(
+        409,
+        `No tienes suficientes monedas (${currentCoins} de ${cost})`,
+      );
     }
-    cuartoInstrumento = missing;
-    valor = missing;
-    updatedPurchased = [...purchased, missing];
+
+    let valor = valorDe(tipo);
+    let cuartoInstrumento: string | null = null;
+    let updatedPurchased = [...purchased];
+
+    // Si con los 3 comprados no salió la melodía, está en el que falta:
+    // desbloquearlo la descubre (todos los instrumentos y la canción sin
+    // voz, igual que al encontrarla comprando).
+    let melodiaDescubierta = false;
+    if (tipo === "fourth_instrument") {
+      if (game!.fields.melodiaDescubierta === true) {
+        throw new HttpError(409, "Ya descubriste la melodía");
+      }
+      const melodia = game!.fields.instrumentoMelodia;
+      if (
+        purchased.length < maxPurchasedInstruments ||
+        typeof melodia !== "string" || purchased.includes(melodia)
+      ) {
+        throw new HttpError(
+          409,
+          "Compra primero 3 instrumentos; si no aparece la melodía, esta pista desbloquea el que falta",
+        );
+      }
+      cuartoInstrumento = melodia;
+      valor = melodia;
+      updatedPurchased = [...purchased, melodia];
+      melodiaDescubierta = true;
+    }
+
+    const now = new Date().toISOString();
+    const updatedPistas = [...pistasUsadas, tipo];
+
+    const gameUpdates: JsonObject = {
+      pistasUsadas: updatedPistas,
+      updatedAt: now,
+    };
+    if (cuartoInstrumento) {
+      gameUpdates.instrumentosComprados = updatedPurchased;
+      gameUpdates.cuartoInstrumento = cuartoInstrumento;
+      gameUpdates.melodiaDescubierta = melodiaDescubierta;
+    }
+
+    const writes: JsonObject[] = [
+      updateWrite(gamePath, gameUpdates, game!.updateTime!),
+    ];
+
+    // Descontar monedas del usuario en su introProgress/state
+    const newSpent = introState.hintCoinsSpent + cost;
+    if (introState.state) {
+      writes.push(
+        updateWrite(
+          introState.path,
+          { pistasMonedasGastadas: newSpent, updatedAt: now },
+          introState.state.updateTime!,
+        ),
+      );
+    } else {
+      writes.push(
+        createWrite(introState.path, {
+          unlockedIds: [],
+          completedIds: [],
+          pistasMonedasGastadas: newSpent,
+          failedAnswerAttempts: 0,
+          nextAnswerAt: null,
+          createdAt: now,
+          updatedAt: now,
+        }),
+      );
+    }
+
+    await commitWrites(token, writes);
+
+    return {
+      tipo,
+      valor,
+      cuartoInstrumento,
+      yaComprada: false,
+      costo: cost,
+      pistasUsadas: updatedPistas,
+      monedasRestantes: currentCoins - cost,
+      instrumentosComprados: updatedPurchased,
+    };
   }
-
-  const now = new Date().toISOString();
-  const updatedPistas = [...pistasUsadas, hintType];
-
-  const gameUpdates: JsonObject = {
-    pistasUsadas: updatedPistas,
-    updatedAt: now,
-  };
-  if (cuartoInstrumento) {
-    gameUpdates.instrumentosComprados = updatedPurchased;
-    gameUpdates.cuartoInstrumento = cuartoInstrumento;
-  }
-
-  const writes: JsonObject[] = [
-    updateWrite(gamePath, gameUpdates, game.updateTime!),
-  ];
-
-  // Descontar monedas del usuario en su introProgress/state
-  const newSpent = introState.hintCoinsSpent + cost;
-  if (introState.state) {
-    writes.push(
-      updateWrite(
-        introState.path,
-        { pistasMonedasGastadas: newSpent, updatedAt: now },
-        introState.state.updateTime!,
-      ),
-    );
-  } else {
-    writes.push(
-      createWrite(introState.path, {
-        unlockedIds: [],
-        completedIds: [],
-        pistasMonedasGastadas: newSpent,
-        failedAnswerAttempts: 0,
-        nextAnswerAt: null,
-        createdAt: now,
-        updatedAt: now,
-      }),
-    );
-  }
-
-  await commitWrites(token, writes);
-
-  return {
-    tipo: hintType,
-    valor,
-    cuartoInstrumento,
-    yaComprada: false,
-    costo: cost,
-    pistasUsadas: updatedPistas,
-    monedasRestantes: currentCoins - cost,
-    instrumentosComprados: updatedPurchased,
-  };
 }
 
 // --- "Desafía a tus amigos" ---
