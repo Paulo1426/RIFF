@@ -93,12 +93,12 @@ const Map<String, ({String titulo, String artista})> catalogoCancionesFallback =
   'facil-02': (titulo: 'A blanco y negro', artista: 'Silvestre Dangond'),
   'facil-03': (titulo: 'Tira que jala', artista: 'Kvrass'),
   'facil-04': (titulo: 'Los caminos de la vida', artista: 'Los Diablitos'),
-  'facil-05': (titulo: 'Obsesión', artista: 'Peter Manjarrés'),
+  'facil-05': (titulo: 'Y como hago', artista: 'Peter Manjarrés'),
   'cancion-001': (titulo: 'Por supuesto que no', artista: 'Martín Elías Díaz'),
   'cancion-002': (titulo: 'A blanco y negro', artista: 'Silvestre Dangond'),
   'cancion-003': (titulo: 'Tira que jala', artista: 'Kvrass'),
   'cancion-004': (titulo: 'Los caminos de la vida', artista: 'Los Diablitos'),
-  'cancion-005': (titulo: 'Obsesión', artista: 'Peter Manjarrés'),
+  'cancion-005': (titulo: 'Y como hago', artista: 'Peter Manjarrés'),
 };
 
 class ResultadoPista {
