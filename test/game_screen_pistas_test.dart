@@ -97,4 +97,47 @@ void main() {
     expect(find.text('Los Diablitos'), findsNothing);
     expect(find.text('L__ c______ d_ l_ v___'), findsNothing);
   });
+
+  testWidgets('level facil-05 resolves correct title and initials for Peter Manjarres', (tester) async {
+    final nivel5 = Nivel(
+      id: 'facil-05',
+      numero: 5,
+      dificultad: Dificultad.facil,
+      cancionId: 'cancion-005',
+      cancionTitulo: 'Canción misteriosa',
+      instrumentos: [
+        for (final type in TipoInstrumento.values)
+          Instrumento(tipo: type, precio: 0, audioUrl: ''),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: GameScreen(
+            nivel: nivel5,
+            gameId: 'facil-game-5',
+            offlineMode: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final hintButton = find.byIcon(Icons.lightbulb_rounded);
+    expect(hintButton, findsOneWidget);
+
+    await tester.tap(hintButton);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byType(PistasDialog), findsOneWidget);
+    // Tap on initials clue to unlock it
+    await tester.tap(find.text('Iniciales del Título'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Must show Y c___ h___ and NOT O_______
+    expect(find.text('O_______'), findsNothing);
+  });
 }
