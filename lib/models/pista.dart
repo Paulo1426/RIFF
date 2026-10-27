@@ -1,4 +1,10 @@
+import 'package:flutter/material.dart';
+
+/// Pistas que se compran con monedas de Adivina la intro. El servidor las
+/// calcula y cobra; la app nunca tiene el título ni el artista.
 enum TipoPista {
+  primeraLetra,
+  ultimaLetra,
   artista,
   iniciales,
   cuartoInstrumento,
@@ -7,6 +13,10 @@ enum TipoPista {
 extension TipoPistaExtension on TipoPista {
   String get id {
     switch (this) {
+      case TipoPista.primeraLetra:
+        return 'first_letter';
+      case TipoPista.ultimaLetra:
+        return 'last_letter';
       case TipoPista.artista:
         return 'artist';
       case TipoPista.iniciales:
@@ -18,6 +28,9 @@ extension TipoPistaExtension on TipoPista {
 
   int get costoMonedas {
     switch (this) {
+      case TipoPista.primeraLetra:
+      case TipoPista.ultimaLetra:
+        return 1;
       case TipoPista.artista:
         return 1;
       case TipoPista.iniciales:
@@ -29,6 +42,10 @@ extension TipoPistaExtension on TipoPista {
 
   String get titulo {
     switch (this) {
+      case TipoPista.primeraLetra:
+        return 'Primera letra';
+      case TipoPista.ultimaLetra:
+        return 'Última letra';
       case TipoPista.artista:
         return 'Nombre del Artista';
       case TipoPista.iniciales:
@@ -40,6 +57,10 @@ extension TipoPistaExtension on TipoPista {
 
   String get descripcion {
     switch (this) {
+      case TipoPista.primeraLetra:
+        return 'Revela con qué letra empieza el título.';
+      case TipoPista.ultimaLetra:
+        return 'Revela con qué letra termina el título.';
       case TipoPista.artista:
         return 'Revela quién canta o interpreta la canción.';
       case TipoPista.iniciales:
@@ -49,8 +70,43 @@ extension TipoPistaExtension on TipoPista {
     }
   }
 
+  /// Texto corto que acompaña al valor en la pantalla del nivel.
+  String get etiqueta {
+    switch (this) {
+      case TipoPista.primeraLetra:
+        return 'Empieza por';
+      case TipoPista.ultimaLetra:
+        return 'Termina en';
+      case TipoPista.artista:
+        return 'Artista';
+      case TipoPista.iniciales:
+        return 'Iniciales';
+      case TipoPista.cuartoInstrumento:
+        return '4.º instrumento';
+    }
+  }
+
+  IconData get icono {
+    switch (this) {
+      case TipoPista.primeraLetra:
+        return Icons.first_page_rounded;
+      case TipoPista.ultimaLetra:
+        return Icons.last_page_rounded;
+      case TipoPista.artista:
+        return Icons.person_rounded;
+      case TipoPista.iniciales:
+        return Icons.text_fields_rounded;
+      case TipoPista.cuartoInstrumento:
+        return Icons.music_note_rounded;
+    }
+  }
+
   static TipoPista fromId(String value) {
     switch (value) {
+      case 'first_letter':
+        return TipoPista.primeraLetra;
+      case 'last_letter':
+        return TipoPista.ultimaLetra;
       case 'artist':
         return TipoPista.artista;
       case 'initials':
@@ -62,44 +118,6 @@ extension TipoPistaExtension on TipoPista {
     }
   }
 }
-
-/// Oculta letras manteniendo las iniciales visibles y respetando puntuación/espacios
-/// (ej: "L__ c______ d_ l_ v___").
-String maskInitials(String title) {
-  return title.split(' ').map((word) {
-    var firstLetterSeen = false;
-    final buffer = StringBuffer();
-    for (var i = 0; i < word.length; i++) {
-      final char = word[i];
-      final isAlphaNum = RegExp(r'[\p{L}\p{N}]', unicode: true).hasMatch(char);
-      if (isAlphaNum) {
-        if (!firstLetterSeen) {
-          firstLetterSeen = true;
-          buffer.write(char);
-        } else {
-          buffer.write('_');
-        }
-      } else {
-        buffer.write(char);
-      }
-    }
-    return buffer.toString();
-  }).join(' ');
-}
-
-/// Catálogo de canciones y artistas para resolución de pistas local/fallback.
-const Map<String, ({String titulo, String artista})> catalogoCancionesFallback = {
-  'facil-01': (titulo: 'Por supuesto que no', artista: 'Martín Elías Díaz'),
-  'facil-02': (titulo: 'A blanco y negro', artista: 'Silvestre Dangond'),
-  'facil-03': (titulo: 'Tira que jala', artista: 'Kvrass'),
-  'facil-04': (titulo: 'Los caminos de la vida', artista: 'Los Diablitos'),
-  'facil-05': (titulo: 'Y como hago', artista: 'Peter Manjarrés'),
-  'cancion-001': (titulo: 'Por supuesto que no', artista: 'Martín Elías Díaz'),
-  'cancion-002': (titulo: 'A blanco y negro', artista: 'Silvestre Dangond'),
-  'cancion-003': (titulo: 'Tira que jala', artista: 'Kvrass'),
-  'cancion-004': (titulo: 'Los caminos de la vida', artista: 'Los Diablitos'),
-  'cancion-005': (titulo: 'Y como hago', artista: 'Peter Manjarrés'),
-};
 
 class ResultadoPista {
   final TipoPista tipo;
@@ -129,12 +147,14 @@ class ResultadoPista {
       cuartoInstrumento: json['cuartoInstrumento'] as String?,
       yaComprada: json['yaComprada'] as bool? ?? false,
       costo: (json['costo'] as num?)?.toInt() ?? 0,
-      pistasUsadas: (json['pistasUsadas'] as List<dynamic>?)
+      pistasUsadas:
+          (json['pistasUsadas'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList(growable: false) ??
           const [],
       monedasRestantes: (json['monedasRestantes'] as num?)?.toInt() ?? 0,
-      instrumentosComprados: (json['instrumentosComprados'] as List<dynamic>?)
+      instrumentosComprados:
+          (json['instrumentosComprados'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList(growable: false) ??
           const [],

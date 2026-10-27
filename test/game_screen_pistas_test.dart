@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:riff/models/instrumento.dart';
 import 'package:riff/models/nivel.dart';
+import 'package:riff/models/pista.dart';
 import 'package:riff/screens/game_screen.dart';
-import 'package:riff/services/offline_game_store.dart';
 import 'package:riff/widgets/liquid_glass/pistas_dialog.dart';
 
 void main() {
@@ -13,131 +13,62 @@ void main() {
     numero: 1,
     dificultad: Dificultad.facil,
     cancionId: 'cancion-001',
-    cancionTitulo: 'La gota fria',
+    cancionTitulo: 'Canción misteriosa',
     instrumentos: [
       for (final type in TipoInstrumento.values)
         Instrumento(tipo: type, precio: 0, audioUrl: ''),
     ],
   );
 
-  testWidgets('hint button is visible and opens PistasDialog', (tester) async {
+  Future<void> abrir(
+    WidgetTester tester, {
+    bool offline = false,
+    bool pistas = true,
+  }) async {
+    tester.view.physicalSize = const Size(393, 851);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
           home: GameScreen(
             nivel: nivel,
-            gameId: 'test-game-1',
-            offlineMode: true,
-            offlineLevel: OfflineLevelData(
-              nivel: nivel,
-              completado: false,
-              puedeIniciar: true,
-              respuestaHash: OfflineGameStore.huella(nivel.id, 'la gota fria'),
-              artista: 'Carlos Vives',
-              audioPaths: const {},
-            ),
+            gameId: 'partida-1',
+            offlineMode: offline,
+            pistas: pistas,
           ),
         ),
       ),
     );
     await tester.pump();
+  }
 
-    // Verify hint icon button is in the app bar
-    final hintButton = find.byIcon(Icons.lightbulb_rounded);
-    expect(hintButton, findsOneWidget);
-
-    // Tap hint button
-    await tester.tap(hintButton);
+  testWidgets('con conexión, el botón abre las cinco pistas sin desbordarse', (
+    tester,
+  ) async {
+    await abrir(tester);
+    await tester.tap(find.byIcon(Icons.lightbulb_rounded));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    // Verify PistasDialog opened
     expect(find.byType(PistasDialog), findsOneWidget);
-    expect(find.text('Pistas y Comodines'), findsOneWidget);
-    expect(find.text('Nombre del Artista'), findsOneWidget);
-    expect(find.text('Iniciales del Título'), findsOneWidget);
-    expect(find.text('4to Instrumento'), findsOneWidget);
+    for (final tipo in TipoPista.values) {
+      expect(find.text(tipo.titulo), findsOneWidget);
+    }
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('level in media difficulty does not leak songs from facil difficulty', (tester) async {
-    final nivelMedia = Nivel(
-      id: 'media-04',
-      numero: 4,
-      dificultad: Dificultad.medio,
-      cancionId: 'cancion-009',
-      cancionTitulo: 'Canción misteriosa',
-      instrumentos: [
-        for (final type in TipoInstrumento.values)
-          Instrumento(tipo: type, precio: 0, audioUrl: ''),
-      ],
-    );
-
-    await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
-          home: GameScreen(
-            nivel: nivelMedia,
-            gameId: 'media-game-4',
-            offlineMode: true,
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-
-    final hintButton = find.byIcon(Icons.lightbulb_rounded);
-    expect(hintButton, findsOneWidget);
-
-    await tester.tap(hintButton);
-    await tester.pump();
+  testWidgets('sin conexión las pistas no se pueden pedir', (tester) async {
+    await abrir(tester, offline: true);
+    await tester.tap(find.byIcon(Icons.lightbulb_rounded));
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.byType(PistasDialog), findsOneWidget);
-    // Ensure that it does not show Fácil 4's artist Los Diablitos
-    expect(find.text('Los Diablitos'), findsNothing);
-    expect(find.text('L__ c______ d_ l_ v___'), findsNothing);
+    expect(find.byType(PistasDialog), findsNothing);
   });
 
-  testWidgets('level facil-05 resolves correct title and initials for Peter Manjarres', (tester) async {
-    final nivel5 = Nivel(
-      id: 'facil-05',
-      numero: 5,
-      dificultad: Dificultad.facil,
-      cancionId: 'cancion-005',
-      cancionTitulo: 'Canción misteriosa',
-      instrumentos: [
-        for (final type in TipoInstrumento.values)
-          Instrumento(tipo: type, precio: 0, audioUrl: ''),
-      ],
-    );
+  testWidgets('en las salas no hay botón de pistas', (tester) async {
+    await abrir(tester, pistas: false);
 
-    await tester.pumpWidget(
-      ProviderScope(
-        child: MaterialApp(
-          home: GameScreen(
-            nivel: nivel5,
-            gameId: 'facil-game-5',
-            offlineMode: true,
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-
-    final hintButton = find.byIcon(Icons.lightbulb_rounded);
-    expect(hintButton, findsOneWidget);
-
-    await tester.tap(hintButton);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(find.byType(PistasDialog), findsOneWidget);
-    // Tap on initials clue to unlock it
-    await tester.tap(find.text('Iniciales del Título'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    // Must show Y c___ h___ and NOT O_______
-    expect(find.text('O_______'), findsNothing);
+    expect(find.byIcon(Icons.lightbulb_rounded), findsNothing);
   });
 }

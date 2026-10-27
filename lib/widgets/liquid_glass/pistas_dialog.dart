@@ -28,11 +28,13 @@ class PistasDialog extends StatelessWidget {
     return LiquidGlassDialog(
       title: Row(
         children: [
-          const Icon(Icons.lightbulb_rounded, color: AppColors.signalOrange, size: 28),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Text('Pistas y Comodines'),
+          const Icon(
+            Icons.lightbulb_rounded,
+            color: AppColors.signalOrange,
+            size: 28,
           ),
+          const SizedBox(width: 10),
+          const Expanded(child: Text('Pistas y Comodines')),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(

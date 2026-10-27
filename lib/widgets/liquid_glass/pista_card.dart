@@ -23,17 +23,6 @@ class PistaCard extends StatelessWidget {
   final bool cargando;
   final VoidCallback? onComprar;
 
-  IconData get _icono {
-    switch (tipo) {
-      case TipoPista.artista:
-        return Icons.person_rounded;
-      case TipoPista.iniciales:
-        return Icons.text_fields_rounded;
-      case TipoPista.cuartoInstrumento:
-        return Icons.music_note_rounded;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -63,7 +52,7 @@ class PistaCard extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  _icono,
+                  tipo.icono,
                   color: desbloqueada
                       ? AppColors.verde
                       : theme.colorScheme.primary,
@@ -92,16 +81,23 @@ class PistaCard extends StatelessWidget {
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color: theme.colorScheme.secondary.withValues(alpha: 0.15),
+                              color: theme.colorScheme.secondary.withValues(
+                                alpha: 0.15,
+                              ),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: theme.colorScheme.secondary.withValues(alpha: 0.3),
+                                color: theme.colorScheme.secondary.withValues(
+                                  alpha: 0.3,
+                                ),
                               ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Text('🪙', style: TextStyle(fontSize: 12)),
+                                const Text(
+                                  '🪙',
+                                  style: TextStyle(fontSize: 12),
+                                ),
                                 const SizedBox(width: 4),
                                 Text(
                                   '$costo',
@@ -119,7 +115,9 @@ class PistaCard extends StatelessWidget {
                     Text(
                       tipo.descripcion,
                       style: text.bodySmall?.copyWith(
-                        color: theme.textTheme.bodySmall?.color?.withValues(alpha: 0.8),
+                        color: theme.textTheme.bodySmall?.color?.withValues(
+                          alpha: 0.8,
+                        ),
                       ),
                     ),
                   ],

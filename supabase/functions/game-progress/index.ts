@@ -40,6 +40,7 @@ import {
   hintTypes,
   type HintType,
   maskInitials,
+  titleLetter,
 } from "./hints.ts";
 import { objectVersion } from "../_shared/storage_version.ts";
 
@@ -926,15 +927,11 @@ async function createOfflineBundle(
       instrumentalPath,
     );
     return {
-      entry: {
-        ...entry,
-        artista: typeof song.fields.artista === "string" ? song.fields.artista : null,
-      },
+      entry,
       respuestaHash: await answerHash(
         levelId,
         String(answer.fields.respuestaCancionNormalizada),
       ),
-      artista: typeof song.fields.artista === "string" ? song.fields.artista : null,
       audioUrls,
       audioVersions,
       instrumentalAudioUrl: await createOfflineAudioUrl(
@@ -1373,6 +1370,10 @@ async function handleRequestHint(
   if (game.fields.ganada === true) {
     throw new HttpError(409, "La partida ya fue completada");
   }
+  // En las salas se compite: nadie compra ventaja con monedas.
+  if (typeof game.fields.salaId === "string") {
+    throw new HttpError(409, "Las pistas no se pueden usar en las salas");
+  }
 
   const levelId = game.fields.levelId;
   if (typeof levelId !== "string" || !validId(levelId)) {
@@ -1402,24 +1403,36 @@ async function handleRequestHint(
     ? Object.keys(rawInstruments as JsonObject)
     : [];
 
+  const titulo = typeof song.fields.titulo === "string"
+    ? song.fields.titulo
+    : "";
+  // Pistas que solo dependen de la canción.
+  const valorDe = (tipo: string): string => {
+    switch (tipo) {
+      case "artist":
+        return typeof song.fields.artista === "string"
+          ? song.fields.artista
+          : "Artista desconocido";
+      case "initials":
+        return maskInitials(titulo);
+      case "first_letter":
+        return titleLetter(titulo);
+      case "last_letter":
+        return titleLetter(titulo, true);
+      default:
+        return "";
+    }
+  };
+
   // Si ya se compró esta pista en esta partida, devolverla sin volver a cobrar
   if (pistasUsadas.includes(hintType)) {
-    let valor = "";
-    let cuartoInstrumento: string | null = null;
-    if (hintType === "artist") {
-      valor = typeof song.fields.artista === "string"
-        ? song.fields.artista
-        : "Artista desconocido";
-    } else if (hintType === "initials") {
-      valor = maskInitials(
-        typeof song.fields.titulo === "string" ? song.fields.titulo : "",
-      );
-    } else if (hintType === "fourth_instrument") {
-      cuartoInstrumento = typeof game.fields.cuartoInstrumento === "string"
-        ? (game.fields.cuartoInstrumento as string)
-        : null;
-      valor = cuartoInstrumento ?? "";
-    }
+    const cuartoInstrumento = hintType === "fourth_instrument" &&
+        typeof game.fields.cuartoInstrumento === "string"
+      ? game.fields.cuartoInstrumento
+      : null;
+    const valor = hintType === "fourth_instrument"
+      ? cuartoInstrumento ?? ""
+      : valorDe(hintType);
     return {
       tipo: hintType,
       valor,
@@ -1440,19 +1453,11 @@ async function handleRequestHint(
     );
   }
 
-  let valor = "";
+  let valor = valorDe(hintType);
   let cuartoInstrumento: string | null = null;
   let updatedPurchased = [...purchased];
 
-  if (hintType === "artist") {
-    valor = typeof song.fields.artista === "string"
-      ? song.fields.artista
-      : "Artista desconocido";
-  } else if (hintType === "initials") {
-    valor = maskInitials(
-      typeof song.fields.titulo === "string" ? song.fields.titulo : "",
-    );
-  } else if (hintType === "fourth_instrument") {
+  if (hintType === "fourth_instrument") {
     const missing = levelInstruments.find((inst) => !purchased.includes(inst));
     if (!missing) {
       throw new HttpError(409, "Todos los instrumentos ya están desbloqueados");

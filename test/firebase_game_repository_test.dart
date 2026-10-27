@@ -14,7 +14,10 @@ void main() {
 
     expect(TipoPistaExtension.fromId('artist'), TipoPista.artista);
     expect(TipoPistaExtension.fromId('initials'), TipoPista.iniciales);
-    expect(TipoPistaExtension.fromId('fourth_instrument'), TipoPista.cuartoInstrumento);
+    expect(
+      TipoPistaExtension.fromId('fourth_instrument'),
+      TipoPista.cuartoInstrumento,
+    );
     expect(() => TipoPistaExtension.fromId('unknown'), throwsFormatException);
   });
 

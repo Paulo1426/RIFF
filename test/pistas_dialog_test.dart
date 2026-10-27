@@ -7,35 +7,38 @@ import 'package:riff/widgets/liquid_glass/pistas_dialog.dart';
 void main() {
   Widget buildTestableWidget(Widget child) {
     return MaterialApp(
-      home: Scaffold(
-        body: Center(child: child),
-      ),
+      home: Scaffold(body: Center(child: child)),
     );
   }
 
-  testWidgets('PistaCard renders locked state with cost and triggers buy callback', (tester) async {
-    var comprado = false;
-    await tester.pumpWidget(
-      buildTestableWidget(
-        PistaCard(
-          tipo: TipoPista.artista,
-          saldoMonedas: 5,
-          desbloqueada: false,
-          onComprar: () => comprado = true,
+  testWidgets(
+    'PistaCard renders locked state with cost and triggers buy callback',
+    (tester) async {
+      var comprado = false;
+      await tester.pumpWidget(
+        buildTestableWidget(
+          PistaCard(
+            tipo: TipoPista.artista,
+            saldoMonedas: 5,
+            desbloqueada: false,
+            onComprar: () => comprado = true,
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(find.text('Nombre del Artista'), findsOneWidget);
-    expect(find.text('Desbloquear (🪙 1)'), findsOneWidget);
+      expect(find.text('Nombre del Artista'), findsOneWidget);
+      expect(find.text('Desbloquear (🪙 1)'), findsOneWidget);
 
-    await tester.tap(find.text('Desbloquear (🪙 1)'));
-    await tester.pump();
+      await tester.tap(find.text('Desbloquear (🪙 1)'));
+      await tester.pump();
 
-    expect(comprado, isTrue);
-  });
+      expect(comprado, isTrue);
+    },
+  );
 
-  testWidgets('PistaCard disables button when coins are insufficient', (tester) async {
+  testWidgets('PistaCard disables button when coins are insufficient', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       buildTestableWidget(
         const PistaCard(
@@ -67,31 +70,34 @@ void main() {
     expect(find.byIcon(Icons.check_circle_outline_rounded), findsOneWidget);
   });
 
-  testWidgets('PistasDialog renders all three hint types with user coin balance', (tester) async {
-    TipoPista? selectedType;
-    await tester.pumpWidget(
-      buildTestableWidget(
-        PistasDialog(
-          saldoMonedas: 7,
-          pistasDesbloqueadas: const {
-            TipoPista.artista: 'Diomedes Díaz',
-          },
-          onComprarPista: (tipo) => selectedType = tipo,
+  testWidgets(
+    'PistasDialog renders every hint type with user coin balance',
+    (tester) async {
+      TipoPista? selectedType;
+      await tester.pumpWidget(
+        buildTestableWidget(
+          PistasDialog(
+            saldoMonedas: 7,
+            pistasDesbloqueadas: const {TipoPista.artista: 'Diomedes Díaz'},
+            onComprarPista: (tipo) => selectedType = tipo,
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(find.text('Pistas y Comodines'), findsOneWidget);
-    expect(find.text('7'), findsOneWidget);
-    expect(find.text('Nombre del Artista'), findsOneWidget);
-    expect(find.text('Diomedes Díaz'), findsOneWidget);
-    expect(find.text('Iniciales del Título'), findsOneWidget);
-    expect(find.text('4to Instrumento'), findsOneWidget);
+      expect(find.text('Pistas y Comodines'), findsOneWidget);
+      expect(find.text('7'), findsOneWidget);
+      expect(find.text('Nombre del Artista'), findsOneWidget);
+      expect(find.text('Diomedes Díaz'), findsOneWidget);
+      expect(find.text('Iniciales del Título'), findsOneWidget);
+      expect(find.text('4to Instrumento'), findsOneWidget);
 
-    // Can purchase initials
-    await tester.tap(find.text('Desbloquear (🪙 2)'));
-    await tester.pump();
+      // Can purchase initials (con cinco pistas puede quedar más abajo).
+      await tester.ensureVisible(find.text('Desbloquear (🪙 2)'));
+      await tester.pump();
+      await tester.tap(find.text('Desbloquear (🪙 2)'));
+      await tester.pump();
 
-    expect(selectedType, TipoPista.iniciales);
-  });
+      expect(selectedType, TipoPista.iniciales);
+    },
+  );
 }

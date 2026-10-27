@@ -1221,6 +1221,7 @@ class _SalaScreenState extends ConsumerState<SalaScreen> {
         titulo: titulo,
         cabecera: _CabeceraPartida(sala: sala),
         comprasPrevias: actual.compras,
+        pistas: false,
         melodiaDescubierta: actual.melodiaDescubierta,
         onSiguiente: contrarreloj ? () => pasar(context) : null,
         onSaltar: contrarreloj ? () => saltar(context) : null,

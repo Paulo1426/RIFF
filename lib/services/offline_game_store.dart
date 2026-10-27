@@ -15,7 +15,6 @@ class OfflineLevelData {
     required this.respuestaHash,
     required this.audioPaths,
     this.instrumentalAudioPath,
-    this.artista,
   });
 
   final Nivel nivel;
@@ -28,7 +27,6 @@ class OfflineLevelData {
       OfflineGameStore.huella(nivel.id, answer) == respuestaHash;
   final Map<String, String> audioPaths;
   final String? instrumentalAudioPath;
-  final String? artista;
 
   factory OfflineLevelData.fromJson(Map<String, dynamic> json) {
     final entry = json['entry'] as Map<String, dynamic>;
@@ -46,26 +44,17 @@ class OfflineLevelData {
           OfflineGameStore.huella(nivel.id, entry['respuesta'] as String),
       audioPaths: Map.unmodifiable(audioPaths),
       instrumentalAudioPath: json['instrumentalAudioPath'] as String?,
-      artista: (entry['artista'] as String?) ?? (json['artista'] as String?),
     );
   }
 
   Map<String, dynamic> toJson(Map<String, dynamic> entry) => {
-    'entry': {
-      ...entry,
-      if (artista != null) 'artista': artista,
-    },
+    'entry': entry,
     'audioPaths': audioPaths,
     if (instrumentalAudioPath != null)
       'instrumentalAudioPath': instrumentalAudioPath,
-    if (artista != null) 'artista': artista,
   };
 
-  OfflineLevelData copyWith({
-    bool? completado,
-    bool? puedeIniciar,
-    String? artista,
-  }) =>
+  OfflineLevelData copyWith({bool? completado, bool? puedeIniciar}) =>
       OfflineLevelData(
         nivel: nivel,
         completado: completado ?? this.completado,
@@ -73,7 +62,6 @@ class OfflineLevelData {
         respuestaHash: respuestaHash,
         audioPaths: audioPaths,
         instrumentalAudioPath: instrumentalAudioPath,
-        artista: artista ?? this.artista,
       );
 }
 
@@ -227,7 +215,6 @@ class OfflineGameSnapshot {
       'completado': stateData.completado,
       'puede_iniciar': stateData.puedeIniciar,
       'respuestaHash': stateData.respuestaHash,
-      if (stateData.artista != null) 'artista': stateData.artista,
     };
   }
 }
@@ -289,27 +276,4 @@ class OfflineGameStore {
       .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), ' ')
       .trim()
       .replaceAll(RegExp(r'\s+'), ' ');
-
-  static String maskInitials(String title) {
-    return title.split(' ').map((word) {
-      var firstLetterSeen = false;
-      final buffer = StringBuffer();
-      for (var i = 0; i < word.length; i++) {
-        final char = word[i];
-        final isAlphaNum =
-            RegExp(r'[\p{L}\p{N}]', unicode: true).hasMatch(char);
-        if (isAlphaNum) {
-          if (!firstLetterSeen) {
-            firstLetterSeen = true;
-            buffer.write(char);
-          } else {
-            buffer.write('_');
-          }
-        } else {
-          buffer.write(char);
-        }
-      }
-      return buffer.toString();
-    }).join(' ');
-  }
 }

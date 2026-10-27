@@ -519,10 +519,12 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         puedeIniciar: entry['puede_iniciar'] as bool? ?? false,
         respuestaHash:
             data['respuestaHash'] as String? ??
-            OfflineGameStore.huella(nivel.id, (data['respuesta'] as String?) ?? ''),
+            OfflineGameStore.huella(
+              nivel.id,
+              (data['respuesta'] as String?) ?? '',
+            ),
         audioPaths: paths,
         instrumentalAudioPath: instrumentalFile.path,
-        artista: (entry['artista'] as String?) ?? (data['artista'] as String?),
       );
     }
 
