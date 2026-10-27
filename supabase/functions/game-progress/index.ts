@@ -35,6 +35,12 @@ import {
   introCoinRewards,
   introPrice,
 } from "./intros.ts";
+import {
+  hintCosts,
+  hintTypes,
+  type HintType,
+  maskInitials,
+} from "./hints.ts";
 import { objectVersion } from "../_shared/storage_version.ts";
 
 const corsHeaders = {
@@ -920,11 +926,15 @@ async function createOfflineBundle(
       instrumentalPath,
     );
     return {
-      entry,
+      entry: {
+        ...entry,
+        artista: typeof song.fields.artista === "string" ? song.fields.artista : null,
+      },
       respuestaHash: await answerHash(
         levelId,
         String(answer.fields.respuestaCancionNormalizada),
       ),
+      artista: typeof song.fields.artista === "string" ? song.fields.artista : null,
       audioUrls,
       audioVersions,
       instrumentalAudioUrl: await createOfflineAudioUrl(
@@ -1154,6 +1164,7 @@ function newGame(
       presupuestoRestante: 1000000,
       preciosInstrumentos: {},
       instrumentosComprados: [],
+      pistasUsadas: [],
       melodiaDescubierta: false,
       instrumentoMelodia: null,
       ganada: false,
@@ -1338,6 +1349,170 @@ async function submitAnswer(
     completedDifficulty: currentOrder.every((id) => completedIds.has(id)),
     // Al acertar ya se puede revelar la canción para el reproductor.
     ...await revealedSong(token, level),
+  };
+}
+
+/// Solicitar una pista (artista, iniciales o 4to instrumento) a cambio de monedas.
+async function handleRequestHint(
+  token: string,
+  uid: string,
+  gameId: string,
+  hintType: string,
+  guest = false,
+): Promise<JsonObject> {
+  if (!validId(gameId) || !hintTypes.has(hintType)) {
+    throw new HttpError(400, "gameId o tipo de pista no válidos");
+  }
+
+  const gamePath = `games/${gameId}`;
+  const game = await getDocument(token, gamePath);
+  if (!game) throw new HttpError(404, "No se encontró la partida");
+  if (game.fields.uid !== uid) {
+    throw new HttpError(403, "La partida no pertenece a este usuario");
+  }
+  if (game.fields.ganada === true) {
+    throw new HttpError(409, "La partida ya fue completada");
+  }
+
+  const levelId = game.fields.levelId;
+  if (typeof levelId !== "string" || !validId(levelId)) {
+    throw new HttpError(500, "La partida no tiene un nivel válido");
+  }
+  const level = await getDocument(token, `levels/${levelId}`);
+  if (!level) throw new HttpError(404, "No se encontró el nivel");
+
+  const songId = level.fields.cancionId;
+  if (typeof songId !== "string" || !validId(songId)) {
+    throw new HttpError(500, "El nivel no tiene una canción válida");
+  }
+  const song = await getDocument(token, `songs/${songId}`);
+  if (!song) throw new HttpError(404, "No se encontró la canción");
+
+  const pistasUsadas = stringList(game.fields.pistasUsadas);
+  const introState = await loadIntroState(token, uid, guest);
+  const currentCoins = coinBalance(
+    introState.earned,
+    introState.unlocked.length,
+    introState.hintCoinsSpent,
+  );
+
+  const purchased = stringList(game.fields.instrumentosComprados);
+  const rawInstruments = level.fields.instrumentos;
+  const levelInstruments = rawInstruments && typeof rawInstruments === "object"
+    ? Object.keys(rawInstruments as JsonObject)
+    : [];
+
+  // Si ya se compró esta pista en esta partida, devolverla sin volver a cobrar
+  if (pistasUsadas.includes(hintType)) {
+    let valor = "";
+    let cuartoInstrumento: string | null = null;
+    if (hintType === "artist") {
+      valor = typeof song.fields.artista === "string"
+        ? song.fields.artista
+        : "Artista desconocido";
+    } else if (hintType === "initials") {
+      valor = maskInitials(
+        typeof song.fields.titulo === "string" ? song.fields.titulo : "",
+      );
+    } else if (hintType === "fourth_instrument") {
+      cuartoInstrumento = typeof game.fields.cuartoInstrumento === "string"
+        ? (game.fields.cuartoInstrumento as string)
+        : null;
+      valor = cuartoInstrumento ?? "";
+    }
+    return {
+      tipo: hintType,
+      valor,
+      cuartoInstrumento,
+      yaComprada: true,
+      costo: 0,
+      pistasUsadas,
+      monedasRestantes: currentCoins,
+      instrumentosComprados: purchased,
+    };
+  }
+
+  const cost = hintCosts[hintType as HintType];
+  if (currentCoins < cost) {
+    throw new HttpError(
+      409,
+      `No tienes suficientes monedas (${currentCoins} de ${cost})`,
+    );
+  }
+
+  let valor = "";
+  let cuartoInstrumento: string | null = null;
+  let updatedPurchased = [...purchased];
+
+  if (hintType === "artist") {
+    valor = typeof song.fields.artista === "string"
+      ? song.fields.artista
+      : "Artista desconocido";
+  } else if (hintType === "initials") {
+    valor = maskInitials(
+      typeof song.fields.titulo === "string" ? song.fields.titulo : "",
+    );
+  } else if (hintType === "fourth_instrument") {
+    const missing = levelInstruments.find((inst) => !purchased.includes(inst));
+    if (!missing) {
+      throw new HttpError(409, "Todos los instrumentos ya están desbloqueados");
+    }
+    cuartoInstrumento = missing;
+    valor = missing;
+    updatedPurchased = [...purchased, missing];
+  }
+
+  const now = new Date().toISOString();
+  const updatedPistas = [...pistasUsadas, hintType];
+
+  const gameUpdates: JsonObject = {
+    pistasUsadas: updatedPistas,
+    updatedAt: now,
+  };
+  if (cuartoInstrumento) {
+    gameUpdates.instrumentosComprados = updatedPurchased;
+    gameUpdates.cuartoInstrumento = cuartoInstrumento;
+  }
+
+  const writes: JsonObject[] = [
+    updateWrite(gamePath, gameUpdates, game.updateTime!),
+  ];
+
+  // Descontar monedas del usuario en su introProgress/state
+  const newSpent = introState.hintCoinsSpent + cost;
+  if (introState.state) {
+    writes.push(
+      updateWrite(
+        introState.path,
+        { pistasMonedasGastadas: newSpent, updatedAt: now },
+        introState.state.updateTime!,
+      ),
+    );
+  } else {
+    writes.push(
+      createWrite(introState.path, {
+        unlockedIds: [],
+        completedIds: [],
+        pistasMonedasGastadas: newSpent,
+        failedAnswerAttempts: 0,
+        nextAnswerAt: null,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+  }
+
+  await commitWrites(token, writes);
+
+  return {
+    tipo: hintType,
+    valor,
+    cuartoInstrumento,
+    yaComprada: false,
+    costo: cost,
+    pistasUsadas: updatedPistas,
+    monedasRestantes: currentCoins - cost,
+    instrumentosComprados: updatedPurchased,
   };
 }
 
@@ -2264,11 +2439,15 @@ async function loadIntroState(token: string, uid: string, guest: boolean) {
       ]),
     ),
   );
+  const hintCoinsSpent = typeof state?.fields.pistasMonedasGastadas === "number"
+    ? (state.fields.pistasMonedasGastadas as number)
+    : 0;
   return {
     path,
     state,
     intros,
     earned,
+    hintCoinsSpent,
     unlocked: [...new Set(stringList(state?.fields.unlockedIds))],
     completed: new Set(stringList(state?.fields.completedIds)),
   };
@@ -2281,7 +2460,11 @@ function introSummary(
 ): JsonObject {
   const unlocked = new Set(state.unlocked);
   return {
-    monedas: coinBalance(state.earned, state.unlocked.length),
+    monedas: coinBalance(
+      state.earned,
+      state.unlocked.length,
+      state.hintCoinsSpent,
+    ),
     monedas_ganadas: state.earned,
     restantes: [...state.intros.keys()].filter((id) => !unlocked.has(id))
       .length,
@@ -2319,7 +2502,10 @@ async function drawIntro(
   if (locked.length === 0) {
     throw new HttpError(409, "Ya descubriste todas las intros");
   }
-  if (coinBalance(state.earned, state.unlocked.length) < introPrice) {
+  if (
+    coinBalance(state.earned, state.unlocked.length, state.hintCoinsSpent) <
+      introPrice
+  ) {
     throw new HttpError(
       409,
       "No tienes monedas suficientes. Adivina canciones del juego principal para ganar más.",
@@ -2638,6 +2824,25 @@ async function handle(request: Request): Promise<Response> {
           uid,
           body.gameId,
           body.instrument,
+        ),
+      );
+    }
+    if (action === "requestHint") {
+      if (
+        !validId(body.gameId) ||
+        typeof body.hintType !== "string" ||
+        !hintTypes.has(body.hintType)
+      ) {
+        throw new HttpError(400, "gameId o tipo de pista no son válidos");
+      }
+      return response(
+        200,
+        await handleRequestHint(
+          token,
+          uid,
+          body.gameId,
+          body.hintType,
+          guest,
         ),
       );
     }

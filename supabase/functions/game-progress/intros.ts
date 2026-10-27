@@ -23,7 +23,11 @@ export function coinsEarned(
   );
 }
 
-/// Saldo disponible: lo ganado menos lo gastado en intros desbloqueadas.
-export function coinBalance(earned: number, unlockedCount: number): number {
-  return Math.max(0, earned - unlockedCount * introPrice);
+/// Saldo disponible: lo ganado menos lo gastado en intros desbloqueadas y pistas.
+export function coinBalance(
+  earned: number,
+  unlockedCount: number,
+  hintCoinsSpent = 0,
+): number {
+  return Math.max(0, earned - unlockedCount * introPrice - hintCoinsSpent);
 }

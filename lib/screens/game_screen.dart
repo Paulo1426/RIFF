@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/instrumento.dart';
 import '../models/nivel.dart';
 import '../models/partida.dart';
+import '../models/pista.dart';
 import '../providers/providers.dart';
 import '../services/audio_service.dart';
 import '../services/firebase_game_repository.dart';
@@ -21,6 +22,7 @@ import '../theme.dart';
 import '../widgets/liquid_glass/liquid_glass_appbar.dart';
 import '../widgets/liquid_glass/liquid_glass_button.dart';
 import '../widgets/liquid_glass/liquid_glass_card.dart';
+import '../widgets/liquid_glass/pistas_dialog.dart';
 import '../widgets/reproductor_cancion.dart';
 
 enum ResultadoNivel { terminar, siguiente }
@@ -100,6 +102,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   late bool _playingOffline;
   int _playbackGeneration = 0;
   late final Partida? _offlinePartida;
+  int _monedasDisponibles = 0;
+  final Map<TipoPista, String> _pistasDesbloqueadas = {};
+  TipoPista? _cargandoPista;
 
   @override
   void initState() {
@@ -118,6 +123,17 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             random: Random.secure(),
           )
         : null;
+    unawaited(_cargarMonedas());
+  }
+
+  @override
+  void didUpdateWidget(covariant GameScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.gameId != widget.gameId || oldWidget.nivel.id != widget.nivel.id) {
+      _pistasDesbloqueadas.clear();
+      _cargandoPista = null;
+      unawaited(_cargarMonedas());
+    }
   }
 
   @override
@@ -251,6 +267,129 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     } finally {
       if (mounted) setState(() => _buying = false);
     }
+  }
+
+  Future<void> _cargarMonedas() async {
+    try {
+      if (!_playingOffline) {
+        final estado = await ref.read(firebaseGameRepositoryProvider).cargarIntros();
+        if (mounted) {
+          setState(() => _monedasDisponibles = estado.monedas);
+        }
+      } else {
+        final uid = ref.read(usuarioProvider).id;
+        final store = await ref.read(offlineIntroStoreProvider).load(uid);
+        if (mounted && store != null) {
+          setState(() => _monedasDisponibles = store.estado.monedas);
+        }
+      }
+    } catch (e) {
+      debugPrint('No se pudieron cargar las monedas del usuario: $e');
+    }
+  }
+
+  void _pedirPista(TipoPista tipo) {
+    debugPrint('==> Solicitando pista ${tipo.id} para nivel ${widget.nivel.id} (${widget.nivel.numero})');
+    // 1. Resolución inmediata en cliente (sin spinners ni demoras de red)
+    _resolverPistaLocal(tipo);
+
+    // 2. Sincronización opcional en segundo plano con el servidor
+    if (!_playingOffline) {
+      unawaited(
+        ref
+            .read(firebaseGameRepositoryProvider)
+            .pedirPista(gameId: widget.gameId, tipo: tipo)
+            .timeout(const Duration(seconds: 2))
+            .then((resultado) {
+          if (mounted) {
+            setState(() {
+              _monedasDisponibles = resultado.monedasRestantes;
+              if (resultado.valor.isNotEmpty) {
+                _pistasDesbloqueadas[tipo] = resultado.valor;
+              }
+            });
+          }
+        }).catchError((_) {
+          // Silencioso: la pista ya fue entregada localmente de inmediato.
+        }),
+      );
+    }
+  }
+
+  void _resolverPistaLocal(TipoPista tipo) {
+    if (_monedasDisponibles < tipo.costoMonedas &&
+        !_pistasDesbloqueadas.containsKey(tipo)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No tienes monedas suficientes')),
+        );
+      }
+      return;
+    }
+
+    final id = widget.nivel.id;
+    final songId = widget.nivel.cancionId;
+    final idPrefix = id.contains('-') ? id.split('-').first : widget.nivel.dificultad.id;
+    final numFormatted = widget.nivel.numero.toString().padLeft(2, '0');
+    final numRaw = widget.nivel.numero.toString();
+
+    final catalogInfo = catalogoCancionesFallback[id] ??
+        catalogoCancionesFallback[songId] ??
+        catalogoCancionesFallback['$idPrefix-$numFormatted'] ??
+        catalogoCancionesFallback['$idPrefix-$numRaw'];
+
+    String valor = '';
+    if (tipo == TipoPista.artista) {
+      valor = widget.offlineLevel?.artista ??
+          catalogInfo?.artista ??
+          (widget.nivel.cancionTitulo != 'Canción misteriosa'
+              ? 'Artista de ${widget.nivel.cancionTitulo}'
+              : 'Artista no disponible');
+    } else if (tipo == TipoPista.iniciales) {
+      final titulo = catalogInfo?.titulo ??
+          (widget.nivel.cancionTitulo != 'Canción misteriosa'
+              ? widget.nivel.cancionTitulo
+              : (widget.offlineLevel?.nivel.cancionTitulo ?? ''));
+      valor = titulo.isNotEmpty && titulo != 'Canción misteriosa'
+          ? maskInitials(titulo)
+          : 'Pista no disponible';
+    } else if (tipo == TipoPista.cuartoInstrumento) {
+      final faltante = widget.nivel.instrumentos.firstWhere(
+        (inst) => !_purchased.contains(inst.id),
+        orElse: () => widget.nivel.instrumentos.first,
+      );
+      _purchased.add(faltante.id);
+      valor = faltante.tipo.nombre;
+    }
+
+    if (!_pistasDesbloqueadas.containsKey(tipo)) {
+      _monedasDisponibles = max(0, _monedasDisponibles - tipo.costoMonedas);
+    }
+    if (mounted) {
+      setState(() {
+        _pistasDesbloqueadas[tipo] = valor;
+      });
+    }
+  }
+
+  Future<void> _abrirDialogoPistas() async {
+    unawaited(_cargarMonedas());
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) => PistasDialog(
+          saldoMonedas: _monedasDisponibles,
+          pistasDesbloqueadas: _pistasDesbloqueadas,
+          cargandoTipo: _cargandoPista,
+          onComprarPista: (tipo) {
+            _pedirPista(tipo);
+            if (dialogCtx.mounted) {
+              setDialogState(() {});
+            }
+          },
+        ),
+      ),
+    );
   }
 
   // Llamar dentro de setState: guarda el descuento para animarlo.
@@ -986,6 +1125,17 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                 'Nivel ${widget.numeroVisible ?? widget.nivel.numero}',
           ),
           actions: [
+            if (!_won)
+              IconButton(
+                tooltip: 'Pistas y comodines (🪙 $_monedasDisponibles)',
+                icon: Badge(
+                  label: Text('$_monedasDisponibles'),
+                  isLabelVisible: _monedasDisponibles > 0,
+                  backgroundColor: AppColors.signalOrange,
+                  child: const Icon(Icons.lightbulb_rounded),
+                ),
+                onPressed: _abrirDialogoPistas,
+              ),
             if (_premio case (final emoji, final cantidad, final nombre))
               _Premio(emoji: emoji, cantidad: cantidad, nombre: nombre),
             AnimatedSwitcher(
@@ -1096,13 +1246,108 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                               : const SizedBox(width: double.infinity),
                         ),
                         const Divider(height: 24),
+                        if (_pistasDesbloqueadas.containsKey(TipoPista.artista))
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppColors.signalOrange.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: AppColors.signalOrange.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.person_rounded,
+                                  size: 16,
+                                  color: AppColors.signalOrange,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Artista: ${_pistasDesbloqueadas[TipoPista.artista]}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (_pistasDesbloqueadas.containsKey(TipoPista.iniciales))
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppColors.verde.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: AppColors.verde.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.text_fields_rounded,
+                                  size: 16,
+                                  color: AppColors.verde,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Iniciales: ${_pistasDesbloqueadas[TipoPista.iniciales]}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      letterSpacing: 1.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (_pistasDesbloqueadas.containsKey(TipoPista.cuartoInstrumento))
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Colors.blue.withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.music_note_rounded,
+                                  size: 16,
+                                  color: Colors.blue,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    '4to instrumento desbloqueado: ${_pistasDesbloqueadas[TipoPista.cuartoInstrumento]}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         TextField(
                           controller: _answerController,
                           enabled: !_sending,
                           textInputAction: TextInputAction.done,
                           onSubmitted: (_) => _submitAnswer(),
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: '¿Qué canción es?',
+                            hintText: _pistasDesbloqueadas[TipoPista.iniciales],
                           ),
                         ),
                         if (_message != null) ...[

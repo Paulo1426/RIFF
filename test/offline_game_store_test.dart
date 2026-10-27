@@ -81,6 +81,46 @@ void main() {
     );
   });
 
+  test('generates initials masks for hints preserving punctuation and numbers', () {
+    expect(
+      OfflineGameStore.maskInitials('Los caminos de la vida'),
+      'L__ c______ d_ l_ v___',
+    );
+    expect(
+      OfflineGameStore.maskInitials('¡Ay, corazón!'),
+      '¡A_, c______!',
+    );
+    expect(
+      OfflineGameStore.maskInitials('1984 (Remix)'),
+      '1___ (R____)',
+    );
+  });
+
+  test('serializes and deserializes artista in OfflineLevelData', () {
+    final offline = OfflineLevelData(
+      nivel: level,
+      completado: false,
+      puedeIniciar: true,
+      respuestaHash: OfflineGameStore.huella(level.id, 'cancion misteriosa'),
+      audioPaths: const {'bateria': 'cache/bateria.mp3'},
+      instrumentalAudioPath: 'cache/cancion-instrumental.mp3',
+      artista: 'Diomedes Díaz',
+    );
+
+    final json = offline.toJson({
+      'nivel': level.toJson(),
+      'completado': false,
+      'puede_iniciar': true,
+      'respuestaHash': OfflineGameStore.huella(level.id, 'cancion misteriosa'),
+    });
+
+    final restored = OfflineLevelData.fromJson(json);
+    expect(restored.artista, 'Diomedes Díaz');
+
+    final copied = restored.copyWith(artista: 'Silvestre Dangond');
+    expect(copied.artista, 'Silvestre Dangond');
+  });
+
   test('completion unlocks the next level and survives serialization', () {
     final secondLevel = Nivel(
       id: 'facil-02',
