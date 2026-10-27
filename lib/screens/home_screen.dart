@@ -350,9 +350,10 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           nivel: nivel,
           completado: entry['completado'] as bool? ?? false,
           puedeIniciar: entry['puede_iniciar'] as bool? ?? false,
-          respuesta: data['respuesta'] as String,
+          respuesta: (data['respuesta'] as String?) ?? '',
           audioPaths: paths,
           instrumentalAudioPath: instrumentalFile.path,
+          artista: (entry['artista'] as String?) ?? (data['artista'] as String?),
         );
       }),
     );
