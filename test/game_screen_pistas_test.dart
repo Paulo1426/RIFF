@@ -58,4 +58,43 @@ void main() {
     expect(find.text('Iniciales del Título'), findsOneWidget);
     expect(find.text('4to Instrumento'), findsOneWidget);
   });
+
+  testWidgets('level in media difficulty does not leak songs from facil difficulty', (tester) async {
+    final nivelMedia = Nivel(
+      id: 'media-04',
+      numero: 4,
+      dificultad: Dificultad.medio,
+      cancionId: 'cancion-009',
+      cancionTitulo: 'Canción misteriosa',
+      instrumentos: [
+        for (final type in TipoInstrumento.values)
+          Instrumento(tipo: type, precio: 0, audioUrl: ''),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          home: GameScreen(
+            nivel: nivelMedia,
+            gameId: 'media-game-4',
+            offlineMode: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final hintButton = find.byIcon(Icons.lightbulb_rounded);
+    expect(hintButton, findsOneWidget);
+
+    await tester.tap(hintButton);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.byType(PistasDialog), findsOneWidget);
+    // Ensure that it does not show Fácil 4's artist Los Diablitos
+    expect(find.text('Los Diablitos'), findsNothing);
+    expect(find.text('L__ c______ d_ l_ v___'), findsNothing);
+  });
 }

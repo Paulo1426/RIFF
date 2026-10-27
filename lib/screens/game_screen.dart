@@ -120,6 +120,16 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   }
 
   @override
+  void didUpdateWidget(covariant GameScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.gameId != widget.gameId || oldWidget.nivel.id != widget.nivel.id) {
+      _pistasDesbloqueadas.clear();
+      _cargandoPista = null;
+      unawaited(_cargarMonedas());
+    }
+  }
+
+  @override
   void dispose() {
     _musicaMenu.salirNivel();
     _reloj?.cancel();
@@ -306,22 +316,34 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       return;
     }
 
-    final catalogInfo = catalogoCancionesFallback[widget.nivel.id] ??
-        catalogoCancionesFallback[widget.nivel.cancionId] ??
-        catalogoCancionesFallback['facil-0${widget.nivel.numero}'] ??
-        catalogoCancionesFallback['facil-${widget.nivel.numero}'];
+    final id = widget.nivel.id;
+    final songId = widget.nivel.cancionId;
+    final idPrefix = id.contains('-') ? id.split('-').first : widget.nivel.dificultad.id;
+    final numFormatted = widget.nivel.numero.toString().padLeft(2, '0');
+    final numRaw = widget.nivel.numero.toString();
+
+    final catalogInfo = catalogoCancionesFallback[id] ??
+        catalogoCancionesFallback[songId] ??
+        catalogoCancionesFallback['$idPrefix-$numFormatted'] ??
+        catalogoCancionesFallback['$idPrefix-$numRaw'];
 
     String valor = '';
     if (tipo == TipoPista.artista) {
       valor = widget.offlineLevel?.artista ??
           catalogInfo?.artista ??
-          'Artista de la canción';
+          (widget.nivel.cancionTitulo != 'Canción misteriosa'
+              ? 'Artista de ${widget.nivel.cancionTitulo}'
+              : 'Artista no disponible');
     } else if (tipo == TipoPista.iniciales) {
       final titulo = catalogInfo?.titulo ??
           (widget.nivel.cancionTitulo != 'Canción misteriosa'
               ? widget.nivel.cancionTitulo
-              : (widget.offlineLevel?.nivel.cancionTitulo ?? ''));
-      valor = maskInitials(titulo.isNotEmpty ? titulo : 'Canción ${widget.nivel.numero}');
+              : (widget.offlineLevel?.respuesta ??
+                  widget.offlineLevel?.nivel.cancionTitulo ??
+                  ''));
+      valor = titulo.isNotEmpty && titulo != 'Canción misteriosa'
+          ? maskInitials(titulo)
+          : 'Pista no disponible';
     } else if (tipo == TipoPista.cuartoInstrumento) {
       final faltante = widget.nivel.instrumentos.firstWhere(
         (inst) => !_purchased.contains(inst.id),
