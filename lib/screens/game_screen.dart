@@ -271,33 +271,28 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     if (_cargandoPista != null) return;
     setState(() => _cargandoPista = tipo);
     try {
-      if (_playingOffline) {
-        _resolverPistaLocal(tipo);
-      } else {
-        try {
-          final resultado =
-              await ref.read(firebaseGameRepositoryProvider).pedirPista(
-                    gameId: widget.gameId,
-                    tipo: tipo,
-                  );
-          if (!mounted) return;
-          setState(() {
-            _monedasDisponibles = resultado.monedasRestantes;
-            _pistasDesbloqueadas[tipo] = resultado.valor;
-            if (tipo == TipoPista.cuartoInstrumento &&
-                resultado.cuartoInstrumento != null) {
-              _purchased.add(resultado.cuartoInstrumento!);
+      // 1. Resolución inmediata en cliente (cero latencia ni esperas de red)
+      _resolverPistaLocal(tipo);
+
+      // 2. Sincronización opcional en segundo plano con el servidor (sin bloquear la UI)
+      if (!_playingOffline) {
+        unawaited(
+          ref
+              .read(firebaseGameRepositoryProvider)
+              .pedirPista(gameId: widget.gameId, tipo: tipo)
+              .timeout(const Duration(seconds: 2))
+              .then((resultado) {
+            if (mounted) {
+              setState(() {
+                _monedasDisponibles = resultado.monedasRestantes;
+                if (resultado.valor.isNotEmpty) {
+                  _pistasDesbloqueadas[tipo] = resultado.valor;
+                }
+              });
             }
-          });
-        } catch (error) {
-          debugPrint('Backend no respondió para la pista; usando resolución local: $error');
-          _resolverPistaLocal(tipo);
-        }
-      }
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo obtener la pista: $error')),
+          }).catchError((_) {
+            // Silencioso: la pista ya fue resuelta localmente de forma instantánea.
+          }),
         );
       }
     } finally {
@@ -319,7 +314,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     }
 
     final catalogInfo = catalogoCancionesFallback[widget.nivel.id] ??
-        catalogoCancionesFallback[widget.nivel.cancionId];
+        catalogoCancionesFallback[widget.nivel.cancionId] ??
+        catalogoCancionesFallback['facil-0${widget.nivel.numero}'] ??
+        catalogoCancionesFallback['facil-${widget.nivel.numero}'];
 
     String valor = '';
     if (tipo == TipoPista.artista) {
@@ -331,7 +328,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           (widget.nivel.cancionTitulo != 'Canción misteriosa'
               ? widget.nivel.cancionTitulo
               : (widget.offlineLevel?.nivel.cancionTitulo ?? ''));
-      valor = maskInitials(titulo.isNotEmpty ? titulo : 'Canción');
+      valor = maskInitials(titulo.isNotEmpty ? titulo : 'Canción ${widget.nivel.numero}');
     } else if (tipo == TipoPista.cuartoInstrumento) {
       final faltante = widget.nivel.instrumentos.firstWhere(
         (inst) => !_purchased.contains(inst.id),
