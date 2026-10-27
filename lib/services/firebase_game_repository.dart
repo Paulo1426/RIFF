@@ -54,12 +54,15 @@ class ProgresoDificultadRemoto {
     required this.desbloqueada,
     required this.completados,
     required this.total,
+    this.unInstrumento = 0,
   });
 
   final Dificultad dificultad;
   final bool desbloqueada;
   final int completados;
   final int total;
+  // Niveles ganados comprando un solo instrumento.
+  final int unInstrumento;
 
   factory ProgresoDificultadRemoto.fromJson(Map<String, dynamic> json) {
     return ProgresoDificultadRemoto(
@@ -67,6 +70,7 @@ class ProgresoDificultadRemoto {
       desbloqueada: json['desbloqueada'] as bool,
       completados: (json['completados'] as num).toInt(),
       total: (json['total'] as num).toInt(),
+      unInstrumento: (json['un_instrumento'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -213,19 +217,25 @@ class FirebaseGameRepository {
     );
   }
 
+  /// Borra todo el progreso de la cuenta. El servidor exige haber confirmado
+  /// la contraseña (o Google) hace poco: se pide un token nuevo con esa
+  /// confirmación.
+  Future<void> reiniciarProgreso() async {
+    await _auth.currentUser?.getIdToken(true);
+    await _post({'action': 'reiniciarProgreso'});
+  }
+
   // --- Salas de "Desafía a tus amigos" ---
 
   Future<String> crearSala({
     required TipoSala tipo,
     required ModoSala modo,
-    required Dificultad dificultad,
     required bool publica,
   }) async {
     final response = await _post({
       'action': 'crearSala',
       'tipo': tipo.name,
       'modo': modo.name,
-      'dificultad': dificultad.id,
       'publica': publica,
     });
     return response['codigo'] as String;
@@ -237,8 +247,9 @@ class FirebaseGameRepository {
   Future<void> salirSala(String codigo) =>
       _post({'action': 'salirSala', 'codigo': codigo});
 
-  Future<void> iniciarSala(String codigo) =>
-      _post({'action': 'iniciarSala', 'codigo': codigo});
+  /// Cuando todos (2 o más) marcan "Listo", la partida empieza sola.
+  Future<void> marcarListo(String codigo, {required bool listo}) =>
+      _post({'action': 'listoSala', 'codigo': codigo, 'listo': listo});
 
   Future<void> saltarCancionSala(String codigo) =>
       _post({'action': 'saltarCancionSala', 'codigo': codigo});
@@ -283,14 +294,15 @@ class FirebaseGameRepository {
     );
   }
 
-  /// Fichas del jugador en tiempo real (0 si aún no ha ganado ninguna).
-  Stream<int> fichas() {
+  /// Fichas y salas ganadas del jugador, en tiempo real (todo en 0 si aún
+  /// no tiene saldo).
+  Stream<SaldoSalas> saldoSalas() {
     final uid = this.uid;
-    if (uid == null) return Stream.value(0);
+    if (uid == null) return Stream.value(const SaldoSalas());
     return FirebaseFirestore.instance
         .doc('users/$uid/fichas/saldo')
         .snapshots()
-        .map((doc) => (doc.data()?['fichas'] as num?)?.toInt() ?? 0);
+        .map((doc) => SaldoSalas.fromMap(doc.data()));
   }
 
   Future<PartidaSala> partidaSala(String codigo) async => PartidaSala.fromJson(
@@ -303,6 +315,22 @@ class FirebaseGameRepository {
       .doc(codigo)
       .snapshots()
       .map((doc) => doc.exists ? Sala.fromMap(doc.data()!) : null);
+
+  /// Últimas salas terminadas del jugador, la más reciente primero.
+  Stream<List<HistorialSala>> historialSalas() {
+    final uid = this.uid;
+    if (uid == null) return Stream.value(const []);
+    return FirebaseFirestore.instance
+        .collection('users/$uid/historialSalas')
+        .orderBy('terminadaEn', descending: true)
+        .limit(30)
+        .snapshots()
+        .map(
+          (query) => [
+            for (final doc in query.docs) HistorialSala.fromMap(doc.data()),
+          ],
+        );
+  }
 
   /// Salas públicas que aún esperan jugadores.
   Stream<List<Sala>> salasPublicas() => FirebaseFirestore.instance

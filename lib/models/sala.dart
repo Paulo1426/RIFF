@@ -1,16 +1,62 @@
 import 'nivel.dart';
 
-/// Contrarreloj: 5 minutos, gana quien sume más puntos. Eliminación: sin
-/// tiempo, en cada ronda sale el último en adivinar.
+/// Contrarreloj: 10 minutos, gana quien sume más puntos. Eliminación: sin
+/// tiempo, en cada ronda sale el último en adivinar. Las canciones salen de
+/// todas las dificultades.
 enum ModoSala { contrarreloj, eliminacion }
 
 enum EstadoSala { esperando, jugando, terminada }
 
 /// Instrumentos: juego principal (gratis, reparte fichas). Intros: cuesta
-/// [precioSalaIntros] fichas crearla o entrar.
+/// fichas crearla o entrar.
 enum TipoSala { instrumentos, intros }
 
-const precioSalaIntros = 5;
+const precioCrearSalaIntros = 10;
+const precioEntrarSalaIntros = 5;
+
+/// `users/{uid}/fichas/saldo`: fichas y estadísticas de salas. Solo el
+/// servidor lo escribe, al terminar cada sala.
+class SaldoSalas {
+  const SaldoSalas({
+    this.fichas = 0,
+    this.ganadasCancion = 0,
+    this.ganadasIntros = 0,
+    this.jugadas = 0,
+    this.fichasGanadas = 0,
+    this.noRendirse = 0,
+    this.podios = 0,
+  });
+
+  final int fichas;
+  final int ganadasCancion;
+  final int ganadasIntros;
+  final int jugadas;
+  // Fichas ganadas en total (sin restar lo gastado).
+  final int fichasGanadas;
+  // Veces que quedó último acertando al menos una canción.
+  final int noRendirse;
+  // Veces que terminó entre los 3 primeros.
+  final int podios;
+
+  int get ganadas => ganadasCancion + ganadasIntros;
+  // Las victorias anteriores a contar partidas pueden superar a las jugadas.
+  int get derrotas => jugadas > ganadas ? jugadas - ganadas : 0;
+  double get porcentajeVictorias =>
+      jugadas == 0 ? 0 : (ganadas / jugadas).clamp(0, 1).toDouble();
+
+  factory SaldoSalas.fromMap(Map<String, dynamic>? map) {
+    int campo(String nombre) => (map?[nombre] as num?)?.toInt() ?? 0;
+    return SaldoSalas(
+      fichas: campo('fichas'),
+      ganadasCancion: campo('ganadasCancion'),
+      ganadasIntros: campo('ganadasIntros'),
+      jugadas: campo('jugadas'),
+      fichasGanadas: campo('fichasGanadas'),
+      noRendirse: campo('noRendirse'),
+      podios: campo('podios'),
+    );
+  }
+}
 
 class JugadorSala {
   const JugadorSala({
@@ -20,6 +66,7 @@ class JugadorSala {
     required this.aciertos,
     required this.eliminado,
     required this.abandono,
+    this.listo = false,
     this.eliminadoEnRonda,
   });
 
@@ -29,6 +76,8 @@ class JugadorSala {
   final int aciertos;
   final bool eliminado;
   final bool abandono;
+  // En la espera: marcó "Listo".
+  final bool listo;
   final int? eliminadoEnRonda;
 
   factory JugadorSala.fromMap(String uid, Map<String, dynamic> map) =>
@@ -39,6 +88,7 @@ class JugadorSala {
         aciertos: (map['aciertos'] as num?)?.toInt() ?? 0,
         eliminado: map['eliminado'] as bool? ?? false,
         abandono: map['abandono'] as bool? ?? false,
+        listo: map['listo'] as bool? ?? false,
         eliminadoEnRonda: (map['eliminadoEnRonda'] as num?)?.toInt(),
       );
 }
@@ -51,7 +101,6 @@ class Sala {
     required this.publica,
     required this.tipo,
     required this.modo,
-    required this.dificultad,
     required this.maxJugadores,
     required this.estado,
     required this.jugadores,
@@ -67,7 +116,6 @@ class Sala {
   final bool publica;
   final TipoSala tipo;
   final ModoSala modo;
-  final Dificultad dificultad;
   final int maxJugadores;
   final EstadoSala estado;
   // En orden de llegada.
@@ -80,6 +128,10 @@ class Sala {
   final Map<String, int> premios;
 
   bool get llena => jugadores.length >= maxJugadores;
+
+  String get nombre => 'Sala de ${jugador(creadorUid)?.nombre ?? 'Alguien'}';
+
+  int get listos => jugadores.where((j) => j.listo).length;
 
   JugadorSala? jugador(String uid) =>
       jugadores.where((j) => j.uid == uid).firstOrNull;
@@ -111,7 +163,6 @@ class Sala {
       publica: map['publica'] as bool? ?? false,
       tipo: TipoSala.values.byName(map['tipo'] as String? ?? 'instrumentos'),
       modo: ModoSala.values.byName(map['modo'] as String),
-      dificultad: DificultadExtension.fromId(map['dificultad'] as String),
       maxJugadores: (map['maxJugadores'] as num?)?.toInt() ?? 5,
       estado: EstadoSala.values.byName(map['estado'] as String),
       jugadores: [
@@ -129,6 +180,45 @@ class Sala {
       ),
     );
   }
+}
+
+/// Una sala terminada en el historial del jugador
+/// (`users/{uid}/historialSalas/{codigo}`, la escribe el servidor al cerrarla).
+class HistorialSala {
+  const HistorialSala({
+    required this.codigo,
+    required this.nombre,
+    required this.tipo,
+    required this.modo,
+    required this.ganadorNombre,
+    required this.ganaste,
+    required this.puesto,
+    required this.jugadores,
+    required this.terminadaEn,
+  });
+
+  final String codigo;
+  final String nombre;
+  final TipoSala tipo;
+  final ModoSala? modo;
+  // null si nadie ganó (todos abandonaron o nadie acertó).
+  final String? ganadorNombre;
+  final bool ganaste;
+  final int puesto;
+  final int jugadores;
+  final DateTime? terminadaEn;
+
+  factory HistorialSala.fromMap(Map<String, dynamic> map) => HistorialSala(
+    codigo: map['codigo'] as String? ?? '',
+    nombre: map['nombre'] as String? ?? 'Sala',
+    tipo: TipoSala.values.asNameMap()[map['tipo']] ?? TipoSala.instrumentos,
+    modo: ModoSala.values.asNameMap()[map['modo']],
+    ganadorNombre: map['ganadorNombre'] as String?,
+    ganaste: map['ganaste'] as bool? ?? false,
+    puesto: (map['puesto'] as num?)?.toInt() ?? 0,
+    jugadores: (map['jugadores'] as num?)?.toInt() ?? 0,
+    terminadaEn: DateTime.tryParse(map['terminadaEn'] as String? ?? ''),
+  );
 }
 
 /// Canción que le toca al jugador en la sala, o por qué no tiene ninguna.

@@ -117,7 +117,7 @@ void main() {
                   nivel: nivel,
                   completado: false,
                   puedeIniciar: true,
-                  respuesta: 'cancion',
+                  respuestaHash: OfflineGameStore.huella(nivel.id, 'cancion'),
                   audioPaths: const {},
                 ),
                 onOfflineCompleted: (_, _) async {},
@@ -143,6 +143,9 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       expect(find.text('Cancion'), findsOneWidget);
+      // Sin conexión: banda animada en lugar de portada y controles.
+      expect(find.text('Sin conexión'), findsOneWidget);
+      expect(find.byTooltip('Reproducir'), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }

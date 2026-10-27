@@ -17,7 +17,7 @@ import '../services/validation_service.dart';
 final gameServiceProvider = Provider((ref) => GameService());
 final audioServiceProvider = Provider((ref) => AudioService());
 final musicaMenuProvider = Provider((ref) {
-  final musica = MusicaMenu(ref.read(audioServiceProvider));
+  final musica = MusicaMenu();
   ref.onDispose(musica.dispose);
   return musica;
 });
@@ -57,10 +57,11 @@ final partidaProvider = StateNotifierProvider<PartidaNotifier, Partida?>(
   (ref) => PartidaNotifier(),
 );
 
-/// Claro u oscuro elegido en el menú; sin elección sigue al sistema. Se
+/// Claro u oscuro elegido en Ajustes; sin elección, claro. Se
 /// guarda en un archivo, igual que el silencio de la música del menú.
 class ModoTema extends StateNotifier<ThemeMode> {
-  ModoTema() : super(ThemeMode.system);
+  // La app empieza en modo claro hasta que el jugador elija otro.
+  ModoTema() : super(ThemeMode.light);
 
   static Future<File> _archivo() async =>
       File('${(await getApplicationSupportDirectory()).path}/modo_tema');
@@ -72,7 +73,7 @@ class ModoTema extends StateNotifier<ThemeMode> {
       final guardado = await archivo.readAsString();
       state = ThemeMode.values.firstWhere(
         (modo) => modo.name == guardado,
-        orElse: () => ThemeMode.system,
+        orElse: () => ThemeMode.light,
       );
     } catch (error) {
       debugPrint('No se pudo leer el modo de tema: $error');

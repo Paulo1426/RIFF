@@ -25,6 +25,12 @@ service cloud.firestore {
         allow read: if isOwner(uid);
         allow write: if false;
       }
+
+      // Salas terminadas del jugador; las escribe game-progress al cerrarlas.
+      match /historialSalas/{codigo} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
     }
 
     match /songs/{songId} {

@@ -20,9 +20,12 @@ import {
   type ModoSala,
   modosSala,
   nivelDeIndice,
-  precioSalaIntros,
+  precioCrearSalaIntros,
+  precioEntrarSalaIntros,
+  estadisticasSala,
   premiosSala,
   puntosAcierto,
+  todosListos,
   type TipoSala,
   tiposSala,
 } from "./salas.ts";
@@ -392,6 +395,25 @@ async function clearGuestSession(token: string, uid: string): Promise<void> {
   }
 }
 
+/// Empezar desde cero: borra progreso, orden de niveles, intros, fichas y
+/// estadísticas de salas de una cuenta registrada.
+async function resetUserProgress(token: string, uid: string): Promise<void> {
+  for (const coleccion of [
+    "progress",
+    "difficultyOrders",
+    "introProgress",
+    "fichas",
+  ]) {
+    const documentos = await listCollection(token, `users/${uid}/${coleccion}`);
+    await clearDocuments(
+      token,
+      documentos
+        .map((documento) => documento.name)
+        .filter((name): name is string => typeof name === "string"),
+    );
+  }
+}
+
 function createWrite(path: string, fields: JsonObject): JsonObject {
   return {
     update: { name: documentName(path), fields: toFields(fields) },
@@ -425,6 +447,19 @@ function normalizeAnswer(value: string): string {
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+/// Huella de la respuesta para los paquetes offline: el teléfono comprueba
+/// el acierto sin recibir el texto. El id evita comparar huellas entre
+/// canciones; el servidor vuelve a validar el acierto al sincronizar.
+async function answerHash(id: string, answer: string): Promise<string> {
+  const bytes = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${id}:${normalizeAnswer(answer)}`),
+  );
+  return [...new Uint8Array(bytes)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function shuffled<T>(items: T[]): T[] {
@@ -545,10 +580,11 @@ async function ensureOrder(
   }
 }
 
+/// [difficulty] null (salas): acepta el nivel sea cual sea su dificultad.
 async function buildLevelEntry(
   token: string,
   id: string,
-  difficulty: Difficulty,
+  difficulty: Difficulty | null,
   completed: Set<string>,
   canStart: boolean,
 ): Promise<JsonObject> {
@@ -565,7 +601,8 @@ async function buildLevelEntry(
   if (
     !validId(songId) ||
     !Number.isInteger(fields.numero) ||
-    levelDifficulty !== difficulty
+    !difficulties.includes(levelDifficulty as Difficulty) ||
+    (difficulty !== null && levelDifficulty !== difficulty)
   ) {
     throw new HttpError(500, `El nivel ${id} tiene metadatos inválidos`);
   }
@@ -689,11 +726,15 @@ async function getProgress(
     );
     const done = order.length === levelsPerDifficulty &&
       order.every((levelId) => completed.has(levelId));
+    const unInstrumento = new Set(
+      stringList(progressDoc?.fields.unInstrumentoIds),
+    );
     summaries.push({
       dificultad: difficulty,
       desbloqueada: true,
       completados: order.filter((id) => completed.has(id)).length,
       total: order.length,
+      un_instrumento: order.filter((id) => unInstrumento.has(id)).length,
     });
     if (!done) {
       activeDifficulty = difficulty;
@@ -815,9 +856,12 @@ async function createOfflineBundle(
   ];
   const eligible = [...new Map(
     entries
+      // Solo niveles ya jugables: los que aún no se pueden iniciar no
+      // viajan al teléfono (ni sus audios ni su respuesta).
       .filter((entry) => {
         const nivel = entry.nivel as JsonObject;
-        return !guest || nivel.dificultad === "facil";
+        return (entry.completado === true || entry.puede_iniciar === true) &&
+          (!guest || nivel.dificultad === "facil");
       })
       .map((entry) => {
         const nivel = entry.nivel as JsonObject;
@@ -886,7 +930,10 @@ async function createOfflineBundle(
         ...entry,
         artista: typeof song.fields.artista === "string" ? song.fields.artista : null,
       },
-      respuesta: answer.fields.respuestaCancionNormalizada,
+      respuestaHash: await answerHash(
+        levelId,
+        String(answer.fields.respuestaCancionNormalizada),
+      ),
       artista: typeof song.fields.artista === "string" ? song.fields.artista : null,
       audioUrls,
       audioVersions,
@@ -1243,6 +1290,13 @@ async function submitAnswer(
     );
   }
   completedIds.add(levelId);
+  // "Música para mis oídos": niveles ganados comprando un solo instrumento
+  // (cuenta también al repetir un nivel ya ganado).
+  const unInstrumento = new Set(stringList(progress?.fields?.unInstrumentoIds));
+  const conUnInstrumento =
+    stringList(game.fields.instrumentosComprados).length === 1;
+  const nuevoUnInstrumento = conUnInstrumento && !unInstrumento.has(levelId);
+  if (conUnInstrumento) unInstrumento.add(levelId);
   const completedNumbers = new Set(
     Array.isArray(progress?.fields?.nivelesCompletados)
       ? (progress.fields.nivelesCompletados as unknown[])
@@ -1259,6 +1313,7 @@ async function submitAnswer(
       : completedIds.size + 1,
     nivelesCompletados: [...completedNumbers].sort((a, b) => a - b),
     completedLevelIds: [...completedIds],
+    unInstrumentoIds: [...unInstrumento],
     updatedAt: now,
   };
   const progressPath = userPath(
@@ -1278,7 +1333,7 @@ async function submitAnswer(
       },
       game.updateTime!,
     ),
-    ...(replayingCompletedLevel ? [] : [
+    ...(replayingCompletedLevel && !nuevoUnInstrumento ? [] : [
       progress
         ? updateWrite(progressPath, progressFields, progress.updateTime!)
         : createWrite(progressPath, progressFields),
@@ -1481,6 +1536,10 @@ interface Jugador extends JsonObject {
   eliminado: boolean;
   eliminadoEnRonda: number | null;
   abandono: boolean;
+  // En la espera: marcó "Listo". Fichas que pagó al entrar (se devuelven si
+  // sale antes de empezar).
+  listo?: boolean;
+  pagado?: number;
   // Solo salas de intros: intros adivinadas (dan acceso a la original), qué
   // canción tiene el reloj en marcha y los fallos para la espera de 30 s.
   acertadas?: string[];
@@ -1489,9 +1548,11 @@ interface Jugador extends JsonObject {
   nextAnswerAt?: string | null;
 }
 
-function newPlayer(nombre: string): Jugador {
+function newPlayer(nombre: string, pagado = 0): Jugador {
   return {
     nombre,
+    listo: false,
+    pagado,
     puntos: 0,
     aciertos: 0,
     indice: 0,
@@ -1569,40 +1630,58 @@ function walletPath(uid: string): string {
   return `users/${uid}/fichas/saldo`;
 }
 
-/// Suma (o resta) fichas; crea el saldo si no existe. Con [updateTime] solo
-/// se aplica si el saldo no cambió desde que se leyó.
+/// Suma (o resta) en [campo] del saldo: fichas o salas ganadas
+/// (ganadasCancion, ganadasIntros); crea el saldo si no existe. Con
+/// [updateTime] solo se aplica si el saldo no cambió desde que se leyó.
 function walletWrite(
   uid: string,
   cantidad: number,
   updateTime?: string,
+  campo = "fichas",
 ): JsonObject {
   return {
     update: { name: documentName(walletPath(uid)), fields: {} },
     updateMask: { fieldPaths: [] },
     updateTransforms: [{
-      fieldPath: "fichas",
+      fieldPath: campo,
       increment: { integerValue: String(cantidad) },
     }],
     ...(updateTime ? { currentDocument: { updateTime } } : {}),
   };
 }
 
-/// Cobra la entrada a una sala de intros o explica por qué no alcanza.
+/// Varios incrementos en el saldo de un jugador en una sola escritura.
+function walletStatsWrite(
+  uid: string,
+  incrementos: Record<string, number>,
+): JsonObject {
+  return {
+    update: { name: documentName(walletPath(uid)), fields: {} },
+    updateMask: { fieldPaths: [] },
+    updateTransforms: Object.entries(incrementos).map(([campo, n]) => ({
+      fieldPath: campo,
+      increment: { integerValue: String(n) },
+    })),
+  };
+}
+
+/// Cobra [precio] fichas por una sala de intros o explica por qué no alcanza.
 async function chargeIntroRoom(
   token: string,
   uid: string,
+  precio: number,
 ): Promise<JsonObject> {
   const saldo = await getDocument(token, walletPath(uid));
   const fichas = typeof saldo?.fields.fichas === "number"
     ? saldo.fields.fichas
     : 0;
-  if (!saldo?.updateTime || fichas < precioSalaIntros) {
+  if (!saldo?.updateTime || fichas < precio) {
     throw new HttpError(
       409,
-      `Necesitas ${precioSalaIntros} fichas para una sala de intros y tienes ${fichas}. Gánalas en salas de instrumentos.`,
+      `Necesitas ${precio} fichas y tienes ${fichas}. Gánalas en salas de Adivina la canción.`,
     );
   }
-  return walletWrite(uid, -precioSalaIntros, saldo.updateTime);
+  return walletWrite(uid, -precio, saldo.updateTime);
 }
 
 /// Eliminación: saca al último en adivinar y abre la siguiente ronda, o
@@ -1665,17 +1744,55 @@ async function updateRoom<T>(
     const { borrar, extra = [], resultado } = cambiado;
     let campos = cambiado.campos;
     const writes = [...extra];
-    // Al terminar una sala de instrumentos se reparten las fichas, en el
-    // mismo guardado que la cierra para que no se paguen dos veces.
-    if (
-      campos?.estado === "terminada" && sala.fields.estado !== "terminada" &&
-      sala.fields.tipo !== "intros"
-    ) {
-      const premios = premiosSala(roomRanking({ ...sala.fields, ...campos }));
-      writes.push(
-        ...Object.entries(premios).map(([id, n]) => walletWrite(id, n)),
+    // Al terminar una sala se guardan las estadísticas y el historial de
+    // cada jugador y, si es de instrumentos, se reparten las fichas; todo en
+    // el mismo guardado que la cierra para que no se cuente ni se pague dos
+    // veces.
+    if (campos?.estado === "terminada" && sala.fields.estado !== "terminada") {
+      const final = { ...sala.fields, ...campos };
+      const ranking = roomRanking(final);
+      const premios = final.tipo === "intros" ? {} : premiosSala(ranking);
+      const ganador = ranking.find((jugador) =>
+        jugador.uid === final.ganadorUid
       );
-      campos = { ...campos, premios };
+      const ganadorUid = ganador?.uid;
+      const creador = roomPlayers(final)[final.creadorUid as string];
+      const terminadaEn = new Date().toISOString();
+      for (const [puesto, jugador] of ranking.entries()) {
+        // Historial del jugador: users/{uid}/historialSalas/{codigo}.
+        writes.push({
+          update: {
+            name: documentName(
+              `users/${jugador.uid}/historialSalas/${codigo}`,
+            ),
+            fields: toFields({
+              codigo,
+              nombre: `Sala de ${creador?.nombre ?? "Alguien"}`,
+              tipo: final.tipo ?? "instrumentos",
+              modo: final.modo ?? null,
+              ganadorNombre: ganador?.nombre ?? null,
+              ganaste: jugador.uid === ganadorUid,
+              puesto: puesto + 1,
+              jugadores: ranking.length,
+              terminadaEn,
+            }),
+          },
+        });
+        writes.push(
+          walletStatsWrite(
+            jugador.uid,
+            estadisticasSala(
+              jugador,
+              puesto,
+              ranking.length,
+              jugador.uid === ganadorUid,
+              final.tipo === "intros",
+              premios[jugador.uid] ?? 0,
+            ),
+          ),
+        );
+      }
+      if (final.tipo !== "intros") campos = { ...campos, premios };
     }
     if (borrar) {
       writes.push({
@@ -1708,16 +1825,15 @@ async function createRoom(
   nombre: string,
   body: JsonObject,
 ): Promise<JsonObject> {
-  const dificultad = normalizeDifficulty(body.dificultad);
   const tipo = body.tipo ?? "instrumentos";
   if (
     !modosSala.includes(body.modo as ModoSala) ||
     !tiposSala.includes(tipo as TipoSala) ||
-    !difficulties.includes(dificultad as Difficulty) ||
     typeof body.publica !== "boolean"
   ) {
-    throw new HttpError(400, "tipo, modo, dificultad o publica no son válidos");
+    throw new HttpError(400, "tipo, modo o publica no son válidos");
   }
+  const pagado = tipo === "intros" ? precioCrearSalaIntros : 0;
   const now = new Date().toISOString();
   for (let intento = 0; intento < 5; intento++) {
     const codigo = generarCodigo((max) => {
@@ -1727,18 +1843,18 @@ async function createRoom(
     });
     try {
       await commitWrites(token, [
-        ...(tipo === "intros" ? [await chargeIntroRoom(token, uid)] : []),
+        ...(pagado ? [await chargeIntroRoom(token, uid, pagado)] : []),
         createWrite(roomPath(codigo), {
           codigo,
           creadorUid: uid,
           publica: body.publica,
           tipo,
           modo: body.modo,
-          // Las intros no tienen dificultad; se guarda igual para la tabla.
-          dificultad,
+          // Las canciones salen de todas las dificultades.
+          dificultad: null,
           maxJugadores: maxJugadoresSala,
           estado: "esperando",
-          jugadores: { [uid]: newPlayer(nombre) },
+          jugadores: { [uid]: newPlayer(nombre, pagado) },
           orden: [uid],
           levelIds: [],
           ronda: 0,
@@ -1777,12 +1893,13 @@ function joinRoom(
     if (Object.keys(jugadores).length >= max) {
       throw new HttpError(409, "La sala está llena");
     }
+    const pagado = sala.tipo === "intros" ? precioEntrarSalaIntros : 0;
     return {
       campos: {
-        jugadores: { ...jugadores, [uid]: newPlayer(nombre) },
+        jugadores: { ...jugadores, [uid]: newPlayer(nombre, pagado) },
         orden: [...roomOrder(sala), uid],
       },
-      extra: sala.tipo === "intros" ? [await chargeIntroRoom(token, uid)] : [],
+      extra: pagado ? [await chargeIntroRoom(token, uid, pagado)] : [],
       resultado: { codigo },
     };
   });
@@ -1793,7 +1910,7 @@ function leaveRoom(
   uid: string,
   codigo: string,
 ): Promise<JsonObject> {
-  return updateRoom(token, codigo, (sala) => {
+  return updateRoom(token, codigo, async (sala) => {
     const jugadores = roomPlayers(sala);
     const jugador = jugadores[uid];
     if (!jugador || sala.estado === "terminada") {
@@ -1802,19 +1919,27 @@ function leaveRoom(
     if (sala.estado === "esperando") {
       delete jugadores[uid];
       const orden = roomOrder(sala).filter((id) => id !== uid);
-      // Salir antes de empezar devuelve la entrada de una sala de intros.
-      const extra = sala.tipo === "intros"
-        ? [walletWrite(uid, precioSalaIntros)]
-        : [];
+      // Salir antes de empezar devuelve lo que pagó (salas de intros).
+      const extra = jugador.pagado ? [walletWrite(uid, jugador.pagado)] : [];
       if (orden.length === 0) {
         return { borrar: true, extra, resultado: { salio: true } };
       }
+      const restante = {
+        ...sala,
+        jugadores,
+        orden,
+        // Si sale quien la creó, la sala pasa al siguiente en llegar.
+        creadorUid: sala.creadorUid === uid ? orden[0] : sala.creadorUid,
+      };
       return {
         campos: {
           jugadores,
           orden,
-          // Si sale quien la creó, la sala pasa al siguiente en llegar.
-          creadorUid: sala.creadorUid === uid ? orden[0] : sala.creadorUid,
+          creadorUid: restante.creadorUid,
+          // Si los que quedan ya estaban todos listos, empieza ya.
+          ...(todosListos(orden.map((id) => jugadores[id].listo === true))
+            ? await roomStart(token, restante)
+            : {}),
         },
         extra,
         resultado: { salio: true },
@@ -1845,53 +1970,67 @@ function leaveRoom(
   });
 }
 
-function startRoom(
+/// Campos para arrancar la partida: canciones de todas las dificultades (o
+/// todas las intros) mezcladas y, en contrarreloj, el reloj desde ahora.
+async function roomStart(token: string, sala: JsonObject): Promise<JsonObject> {
+  const levelIds = sala.tipo === "intros"
+    ? (await listCollection(token, "intros"))
+      .filter((document) => fromFields(document.fields ?? {}).published === true)
+      .map((document) => document.name?.split("/").at(-1) ?? "")
+      .filter(validId)
+    : (await publishedLevels(token))
+      .filter((level) =>
+        level.published && Number.isInteger(level.numero) &&
+        difficulties.includes(level.dificultad as Difficulty) &&
+        validId(level.id)
+      )
+      .map((level) => level.id);
+  if (levelIds.length === 0) {
+    throw new HttpError(
+      409,
+      sala.tipo === "intros"
+        ? "No hay intros publicadas"
+        : "No hay canciones publicadas",
+    );
+  }
+  const now = Date.now();
+  return {
+    estado: "jugando",
+    levelIds: shuffled(levelIds),
+    ronda: 1,
+    acertaronRonda: [],
+    inicioRonda: new Date(now).toISOString(),
+    finEn: sala.modo === "contrarreloj"
+      ? new Date(now + duracionContrarrelojMs).toISOString()
+      : null,
+  };
+}
+
+/// Marca o desmarca "Listo"; cuando todos (2 o más) están listos, empieza.
+function readyRoom(
   token: string,
   uid: string,
   codigo: string,
+  listo: unknown,
 ): Promise<JsonObject> {
+  if (typeof listo !== "boolean") {
+    throw new HttpError(400, "listo debe ser true o false");
+  }
   return updateRoom(token, codigo, async (sala) => {
-    if (sala.creadorUid !== uid) {
-      throw new HttpError(403, "Solo quien creó la sala puede iniciarla");
-    }
+    const jugador = roomMember(sala, uid);
     if (sala.estado !== "esperando") {
       throw new HttpError(409, "La sala ya empezó");
     }
-    if (roomOrder(sala).length < 2) {
-      throw new HttpError(409, "Se necesitan al menos 2 jugadores");
-    }
-    const levelIds = sala.tipo === "intros"
-      ? (await listCollection(token, "intros"))
-        .filter((document) => fromFields(document.fields ?? {}).published === true)
-        .map((document) => document.name?.split("/").at(-1) ?? "")
-        .filter(validId)
-      : (await publishedLevels(token))
-        .filter((level) =>
-          level.published && level.dificultad === sala.dificultad &&
-          validId(level.id)
-        )
-        .map((level) => level.id);
-    if (levelIds.length === 0) {
-      throw new HttpError(
-        409,
-        sala.tipo === "intros"
-          ? "No hay intros publicadas"
-          : "No hay canciones publicadas en esa dificultad",
-      );
-    }
-    const now = Date.now();
+    const jugadores = { ...roomPlayers(sala), [uid]: { ...jugador, listo } };
+    const empieza = todosListos(
+      roomOrder(sala).map((id) => jugadores[id]?.listo === true),
+    );
     return {
       campos: {
-        estado: "jugando",
-        levelIds: shuffled(levelIds),
-        ronda: 1,
-        acertaronRonda: [],
-        inicioRonda: new Date(now).toISOString(),
-        finEn: sala.modo === "contrarreloj"
-          ? new Date(now + duracionContrarrelojMs).toISOString()
-          : null,
+        jugadores,
+        ...(empieza ? await roomStart(token, sala) : {}),
       },
-      resultado: { iniciada: true },
+      resultado: { listo, iniciada: empieza },
     };
   });
 }
@@ -1938,13 +2077,7 @@ function roomGame(
         resultado,
       };
     }
-    const entry = await buildLevelEntry(
-      token,
-      levelId,
-      sala.dificultad as Difficulty,
-      new Set(),
-      true,
-    );
+    const entry = await buildLevelEntry(token, levelId, null, new Set(), true);
     const nivel = entry.nivel as JsonObject;
     const actual = jugador.gameId
       ? await getDocument(token, `games/${jugador.gameId}`)
@@ -2400,9 +2533,9 @@ async function drawIntro(
   return { ...introSummary({ ...state, unlocked }), nueva: introId };
 }
 
-/// Paquete para jugar sin conexión las intros ya obtenidas: enlaces de
-/// descarga (intro, original y portada) y la respuesta normalizada, igual que
-/// el paquete offline de los niveles.
+/// Paquete para jugar sin conexión las intros ya obtenidas: enlace de la
+/// intro y la huella de la respuesta. Título, artista, original y portada
+/// revelan la canción: solo van de las intros ya adivinadas.
 async function introOfflineBundle(
   token: string,
   uid: string,
@@ -2422,17 +2555,22 @@ async function introOfflineBundle(
       if (typeof expected !== "string") {
         throw new HttpError(500, `La intro ${id} no tiene respuesta`);
       }
+      const done = state.completed.has(id);
       const [intro, fullSong, cover] = await Promise.all([
         createOfflineAudioUrl(pathOf("intro"), bucket),
-        createOfflineAudioUrl(pathOf("fullSong"), bucket),
+        done ? createOfflineAudioUrl(pathOf("fullSong"), bucket) : null,
         // Sin portada subida se juega igual: el reproductor muestra el disco.
-        createOfflineAudioUrl(pathOf("cover"), bucket).catch(() => null),
+        done
+          ? createOfflineAudioUrl(pathOf("cover"), bucket).catch(() => null)
+          : null,
       ]);
       return {
         id,
-        titulo: typeof fields.titulo === "string" ? fields.titulo : null,
-        artista: typeof fields.artista === "string" ? fields.artista : null,
-        respuesta: normalizeAnswer(expected),
+        titulo: done && typeof fields.titulo === "string" ? fields.titulo : null,
+        artista: done && typeof fields.artista === "string"
+          ? fields.artista
+          : null,
+        respuestaHash: await answerHash(id, expected),
         urls: { intro, fullSong, cover },
       };
     }),
@@ -2599,13 +2737,12 @@ async function handle(request: Request): Promise<Response> {
     const guest = firebaseClaim !== null &&
       typeof firebaseClaim === "object" &&
       (firebaseClaim as JsonObject).sign_in_provider === "anonymous";
-    // Nombre visible en las salas: el de Google o la parte local del correo.
-    const { name, email } = verified.payload;
+    // Nombre visible en las salas: el de la cuenta (Google) o uno genérico.
+    // Nunca el correo: las salas públicas las ve cualquier jugador.
+    const { name } = verified.payload;
     const playerName = typeof name === "string" && name.trim()
       ? name.trim().slice(0, 30)
-      : typeof email === "string"
-      ? email.split("@")[0].slice(0, 30)
-      : "Jugador";
+      : `Jugador ${uid.slice(0, 4).toUpperCase()}`;
     let rawBody: unknown;
     try {
       rawBody = await request.json();
@@ -2795,7 +2932,7 @@ async function handle(request: Request): Promise<Response> {
     > = {
       unirseSala: (codigo) => joinRoom(token, uid, playerName, codigo),
       salirSala: (codigo) => leaveRoom(token, uid, codigo),
-      iniciarSala: (codigo) => startRoom(token, uid, codigo),
+      listoSala: (codigo) => readyRoom(token, uid, codigo, body.listo),
       partidaSala: (codigo) => roomGame(token, uid, codigo),
       saltarCancionSala: (codigo) => skipRoomSong(token, uid, codigo),
       revisarSala: (codigo) => checkRoom(token, uid, codigo),
@@ -2815,6 +2952,23 @@ async function handle(request: Request): Promise<Response> {
         throw new HttpError(400, "El código de sala no es válido");
       }
       return response(200, await roomActions[action as string](body.codigo));
+    }
+    if (action === "reiniciarProgreso") {
+      if (guest) {
+        throw new HttpError(403, "Solo una cuenta registrada puede reiniciarse");
+      }
+      // Hace falta haber confirmado la contraseña (o Google) hace poco.
+      const authTime = verified.payload.auth_time;
+      if (
+        typeof authTime !== "number" || Date.now() / 1000 - authTime > 300
+      ) {
+        throw new HttpError(
+          401,
+          "Vuelve a confirmar tu cuenta para reiniciar el progreso",
+        );
+      }
+      await resetUserProgress(token, uid);
+      return response(200, { reiniciado: true });
     }
     if (action === "endGuestSession") {
       if (!guest) {

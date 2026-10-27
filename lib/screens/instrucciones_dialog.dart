@@ -28,22 +28,7 @@ class InstruccionesDialog extends StatelessWidget {
                 children: [
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
-                    child: Column(
-                      children: [
-                        Image.asset(
-                          'lib/assets/images/logo/riff_logo.png',
-                          height: 120,
-                          semanticLabel: 'Riff',
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '¿Cómo funciona?',
-                          style: text.bodyLarge?.copyWith(
-                            color: context.paleta.tintaSuave,
-                          ),
-                        ),
-                      ],
-                    ),
+                    child: Text('¿Cómo funciona?', style: text.headlineMedium),
                   ),
                   Flexible(
                     child: SingleChildScrollView(
@@ -206,18 +191,20 @@ class InstruccionesDialog extends StatelessWidget {
                                 runSpacing: 6,
                                 children: [
                                   _Etiqueta('🥁 Adivina la canción · gratis'),
-                                  _Etiqueta('🎧 Intros · 🎟️ 5'),
+                                  _Etiqueta(
+                                    '🎧 Intros · crear 🎟️ 10 · entrar 🎟️ 5',
+                                  ),
                                 ],
                               ),
                               SizedBox(height: 10),
                               _Vineta(
-                                'Al crearla eliges el reto, la dificultad y si es pública o cerrada.',
+                                'Al crearla eliges el reto y si es pública o cerrada. Las canciones salen de todas las dificultades.',
                               ),
                               _Vineta(
                                 'Únete con el código de 6 letras, escaneando el QR o desde Salas abiertas.',
                               ),
                               _Vineta(
-                                'Quien crea la sala la inicia cuando hay al menos 2 jugadores.',
+                                'Cada jugador toca "¡Estoy listo!"; la partida empieza sola cuando todos (2 o más) están listos.',
                               ),
                               _Vineta(
                                 'Todos juegan las mismas canciones; si sales en plena partida dejas de competir.',
@@ -230,7 +217,7 @@ class InstruccionesDialog extends StatelessWidget {
                             icono: Icons.emoji_events_rounded,
                             children: [
                               _Vineta(
-                                'Contrarreloj ⏱️: 5 minutos para adivinar todas las canciones que puedas. Cada acierto da 100 puntos, hasta 50 más por rapidez y 1 por cada \$10.000 sin gastar. Puedes saltar una canción sin puntos.',
+                                'Contrarreloj ⏱️: 10 minutos, desde que todos están listos, para adivinar todas las canciones que puedas. Cada acierto da 100 puntos, hasta 50 más por rapidez y 1 por cada \$10.000 sin gastar. Puedes saltar una canción sin puntos.',
                                 icono: Icons.timer_outlined,
                               ),
                               _Vineta(
@@ -265,7 +252,7 @@ class InstruccionesDialog extends StatelessWidget {
                                 'No cobra quien abandonó ni quien no acertó ninguna canción.',
                               ),
                               _Vineta(
-                                'Crear o entrar a una sala de intros cuesta 5; si sales antes de que empiece, te las devuelve.',
+                                'Crear una sala de intros cuesta 10 y entrar a una cuesta 5; si sales antes de que empiece, te las devuelve.',
                               ),
                             ],
                           ),

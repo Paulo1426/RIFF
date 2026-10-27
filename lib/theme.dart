@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'models/logros.dart';
 import 'models/nivel.dart';
 
 /// Paleta "arcade 8-bit sobre papel de nubes".
@@ -28,7 +29,16 @@ class AppColors {
   static const facil = verde;
   static const medio = Color(0xFFFFD100);
   static const avanzado = Color(0xFFCE1126);
+  // Borde y letras de la insignia Vallenatólogo.
+  static const oro = Color(0xFFD4AF37);
 }
+
+/// Insignias: verde las fáciles, amarillo las medias y rojo las difíciles.
+Color colorInsignia(NivelInsignia nivel) => switch (nivel) {
+  NivelInsignia.facil => AppColors.facil,
+  NivelInsignia.media => AppColors.medio,
+  NivelInsignia.dificil => AppColors.avanzado,
+};
 
 Color colorDificultad(Dificultad dificultad) => switch (dificultad) {
   Dificultad.facil => AppColors.facil,

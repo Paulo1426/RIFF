@@ -4,6 +4,14 @@ import 'package:riff/models/nivel.dart';
 import 'package:riff/services/offline_game_store.dart';
 
 void main() {
+  test('la huella coincide con la de game-progress', () {
+    // Valor calculado con answerHash de supabase/functions/game-progress.
+    expect(
+      OfflineGameStore.huella('facil-01', '¡Canción Misteriosa!'),
+      '630ab94550c8b1f208c95415e0169b572f715566e5222ebf195c27fd2d1ecd9c',
+    );
+  });
+
   final level = Nivel(
     id: 'facil-01',
     numero: 1,
@@ -20,7 +28,7 @@ void main() {
     nivel: level,
     completado: false,
     puedeIniciar: true,
-    respuesta: 'cancion misteriosa',
+    respuestaHash: OfflineGameStore.huella('facil-01', 'cancion misteriosa'),
     audioPaths: const {'bateria': 'cache/bateria.mp3'},
     instrumentalAudioPath: 'cache/cancion-instrumental.mp3',
   );

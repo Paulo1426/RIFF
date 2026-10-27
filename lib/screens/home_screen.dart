@@ -7,17 +7,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../models/logros.dart';
 import '../models/nivel.dart';
+import '../models/sala.dart';
 import '../providers/providers.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/offline_game_store.dart';
+import '../animations/ciclo_lento.dart';
 import '../animations/liquid_ripple_effect.dart';
+import '../widgets/aviso_insignia.dart';
 import '../widgets/boton_tema.dart';
+import '../widgets/con_reflejo.dart';
+import '../widgets/dialogo_contrasena.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
+import '../widgets/login_liquido.dart';
+import '../services/insignias_vistas.dart';
+import '../services/recordatorios.dart';
 import '../theme.dart';
 import '../theme/liquid_glass_theme.dart';
 import '../widgets/liquid_glass/liquid_glass_appbar.dart';
-import '../widgets/liquid_glass/liquid_glass_button.dart';
+import '../widgets/liquid_glass/liquid_glass_bottom_nav.dart';
 import '../widgets/liquid_glass/liquid_glass_card.dart';
 import '../widgets/liquid_glass/liquid_glass_dialog.dart';
 import '../widgets/liquid_glass/liquid_level_card.dart';
@@ -38,9 +47,11 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  // La sesión guardada se conserva (progreso offline e invitados), pero cada
-  // arranque pasa por el login para confirmarla.
+  // Una cuenta registrada (correo o Google) entra directo al menú al abrir la
+  // app; un invitado pasa por el login, porque su sesión se limpia al entrar.
   bool _entered = false;
+  // El login estaba en pantalla: al entrar se muestra la bienvenida.
+  bool _desdeLogin = false;
   late final Stream<User?> _authStateChanges =
       widget.authStateChanges ?? FirebaseAuth.instance.authStateChanges();
 
@@ -67,10 +78,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           return const Scaffold(body: Cargando());
         }
         final user = snapshot.data;
-        if (user == null || !_entered) {
+        if (user == null || (!_entered && user.isAnonymous)) {
+          _desdeLogin = true;
           return FirebaseAuthScreen(
             savedUser: user,
             onSignedIn: () => setState(() => _entered = true),
+          );
+        }
+        if (_desdeLogin) {
+          return BienvenidaLogin(
+            nombre: user.isAnonymous ? null : _nombreSesion(user),
+            onFin: () {
+              if (mounted) setState(() => _desdeLogin = false);
+            },
           );
         }
         return _AuthenticatedHome(key: ValueKey(user.uid), user: user);
@@ -78,6 +98,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 }
+
+// Una vez por apertura de la app; cerrar sesión y volver a entrar no lo repite.
+var _avisoAuricularesMostrado = false;
+
+// GoogleSignIn se inicializa una sola vez (login y confirmar la cuenta).
+Future<void>? _googleListo;
+Future<void> prepararGoogle() =>
+    _googleListo ??= GoogleSignIn.instance.initialize();
 
 class _AuthenticatedHome extends ConsumerStatefulWidget {
   const _AuthenticatedHome({super.key, required this.user});
@@ -98,46 +126,77 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   OfflineGameSnapshot? _offlineSnapshot;
   // Dificultad mostrada en el centro; null = la dificultad activa.
   Dificultad? _seleccionada;
-  // false: menú principal; true: juego por instrumentos (dificultades).
-  bool _enInstrumentos = false;
+  // Pestaña Canción: false muestra el carrusel de dificultades; true, la
+  // tarjeta con todos los niveles de la seleccionada.
+  bool _nivelesAbiertos = false;
+  // Barra inferior: 0 menú, 1 Adivina la canción, 2 Adivina la intro,
+  // 3 salas, 4 progreso, 5 configuración.
+  int _pestana = 0;
+  static const _pCancion = 1, _pIntro = 2, _pSalas = 3, _pProgreso = 4;
+  static const _pAjustes = 5;
+  Future<EstadoIntros?>? _introsFuturo;
+  // Para las tarjetas del menú: cuántas intros tiene y salas ganadas.
+  EstadoIntros? _resumenIntros;
+  SaldoSalas _saldo = const SaldoSalas();
+  StreamSubscription<SaldoSalas>? _suscripcionSaldo;
+  // Monedas de Adivina la intro para la barra (null hasta saberlas).
+  int? _monedas;
+  // El saldo de salas ya llegó (antes es todo cero y no sirve para insignias).
+  bool _saldoCargado = false;
+  // Revisando insignias o mostrando avisos al terminar un nivel.
+  bool _avisando = false;
+  bool _revisarOtraVez = false;
+  // El paquete offline se actualiza en segundo plano, uno tras otro.
+  Future<void> _paquete = Future.value();
   // Elementos que resalta el recorrido guiado.
   final _claveMenu = GlobalKey();
-  final _claveInstrumentos = GlobalKey();
-  final _claveSalas = GlobalKey();
-  final _claveIntros = GlobalKey();
+  final _clavesPestanas = List.generate(6, (_) => GlobalKey());
   bool _recorridoRevisado = false;
+  // Se completa al cerrar el aviso de auriculares; el recorrido espera.
+  final _avisoCerrado = Completer<void>();
 
   Future<void> _verRecorrido() => mostrarRecorrido(context, _pasosMenu());
 
   List<PasoRecorrido> _pasosMenu() => [
     PasoRecorrido(
-      clave: _claveInstrumentos,
-      titulo: '🥁 Adivina la canción',
-      texto:
-          'El juego principal. Tienes \$1.000.000 para comprar 3 '
-          'instrumentos, escúchalos y adivina la canción. Completa los 5 '
-          'niveles de una dificultad para desbloquear la siguiente.',
-    ),
-    PasoRecorrido(
-      clave: _claveSalas,
-      titulo: '🏆 Desafía a tus amigos',
-      texto:
-          'Crea una sala o únete con código o QR. Compite contra reloj o por '
-          'eliminación. Los 3 primeros ganan fichas 🎟️ para salas de intros.',
-    ),
-    PasoRecorrido(
-      clave: _claveIntros,
-      titulo: '🎧 Adivina la intro',
-      texto:
-          'Escucha los primeros segundos y adivina la canción. Cada nivel '
-          'que completas te da monedas para sacar intros nuevas.',
-    ),
-    PasoRecorrido(
       clave: _claveMenu,
-      titulo: '☰ Menú',
+      titulo: '🎮 Menú principal',
       texto:
-          'Aquí ves tu progreso, silencias la música, cambias a modo oscuro, '
-          'repasas las instrucciones o cierras sesión.',
+          'Las tarjetas giran solas; también puedes deslizarlas. 🥁 Adivina '
+          'la canción: compra instrumentos con \$1.000.000 y adivina. '
+          '🏆 Desafía a tus amigos. 🎧 Adivina la intro: se desbloquea al '
+          'completar tu primer nivel.',
+    ),
+    PasoRecorrido(
+      clave: _clavesPestanas[_pCancion],
+      titulo: '🥁 Canción',
+      texto: 'Las dificultades y niveles de Adivina la canción.',
+    ),
+    PasoRecorrido(
+      clave: _clavesPestanas[_pIntro],
+      titulo: '🎧 Intro',
+      texto: 'Tu colección de Adivina la intro y el botón para sacar cartas.',
+    ),
+    PasoRecorrido(
+      clave: _clavesPestanas[_pSalas],
+      titulo: '👥 Salas',
+      texto:
+          'Juega con hasta 5 amigos: salas de Adivina la canción y de '
+          'Adivina la intro, por tiempo o por eliminación.',
+    ),
+    PasoRecorrido(
+      clave: _clavesPestanas[_pProgreso],
+      titulo: '📈 Progreso',
+      texto:
+          'Tus niveles, tus monedas 🪙, tus fichas 🎟️ y las canciones que '
+          'ya adivinaste.',
+    ),
+    PasoRecorrido(
+      clave: _clavesPestanas[_pAjustes],
+      titulo: '⚙️ Ajustes',
+      texto:
+          'Desde este botón: instrucciones, música del menú, modo oscuro, '
+          'reiniciar el progreso y cerrar sesión.',
     ),
   ];
 
@@ -145,13 +204,14 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   Future<void> _recorridoSiEsNuevo() async {
     if (_recorridoRevisado) return;
     _recorridoRevisado = true;
+    await _avisoCerrado.future;
+    if (!mounted) return;
     await const RecorridoInicial('menu').mostrarSiEsNuevo(context, _pasosMenu);
   }
 
   final _claveDificultades = GlobalKey();
 
-  void _abrirDificultades() {
-    setState(() => _enInstrumentos = true);
+  void _recorridoDificultades() {
     const RecorridoInicial('dificultades').mostrarSiEsNuevo(
       context,
       () => [
@@ -172,14 +232,100 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   bool get _introsDisponibles =>
       _estado?.dificultades.any((item) => item.completados > 0) ?? false;
 
+  /// Una vez por apertura de la app, antes del menú: usar auriculares.
+  Future<void> _avisoAuriculares() async {
+    if (!_avisoAuricularesMostrado && mounted) {
+      _avisoAuricularesMostrado = true;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => LiquidGlassDialog(
+          icon: const Icon(Icons.headphones_rounded, size: 64),
+          title: const Text('Usa auriculares', textAlign: TextAlign.center),
+          content: const Text(
+            'Se recomienda usar cascos (audífonos o auriculares) para '
+            'distinguir bien cada instrumento.',
+            textAlign: TextAlign.center,
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
+      );
+    }
+    if (!_avisoCerrado.isCompleted) _avisoCerrado.complete();
+    unawaited(Recordatorios.programar());
+  }
+
+  /// Avisa de las insignias conseguidas desde la última vez. Solo con todos
+  /// los datos cargados, para no tomar como nueva una que ya se tenía.
+  Future<void> _revisarInsignias() async {
+    final estado = _estado;
+    if (estado == null || _loading) return;
+    if (!widget.user.isAnonymous && !_saldoCargado) return;
+    if (_introsDisponibles && _resumenIntros == null) return;
+    if (_avisando) {
+      _revisarOtraVez = true;
+      return;
+    }
+    _avisando = true;
+    try {
+      final logrados = {
+        for (final logro in logrosDe(
+          _saldo,
+          _avanceDe(estado.dificultades, _resumenIntros),
+        ))
+          if (logro.logrado) logro.nombre: logro,
+      };
+      final nuevas = await InsigniasVistas(
+        widget.user.uid,
+      ).registrar(logrados.keys.toSet());
+      for (final nombre in nuevas) {
+        if (!mounted) break;
+        await mostrarInsignia(context, logrados[nombre]!);
+      }
+    } finally {
+      _avisando = false;
+    }
+    if (_revisarOtraVez && mounted) {
+      _revisarOtraVez = false;
+      await _revisarInsignias();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _avisoAuriculares());
+    if (!widget.user.isAnonymous) {
+      _suscripcionSaldo = ref
+          .read(firebaseGameRepositoryProvider)
+          .saldoSalas()
+          .listen(
+            (saldo) {
+              setState(() {
+                _saldo = saldo;
+                _saldoCargado = true;
+              });
+              _revisarInsignias();
+            },
+            onError: (Object error) =>
+                debugPrint('No se pudo leer el saldo de salas: $error'),
+          );
+    }
     if (widget.user.isAnonymous) {
       _iniciarSesionInvitado();
     } else {
       _cargar();
     }
+  }
+
+  @override
+  void dispose() {
+    _suscripcionSaldo?.cancel();
+    super.dispose();
   }
 
   Future<void> _iniciarSesionInvitado() async {
@@ -235,6 +381,20 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         _offlineMode = false;
         _loading = false;
       });
+      unawaited(_revisarInsignias());
+      if (_introsDisponibles) {
+        unawaited(
+          _estadoIntros().then((intros) {
+            if (mounted) {
+              setState(() {
+                _resumenIntros = intros;
+                _monedas = intros?.monedas ?? _monedas;
+              });
+              _revisarInsignias();
+            }
+          }),
+        );
+      }
       // Deja listas las intros obtenidas por si luego se pierde la conexión.
       if (_introsDisponibles) {
         unawaited(
@@ -248,30 +408,38 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
               ),
         );
       }
-      try {
-        final bundle = await repository.descargarPaqueteOffline();
-        final refreshed = await _cacheOfflineBundle(
-          bundle,
-          widget.user.uid,
-          widget.user.isAnonymous,
-        );
-        if (!mounted) return;
-        setState(() => _offlineSnapshot = refreshed);
-      } catch (error) {
-        debugPrint('No se pudo actualizar el paquete offline: $error');
-        if (snapshot == null && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'No se pudieron descargar todos los niveles para usarlos sin conexión.',
-              ),
-            ),
-          );
-        }
-      }
+      // En segundo plano: los avisos tras un nivel no esperan la descarga.
+      final sinCopia = snapshot == null;
+      _paquete = _paquete.then((_) => _actualizarPaquete(sinCopia));
     } catch (error) {
       if (!mounted) return;
       await _loadOfflineSnapshot(error);
+    }
+  }
+
+  Future<void> _actualizarPaquete(bool sinCopia) async {
+    try {
+      final bundle = await ref
+          .read(firebaseGameRepositoryProvider)
+          .descargarPaqueteOffline();
+      final refreshed = await _cacheOfflineBundle(
+        bundle,
+        widget.user.uid,
+        widget.user.isAnonymous,
+      );
+      if (!mounted) return;
+      setState(() => _offlineSnapshot = refreshed);
+    } catch (error) {
+      debugPrint('No se pudo actualizar el paquete offline: $error');
+      if (sinCopia && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'No se pudieron descargar todos los niveles para usarlos sin conexión.',
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -310,53 +478,63 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     final state = Map<String, dynamic>.from(bundle['estado'] as Map);
     final rawLevels = bundle['levels'] as List<dynamic>;
     final audioService = ref.read(audioServiceProvider);
-    final levels = await Future.wait(
-      rawLevels.map((rawLevel) async {
-        final data = Map<String, dynamic>.from(rawLevel as Map);
-        final entry = Map<String, dynamic>.from(data['entry'] as Map);
-        final nivelJson = Map<String, dynamic>.from(entry['nivel'] as Map);
-        final nivel = Nivel.fromJson(nivelJson);
-        final urls = Map<String, dynamic>.from(data['audioUrls'] as Map);
-        // Versión de cada archivo: si se reemplaza en Storage se baja otra vez.
-        final versiones = Map<String, dynamic>.from(
-          data['audioVersions'] as Map? ?? const {},
-        );
-        final paths = <String, String>{};
-        for (final instrument in nivel.instrumentos) {
-          final url = urls[instrument.id];
-          if (url is! String || url.isEmpty) {
-            throw FormatException(
-              'Falta el enlace offline del instrumento ${instrument.id} en ${nivel.id}',
-            );
-          }
-          final key =
-              'level:${nivel.id}:stem:${instrument.id}:'
-              '${versiones[instrument.id] ?? ''}';
-          final file = await audioService.descargarYGuardar(url, key);
-          paths[instrument.id] = file.path;
-        }
-        final instrumentalUrl = data['instrumentalAudioUrl'];
-        if (instrumentalUrl is! String || instrumentalUrl.isEmpty) {
+    Future<OfflineLevelData> descargarNivel(dynamic rawLevel) async {
+      final data = Map<String, dynamic>.from(rawLevel as Map);
+      final entry = Map<String, dynamic>.from(data['entry'] as Map);
+      final nivelJson = Map<String, dynamic>.from(entry['nivel'] as Map);
+      final nivel = Nivel.fromJson(nivelJson);
+      final urls = Map<String, dynamic>.from(data['audioUrls'] as Map);
+      // Versión de cada archivo: si se reemplaza en Storage se baja otra vez.
+      final versiones = Map<String, dynamic>.from(
+        data['audioVersions'] as Map? ?? const {},
+      );
+      final paths = <String, String>{};
+      for (final instrument in nivel.instrumentos) {
+        final url = urls[instrument.id];
+        if (url is! String || url.isEmpty) {
           throw FormatException(
-            'Falta el enlace offline de la pista instrumental de ${nivel.id}',
+            'Falta el enlace offline del instrumento ${instrument.id} en ${nivel.id}',
           );
         }
-        final instrumentalFile = await audioService.descargarYGuardar(
-          instrumentalUrl,
-          'song:${nivel.cancionId}:instrumentalSong:'
-          '${versiones['instrumental'] ?? ''}',
+        final key =
+            'level:${nivel.id}:stem:${instrument.id}:'
+            '${versiones[instrument.id] ?? ''}';
+        final file = await audioService.descargarYGuardar(url, key);
+        paths[instrument.id] = file.path;
+      }
+      final instrumentalUrl = data['instrumentalAudioUrl'];
+      if (instrumentalUrl is! String || instrumentalUrl.isEmpty) {
+        throw FormatException(
+          'Falta el enlace offline de la pista instrumental de ${nivel.id}',
         );
-        return OfflineLevelData(
-          nivel: nivel,
-          completado: entry['completado'] as bool? ?? false,
-          puedeIniciar: entry['puede_iniciar'] as bool? ?? false,
-          respuesta: (data['respuesta'] as String?) ?? '',
-          audioPaths: paths,
-          instrumentalAudioPath: instrumentalFile.path,
-          artista: (entry['artista'] as String?) ?? (data['artista'] as String?),
-        );
-      }),
-    );
+      }
+      final instrumentalFile = await audioService.descargarYGuardar(
+        instrumentalUrl,
+        'song:${nivel.cancionId}:instrumentalSong:'
+        '${versiones['instrumental'] ?? ''}',
+      );
+      return OfflineLevelData(
+        nivel: nivel,
+        completado: entry['completado'] as bool? ?? false,
+        puedeIniciar: entry['puede_iniciar'] as bool? ?? false,
+        respuestaHash:
+            data['respuestaHash'] as String? ??
+            OfflineGameStore.huella(nivel.id, (data['respuesta'] as String?) ?? ''),
+        audioPaths: paths,
+        instrumentalAudioPath: instrumentalFile.path,
+        artista: (entry['artista'] as String?) ?? (data['artista'] as String?),
+      );
+    }
+
+    // De a 3 niveles: no satura la red, el disco ni la batería mientras el
+    // jugador ya está usando la app (corre en segundo plano).
+    const lote = 3;
+    final levels = <OfflineLevelData>[];
+    for (var i = 0; i < rawLevels.length; i += lote) {
+      levels.addAll(
+        await Future.wait(rawLevels.skip(i).take(lote).map(descargarNivel)),
+      );
+    }
     final snapshot = OfflineGameSnapshot(
       uid: uid,
       guest: guest,
@@ -506,6 +684,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       final antes = _desbloqueadas();
       final terminadoAntes = _juegoTerminado();
       final introsAntes = _introsDisponibles;
+      // Las insignias esperan a que salgan estos avisos.
+      _avisando = true;
       await _cargar();
       if (!introsAntes && _introsDisponibles && mounted) {
         await _avisarIntros();
@@ -518,6 +698,9 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       if (!terminadoAntes && _juegoTerminado() && mounted) {
         await _avisarJuegoTerminado();
       }
+      _avisando = false;
+      _revisarOtraVez = false;
+      await _revisarInsignias();
     }
     return resultado;
   }
@@ -642,30 +825,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     }
   }
 
-  Future<void> _verProgreso() {
-    final intros = _estadoIntros();
-    return showDialog<void>(
-      context: context,
-      builder: (context) => FutureBuilder<EstadoIntros?>(
-        future: intros,
-        builder: (context, snapshot) => LiquidGlassDialog(
-          title: const Text('Tu progreso'),
-          content: _ProgresoGeneral(
-            dificultades: _estado?.dificultades ?? const [],
-            intros: snapshot.data,
-            cargandoIntros: snapshot.connectionState != ConnectionState.done,
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cerrar'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   /// Juega el nivel [index] y sigue con los siguientes mientras el jugador
   /// elija "Siguiente nivel".
   Future<void> _jugar(Dificultad dificultad, int index) async {
@@ -695,6 +854,98 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     }
   }
 
+  /// Empezar desde cero: confirma, pide la contraseña (o Google) de nuevo y
+  /// borra el progreso en el servidor y la copia offline del teléfono.
+  Future<void> _reiniciarProgreso() async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => LiquidGlassDialog(
+        icon: const Icon(Icons.warning_amber_rounded, size: 56),
+        title: const Text('¿Empezar desde cero?', textAlign: TextAlign.center),
+        content: const Text(
+          'Se borrarán tus niveles, intros, monedas, fichas, estadísticas de '
+          'salas e insignias. No se puede deshacer.',
+          textAlign: TextAlign.center,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    );
+    final user = FirebaseAuth.instance.currentUser;
+    if (confirmar != true || user == null || !mounted) return;
+    try {
+      final conCorreo = user.providerData.any(
+        (proveedor) => proveedor.providerId == 'password',
+      );
+      if (conCorreo) {
+        final clave = await _pedirContrasena();
+        if (clave == null) return;
+        await user.reauthenticateWithCredential(
+          EmailAuthProvider.credential(email: user.email!, password: clave),
+        );
+      } else {
+        await prepararGoogle();
+        final cuenta = await GoogleSignIn.instance.authenticate();
+        final idToken = cuenta.authentication.idToken;
+        if (idToken == null) throw StateError('Google no confirmó la cuenta.');
+        await user.reauthenticateWithCredential(
+          GoogleAuthProvider.credential(idToken: idToken),
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        _pestana = 0;
+        _loading = true;
+      });
+      await ref.read(firebaseGameRepositoryProvider).reiniciarProgreso();
+      await _offlineStore.borrar(user.uid);
+      await ref.read(offlineIntroStoreProvider).borrar(user.uid);
+      await InsigniasVistas(user.uid).borrar();
+      if (!mounted) return;
+      setState(() {
+        _offlineSnapshot = null;
+        _resumenIntros = null;
+        _monedas = null;
+        _seleccionada = null;
+      });
+      await _cargar();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Tu progreso empezó desde cero.')),
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      final mensaje = switch (error) {
+        FirebaseAuthException(code: 'wrong-password' || 'invalid-credential') =>
+          'La contraseña no es correcta.',
+        GameRepositoryException(:final message) => message,
+        _ => 'No se pudo reiniciar el progreso: $error',
+      };
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(mensaje)));
+      // Si el reinicio falló a medias, se vuelve a cargar lo que haya.
+      if (_loading) await _cargar();
+    }
+  }
+
+  Future<String?> _pedirContrasena() => showDialog<String>(
+    context: context,
+    builder: (_) => const DialogoContrasena(accion: 'Reiniciar'),
+  );
+
   Future<void> _cerrarSesion() async {
     try {
       if (widget.user.isAnonymous) {
@@ -718,155 +969,966 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     final estado = _estado;
     // El fondo cubre también la barra para que el vidrio tenga qué mostrar.
     return LiquidBackground(
-      acento: estado == null || !_enInstrumentos
-          ? null
-          : colorDificultad(_seleccionada ?? estado.dificultadActiva),
-      // Atrás desde las dificultades vuelve al menú principal.
+      acento: switch (_pestana) {
+        _pCancion when estado != null => colorDificultad(
+          _seleccionada ?? estado.dificultadActiva,
+        ),
+        _pIntro => AppColors.signalOrange,
+        _ => null,
+      },
+      // Atrás desde cualquier pestaña vuelve al menú.
       child: PopScope(
-        canPop: !_enInstrumentos,
+        canPop: _pestana == 0,
         onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) setState(() => _enInstrumentos = false);
+          if (didPop) return;
+          // Desde los niveles se vuelve primero a las dificultades.
+          if (_pestana == _pCancion && _nivelesAbiertos) {
+            setState(() => _nivelesAbiertos = false);
+          } else {
+            _cambiarPestana(0);
+          }
         },
         child: Scaffold(
           backgroundColor: Colors.transparent,
           appBar: LiquidGlassAppBar(
             centerTitle: false,
-            titleSpacing: _enInstrumentos ? 0 : 16,
-            leading: _enInstrumentos
+            // Ajustes no está en la barra de abajo: se vuelve con la flecha.
+            leading: _pestana == _pAjustes
                 ? IconButton(
-                    tooltip: 'Menú principal',
+                    tooltip: 'Volver al menú',
                     icon: const Icon(Icons.arrow_back_rounded),
-                    onPressed: () => setState(() => _enInstrumentos = false),
+                    onPressed: () => _cambiarPestana(0),
+                  )
+                : _pestana == _pCancion && _nivelesAbiertos
+                ? IconButton(
+                    tooltip: 'Volver a las dificultades',
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    onPressed: () => setState(() => _nivelesAbiertos = false),
                   )
                 : null,
-            title: Image.asset(
-              'lib/assets/images/logo/riff_logo.png',
-              height: 48,
-              semanticLabel: 'Riff',
-            ),
-            actions: [
-              PopupMenuButton<VoidCallback>(
-                key: _claveMenu,
-                tooltip: 'Menú',
-                icon: const Icon(Icons.menu_rounded),
-                position: PopupMenuPosition.under,
-                onSelected: (accion) => accion(),
-                itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: () => mostrarInstrucciones(context),
-                    child: const ListTile(
-                      leading: Icon(Icons.menu_book_rounded),
-                      title: Text('Instrucciones'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: _verRecorrido,
-                    child: const ListTile(
-                      leading: Icon(Icons.tour_rounded),
-                      title: Text('Recorrido guiado'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: _verProgreso,
-                    child: const ListTile(
-                      leading: Icon(Icons.insights_rounded),
-                      title: Text('Ver progreso'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: () =>
-                        ref.read(musicaMenuProvider).alternarSilencio(),
-                    child: ListTile(
-                      leading: Icon(
-                        ref.read(musicaMenuProvider).silenciada
-                            ? Icons.music_off_rounded
-                            : Icons.music_note_rounded,
-                      ),
-                      title: Text(
-                        ref.read(musicaMenuProvider).silenciada
-                            ? 'Activar música'
-                            : 'Silenciar música',
-                      ),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: () => ref
-                        .read(modoTemaProvider.notifier)
-                        .cambiar(
-                          context.paleta.oscuro
-                              ? ThemeMode.light
-                              : ThemeMode.dark,
-                        ),
-                    child: ListTile(
-                      leading: Icon(
-                        context.paleta.oscuro
-                            ? Icons.light_mode_rounded
-                            : Icons.dark_mode_rounded,
-                      ),
-                      title: Text(
-                        context.paleta.oscuro ? 'Modo claro' : 'Modo oscuro',
-                      ),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: _cerrarSesion,
-                    child: const ListTile(
-                      leading: Icon(Icons.logout),
-                      title: Text('Cerrar sesión'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 8),
+            title: _tituloBarra(estado),
+            actions: [..._accionesBarra(), const SizedBox(width: 8)],
+          ),
+          bottomNavigationBar: LiquidGlassBottomNav(
+            claves: _clavesPestanas,
+            currentIndex: _pestana,
+            onTap: _cambiarPestana,
+            items: const [
+              (icon: Icons.home_rounded, label: 'Menú'),
+              (icon: Icons.music_note_rounded, label: 'Canción'),
+              (icon: Icons.headphones_rounded, label: 'Intro'),
+              (icon: Icons.groups_rounded, label: 'Salas'),
+              (icon: Icons.insights_rounded, label: 'Progreso'),
             ],
           ),
           body: AnimatedSwitcher(
             duration: const Duration(milliseconds: 350),
-            child: _loading
-                ? const Cargando(
-                    key: ValueKey('cargando'),
-                    texto: 'Cargando progreso...',
-                  )
-                : _error != null
-                ? _ErrorPanel(error: _error!, onRetry: _cargar)
-                : estado == null
-                ? const Center(child: Text('No se pudo cargar el progreso.'))
-                : !_enInstrumentos
-                ? _MenuPrincipal(
-                    claveInstrumentos: _claveInstrumentos,
-                    claveSalas: _claveSalas,
-                    claveIntros: _claveIntros,
-                    onVisible: _recorridoSiEsNuevo,
-                    introsDisponibles: _introsDisponibles,
-                    offlineMode: _offlineMode,
-                    esInvitado: widget.user.isAnonymous,
-                    onInstrumentos: _abrirDificultades,
-                    onSalas: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const SalasScreen(),
-                      ),
-                    ),
-                    onIntros: () => Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const IntrosScreen(),
-                      ),
-                    ),
-                  )
-                : _PanelDificultades(
-                    key: _claveDificultades,
-                    estado: estado,
-                    seleccionada: _seleccionada ?? estado.dificultadActiva,
-                    esInvitado: widget.user.isAnonymous,
-                    offlineMode: _offlineMode,
-                    nivelesDe: _nivelesDe,
-                    onCambio: (dificultad) =>
-                        setState(() => _seleccionada = dificultad),
-                    onJugar: _jugar,
-                    onRefresh: _cargar,
-                  ),
+            child: switch (_pestana) {
+              _pCancion => _pestanaCancion(estado),
+              _pIntro => _pestanaIntro(),
+              _pSalas => _pestanaSalas(),
+              _pProgreso => _PestanaProgreso(
+                key: const ValueKey('progreso'),
+                dificultades: estado?.dificultades ?? const [],
+                intros: _introsFuturo,
+                saldo: _saldo,
+                esInvitado: widget.user.isAnonymous,
+              ),
+              _pAjustes => _PestanaConfiguracion(
+                key: const ValueKey('configuracion'),
+                onRecorrido: _verRecorrido,
+                onCerrarSesion: _cerrarSesion,
+                onReiniciar: widget.user.isAnonymous
+                    ? null
+                    : _reiniciarProgreso,
+              ),
+              _ => _pestanaMenu(estado),
+            },
           ),
         ),
       ),
+    );
+  }
+
+  /// Título de la barra de arriba según la pestaña: el logo en el menú y el
+  /// nombre de la sección en las demás.
+  Widget _tituloBarra(EstadoJuegoRemoto? estado) => switch (_pestana) {
+    _pCancion => const Text('Adivina la canción'),
+    _pIntro => const Text('Adivina la intro'),
+    _pSalas => const Text('Salas'),
+    _pProgreso => const Text('Progreso'),
+    _pAjustes => const Text('Ajustes'),
+    _ => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Image.asset(
+          'lib/assets/images/logo/riff_logo.png',
+          height: 48,
+          // El nombre ya va escrito al lado.
+          excludeFromSemantics: true,
+        ),
+        const SizedBox(width: 10),
+        const Text('RIFF'),
+      ],
+    ),
+  };
+
+  /// Monedas 🪙 en Intro y Progreso; fichas 🎟️ en Salas y Progreso.
+  List<Widget> _accionesBarra() => [
+    // Ajustes solo se abre desde la barra de arriba del menú principal.
+    if (_pestana == 0)
+      IconButton(
+        key: _clavesPestanas[_pAjustes],
+        tooltip: 'Ajustes',
+        icon: const Icon(Icons.settings_rounded),
+        onPressed: () => _cambiarPestana(_pAjustes),
+      ),
+    if ((_pestana == _pIntro || _pestana == _pProgreso) && _monedas != null)
+      _Saldo('🪙', _monedas!, 'monedas'),
+    if ((_pestana == _pSalas || _pestana == _pProgreso) &&
+        !widget.user.isAnonymous)
+      _Saldo('🎟️', _saldo.fichas, 'fichas'),
+  ];
+
+  void _cambiarPestana(int pestana) {
+    setState(() {
+      _pestana = pestana;
+      _nivelesAbiertos = false;
+      // Progreso se vuelve a pedir al abrir la pestaña, para que esté al día.
+      if (pestana == _pProgreso) {
+        _introsFuturo = _estadoIntros()
+          ..then((intros) {
+            if (mounted && intros != null) {
+              setState(() {
+                _monedas = intros.monedas;
+                _resumenIntros = intros;
+              });
+              _revisarInsignias();
+            }
+          });
+      }
+    });
+    if (pestana == _pCancion && _estado != null) _recorridoDificultades();
+  }
+
+  /// Carga o error del progreso; null si ya está listo.
+  Widget? _esperandoProgreso() {
+    if (_loading) {
+      return const Cargando(
+        key: ValueKey('cargando'),
+        texto: 'Cargando progreso...',
+      );
+    }
+    if (_error != null) return _ErrorPanel(error: _error!, onRetry: _cargar);
+    if (_estado == null) {
+      return const Center(child: Text('No se pudo cargar el progreso.'));
+    }
+    return null;
+  }
+
+  Widget _pestanaMenu(EstadoJuegoRemoto? estado) {
+    if (_esperandoProgreso() case final espera?) return espera;
+    return _MenuPrincipal(
+      key: const ValueKey('menu'),
+      claveCarrusel: _claveMenu,
+      onVisible: _recorridoSiEsNuevo,
+      introsDisponibles: _introsDisponibles,
+      offlineMode: _offlineMode,
+      esInvitado: widget.user.isAnonymous,
+      infoCancion: _infoCancion(estado!),
+      infoIntros: _resumenIntros == null
+          ? null
+          : '${_resumenIntros!.intros.length} intros desbloqueadas',
+      infoSalas: widget.user.isAnonymous
+          ? null
+          : _saldo.ganadas == 0
+          ? 'Aún no ganas salas'
+          : 'Ganaste ${_saldo.ganadas} '
+                '${_saldo.ganadas == 1 ? 'sala' : 'salas'} · '
+                '🥁 ${_saldo.ganadasCancion} · 🎧 ${_saldo.ganadasIntros}',
+      onInstrumentos: () => _cambiarPestana(_pCancion),
+      onSalas: () => _cambiarPestana(_pSalas),
+      onIntros: () => _cambiarPestana(_pIntro),
+    );
+  }
+
+  /// "Vas en el nivel 3 de Fácil" según la dificultad activa.
+  String _infoCancion(EstadoJuegoRemoto estado) {
+    if (_juegoTerminado()) return '¡Completaste las tres dificultades!';
+    final activa = estado.dificultades
+        .where((item) => item.dificultad == estado.dificultadActiva)
+        .firstOrNull;
+    final nivel = min((activa?.completados ?? 0) + 1, 5);
+    return 'Vas en el nivel $nivel de '
+        '${_nombreDificultad(estado.dificultadActiva)}';
+  }
+
+  Widget _pestanaIntro() {
+    if (_esperandoProgreso() case final espera?) return espera;
+    if (!_introsDisponibles) {
+      return _bloqueada(
+        'intro-bloqueada',
+        'Adivina la intro se desbloquea al completar tu primer nivel de '
+            'Adivina la canción.',
+      );
+    }
+    return IntrosScreen(
+      key: const ValueKey('intro'),
+      embebida: true,
+      onEstado: (intros) {
+        setState(() {
+          _monedas = intros.monedas;
+          _resumenIntros = intros;
+        });
+        _revisarInsignias();
+      },
+    );
+  }
+
+  Widget _bloqueada(String clave, String motivo) => Center(
+    key: ValueKey(clave),
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: LiquidGlassCard(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.lock_rounded, size: 40),
+            const SizedBox(height: 12),
+            Text(motivo, textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _pestanaCancion(EstadoJuegoRemoto? estado) {
+    if (_esperandoProgreso() case final espera?) return espera;
+    return _PanelDificultades(
+      key: _claveDificultades,
+      estado: estado!,
+      seleccionada: _seleccionada ?? estado.dificultadActiva,
+      esInvitado: widget.user.isAnonymous,
+      offlineMode: _offlineMode,
+      nivelesDe: _nivelesDe,
+      abierta: _nivelesAbiertos,
+      onCambio: (dificultad) => setState(() => _seleccionada = dificultad),
+      onAbrir: (dificultad) => setState(() {
+        _seleccionada = dificultad;
+        _nivelesAbiertos = true;
+      }),
+      onJugar: _jugar,
+      onRefresh: _cargar,
+    );
+  }
+
+  Widget _pestanaSalas() {
+    final motivo = widget.user.isAnonymous
+        ? 'Crea una cuenta para jugar en salas con tus amigos.'
+        : _offlineMode
+        ? 'Necesitas conexión a internet para jugar en salas.'
+        : null;
+    if (motivo == null) {
+      return const SalasPanel(key: ValueKey('salas'));
+    }
+    return _bloqueada('salas-bloqueadas', motivo);
+  }
+}
+
+/// Avance del jugador para calcular las insignias.
+AvanceJuego _avanceDe(
+  List<ProgresoDificultadRemoto> dificultades,
+  EstadoIntros? intros,
+) {
+  int completados(Dificultad dificultad) =>
+      dificultades
+          .where((item) => item.dificultad == dificultad)
+          .firstOrNull
+          ?.completados ??
+      0;
+  return AvanceJuego(
+    facil: completados(Dificultad.facil),
+    media: completados(Dificultad.medio),
+    avanzada: completados(Dificultad.avanzado),
+    nivelesPorDificultad: _ProgresoGeneral._nivelesPorDificultad,
+    introsAdivinadas:
+        intros?.intros
+            .where((item) => item.estado == EstadoIntro.completada)
+            .length ??
+        0,
+    totalIntros: intros == null
+        ? _ProgresoGeneral._totalIntros
+        : intros.intros.length + intros.restantes,
+    unInstrumento: dificultades.fold(
+      0,
+      (total, item) => total + item.unInstrumento,
+    ),
+  );
+}
+
+/// Pestaña Progreso: avance de niveles e intros, estadísticas de salas e
+/// insignias.
+class _PestanaProgreso extends StatelessWidget {
+  const _PestanaProgreso({
+    super.key,
+    required this.dificultades,
+    required this.intros,
+    required this.saldo,
+    required this.esInvitado,
+  });
+
+  final List<ProgresoDificultadRemoto> dificultades;
+  final Future<EstadoIntros?>? intros;
+  final SaldoSalas saldo;
+  final bool esInvitado;
+
+  static const _colores = [
+    AppColors.signalOrange,
+    AppColors.medio,
+    AppColors.verde,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<EstadoIntros?>(
+      future: intros,
+      builder: (context, snapshot) {
+        final estadoIntros = snapshot.data;
+        final cargando = snapshot.connectionState != ConnectionState.done;
+        final logros = logrosDe(saldo, _avanceDe(dificultades, estadoIntros));
+        // Progreso y Salas muestran todo en la tarjeta; Insignias abre una
+        // hoja con todas al tocarla.
+        Widget tarjeta(int index, bool alFrente) => switch (index) {
+          0 => _CuadroProgreso(
+            color: _colores[0],
+            alFrente: alFrente,
+            onTap: null,
+            children: [
+              _tituloTarjeta(context, '📈 Progreso', _colores[0]),
+              const SizedBox(height: 8),
+              _ProgresoGeneral(
+                dificultades: dificultades,
+                intros: estadoIntros,
+                cargandoIntros: cargando,
+              ),
+            ],
+          ),
+          1 => _ResumenSalas(
+            saldo: saldo,
+            esInvitado: esInvitado,
+            color: _colores[1],
+            alFrente: alFrente,
+          ),
+          _ => _ResumenInsignias(
+            logros: logros,
+            color: _colores[2],
+            alFrente: alFrente,
+            onTap: () => _verDetalle(
+              context,
+              'Insignias',
+              () => _GrillaInsignias(logros: logros),
+            ),
+          ),
+        };
+        return Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: CarruselGiratorio(
+            itemCount: _colores.length,
+            // Como el menú principal: más pequeñas, con reflejo y las otras
+            // asomando detrás.
+            compacto: true,
+            // Algo más altas que las del menú: Progreso y Salas traen todo.
+            proporcion: 1.45,
+            colorDe: (index) => _colores[index],
+            itemBuilder: (context, index, alFrente) => ConReflejo(
+              color: _colores[index],
+              tarjeta: tarjeta(index, alFrente),
+              // La copia del reflejo va sin desenfoque.
+              reflejo: tarjeta(index, false),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _verDetalle(
+    BuildContext context,
+    String titulo,
+    Widget Function() contenido,
+  ) => showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: context.paleta.fondo,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+    ),
+    builder: (context) => DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.85,
+      maxChildSize: 0.95,
+      builder: (context, desplazamiento) => ListView(
+        controller: desplazamiento,
+        padding: EdgeInsets.symmetric(
+          horizontal: max(16, (MediaQuery.sizeOf(context).width - 680) / 2),
+          vertical: 16,
+        ),
+        children: [
+          Text(
+            titulo,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 16),
+          contenido(),
+        ],
+      ),
+    ),
+  );
+}
+
+/// Tarjeta del carrusel de Progreso: vidrio de color, toda tocable y con el
+/// contenido encogido si no cabe (letra grande, pantallas bajas).
+class _CuadroProgreso extends StatelessWidget {
+  const _CuadroProgreso({
+    required this.color,
+    required this.alFrente,
+    required this.onTap,
+    required this.children,
+  });
+
+  final Color color;
+  final bool alFrente;
+  final VoidCallback? onTap;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => LiquidGlassCard(
+    borderRadius: 28,
+    tintColor: color,
+    borderColor: alFrente ? color : null,
+    // Las laterales solo se ven al girar: sin desenfoque, que es caro.
+    blur: alFrente ? LiquidGlass.glassBlur : 0,
+    child: LiquidRippleEffect(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(28),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: SizedBox(
+              width: 280,
+              child: Column(mainAxisSize: MainAxisSize.min, children: children),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// "Toca para ver más" al pie de las tarjetas de Progreso.
+Widget _verMas(BuildContext context, Color color) {
+  final tono = context.paleta.tonoTexto(color);
+  return Padding(
+    padding: const EdgeInsets.only(top: 16),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Ver detalle',
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(color: tono),
+        ),
+        Icon(Icons.chevron_right_rounded, color: tono),
+      ],
+    ),
+  );
+}
+
+/// Título de una tarjeta de Progreso, del color de la tarjeta.
+Widget _tituloTarjeta(BuildContext context, String titulo, Color color) => Text(
+  titulo,
+  textAlign: TextAlign.center,
+  style: Theme.of(
+    context,
+  ).textTheme.headlineSmall?.copyWith(color: context.paleta.tonoTexto(color)),
+);
+
+/// Salas: las seis estadísticas a la vista.
+class _ResumenSalas extends StatelessWidget {
+  const _ResumenSalas({
+    required this.saldo,
+    required this.esInvitado,
+    required this.color,
+    required this.alFrente,
+  });
+
+  final SaldoSalas saldo;
+  final bool esInvitado;
+  final Color color;
+  final bool alFrente;
+
+  @override
+  Widget build(BuildContext context) => _CuadroProgreso(
+    color: color,
+    alFrente: alFrente,
+    onTap: null,
+    children: [
+      _tituloTarjeta(context, '👥 Salas', color),
+      const SizedBox(height: 16),
+      if (esInvitado)
+        Text(
+          'Crea una cuenta para jugar en salas y ver tus estadísticas.',
+          textAlign: TextAlign.center,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(color: context.paleta.tintaSuave),
+        )
+      else
+        _EstadisticasSalas(saldo: saldo),
+    ],
+  );
+}
+
+List<_Dato> _datosSalas(SaldoSalas saldo) => [
+  _Dato('🎮', '${saldo.jugadas}', 'Jugadas'),
+  _Dato('🏆', '${saldo.ganadas}', 'Ganadas'),
+  _Dato('😔', '${saldo.derrotas}', 'Derrotas'),
+  _Dato('📊', '${(saldo.porcentajeVictorias * 100).round()}%', 'Victorias'),
+  _Dato('🏅', '${saldo.podios}', 'Podios'),
+  _Dato('🎟️', '${saldo.fichasGanadas}', 'Fichas ganadas'),
+];
+
+/// Insignias conseguidas como etiquetas del color de su dificultad, igual que
+/// los niveles completados; las pendientes se ven en el detalle.
+class _ResumenInsignias extends StatelessWidget {
+  const _ResumenInsignias({
+    required this.logros,
+    required this.color,
+    required this.alFrente,
+    required this.onTap,
+  });
+
+  final List<Logro> logros;
+  final Color color;
+  final bool alFrente;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final conseguidas = logros.where((logro) => logro.logrado).toList();
+    return _CuadroProgreso(
+      color: color,
+      alFrente: alFrente,
+      onTap: onTap,
+      children: [
+        Text(
+          '🏅 Insignias',
+          style: text.headlineSmall?.copyWith(
+            color: context.paleta.tonoTexto(color),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${conseguidas.length} de ${logros.length}',
+          style: text.bodyMedium?.copyWith(color: context.paleta.tintaSuave),
+        ),
+        const SizedBox(height: 12),
+        if (conseguidas.isEmpty)
+          Text(
+            'Aún no tienes insignias. ¡Toca para ver cómo ganarlas!',
+            textAlign: TextAlign.center,
+            style: text.bodyMedium?.copyWith(color: context.paleta.tintaSuave),
+          )
+        else
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final logro in conseguidas) _EtiquetaInsignia(logro: logro),
+            ],
+          ),
+        _verMas(context, color),
+      ],
+    );
+  }
+}
+
+/// Nombre de una insignia en una píldora de su color (dorada Vallenatólogo).
+class _EtiquetaInsignia extends StatelessWidget {
+  const _EtiquetaInsignia({required this.logro});
+
+  final Logro logro;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = logro.dorada ? AppColors.oro : colorInsignia(logro.nivel);
+    final tono = context.paleta.tonoTexto(color);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.22),
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: color, width: logro.dorada ? 2 : 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(logro.emoji),
+          const SizedBox(width: 4),
+          Text(
+            logro.nombre,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: tono,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Icon(Icons.check_circle_rounded, size: 16, color: tono),
+        ],
+      ),
+    );
+  }
+}
+
+/// Todas las estadísticas de salas: dos filas de tres datos.
+class _EstadisticasSalas extends StatelessWidget {
+  const _EstadisticasSalas({required this.saldo});
+
+  final SaldoSalas saldo;
+
+  @override
+  Widget build(BuildContext context) {
+    final datos = _datosSalas(saldo);
+    return Column(
+      children: [
+        for (final fila in [datos.sublist(0, 3), datos.sublist(3)])
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final (i, dato) in fila.indexed) ...[
+                    if (i > 0) const SizedBox(width: 10),
+                    Expanded(child: dato),
+                  ],
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Todas las insignias, conseguidas o no, del mismo tamaño.
+class _GrillaInsignias extends StatelessWidget {
+  const _GrillaInsignias({required this.logros});
+
+  final List<Logro> logros;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, espacio) {
+      // Dos por fila en teléfonos, más en tablets.
+      final columnas = max(2, (espacio.maxWidth / 200).floor());
+      final ancho = (espacio.maxWidth - 10 * (columnas - 1)) / columnas;
+      // Todas del mismo alto: cabe nombre en 2 líneas y condición en 4;
+      // crece con la letra del sistema.
+      final alto = MediaQuery.textScalerOf(context).scale(224);
+      return Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          for (final logro in logros)
+            SizedBox(
+              width: ancho,
+              height: alto,
+              child: TarjetaLogro(logro: logro),
+            ),
+        ],
+      );
+    },
+  );
+}
+
+/// Un número de las estadísticas de salas con su emoji y nombre.
+class _Dato extends StatelessWidget {
+  const _Dato(this.emoji, this.valor, this.nombre);
+
+  final String emoji;
+  final String valor;
+  final String nombre;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+      decoration: BoxDecoration(
+        color: context.paleta.superficie.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.paleta.borde),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 22)),
+          Text(valor, style: text.titleLarge),
+          Text(
+            nombre,
+            textAlign: TextAlign.center,
+            style: text.bodySmall?.copyWith(color: context.paleta.tintaSuave),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Insignia con el color de su dificultad: llena si se consiguió; si no,
+/// apagada con su avance. Vallenatólogo conseguida va en dorado.
+@visibleForTesting
+class TarjetaLogro extends StatelessWidget {
+  const TarjetaLogro({super.key, required this.logro});
+
+  final Logro logro;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final hecho = logro.logrado;
+    final color = colorInsignia(logro.nivel);
+    final dorada = hecho && logro.dorada;
+    return Semantics(
+      label:
+          '${logro.nombre}: ${hecho ? 'conseguida' : 'pendiente, '
+                    '${min(logro.actual, logro.meta)} de ${logro.meta}'}. '
+          '${logro.condicion}',
+      excludeSemantics: true,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: hecho
+              ? color.withValues(alpha: 0.22)
+              : context.paleta.superficie.withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: dorada
+                ? AppColors.oro
+                : hecho
+                ? color
+                : color.withValues(alpha: 0.45),
+            width: dorada ? 3 : (hecho ? 2 : 1),
+          ),
+        ),
+        child: Column(
+          children: [
+            Opacity(
+              opacity: hecho ? 1 : 0.35,
+              child: Text(logro.emoji, style: const TextStyle(fontSize: 34)),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              logro.nombre,
+              textAlign: TextAlign.center,
+              style: dorada
+                  ? text.titleSmall?.copyWith(
+                      color: context.paleta.tonoTexto(AppColors.oro),
+                      fontWeight: FontWeight.w800,
+                    )
+                  : text.titleSmall,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              logro.condicion,
+              textAlign: TextAlign.center,
+              style: text.bodySmall?.copyWith(color: context.paleta.tintaSuave),
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
+            ),
+            // El avance queda abajo en todas, aunque el texto sea corto.
+            const Spacer(),
+            const SizedBox(height: 8),
+            if (hecho)
+              Text(
+                '✅ Conseguida',
+                style: text.labelMedium?.copyWith(
+                  color: context.paleta.tonoTexto(color),
+                  fontWeight: FontWeight.w800,
+                ),
+              )
+            else ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(99),
+                child: LinearProgressIndicator(
+                  value: logro.meta == 0
+                      ? 0
+                      : min(logro.actual, logro.meta) / logro.meta,
+                  minHeight: 5,
+                  color: color,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${min(logro.actual, logro.meta)}/${logro.meta}',
+                style: text.bodySmall,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Pestaña Configuración: instrucciones, música del menú, tema y sesión.
+/// Saldo en la barra de arriba: emoji y número en una píldora.
+class _Saldo extends StatelessWidget {
+  const _Saldo(this.emoji, this.valor, this.nombre);
+
+  final String emoji;
+  final int valor;
+  final String nombre;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(left: 6),
+    child: Semantics(
+      label: '$valor $nombre',
+      excludeSemantics: true,
+      child: Chip(
+        visualDensity: VisualDensity.compact,
+        avatar: Text(emoji),
+        label: Text('$valor'),
+      ),
+    ),
+  );
+}
+
+class _PestanaConfiguracion extends ConsumerStatefulWidget {
+  const _PestanaConfiguracion({
+    super.key,
+    required this.onRecorrido,
+    required this.onCerrarSesion,
+    this.onReiniciar,
+  });
+
+  final VoidCallback onRecorrido;
+  final VoidCallback onCerrarSesion;
+  // null para invitados: su progreso ya se borra al salir.
+  final VoidCallback? onReiniciar;
+
+  @override
+  ConsumerState<_PestanaConfiguracion> createState() =>
+      _PestanaConfiguracionState();
+}
+
+class _PestanaConfiguracionState extends ConsumerState<_PestanaConfiguracion> {
+  @override
+  Widget build(BuildContext context) {
+    final musica = ref.read(musicaMenuProvider);
+    final oscuro = context.paleta.oscuro;
+    return ListView(
+      padding: EdgeInsets.symmetric(
+        horizontal: max(16, (MediaQuery.sizeOf(context).width - 680) / 2),
+        vertical: 16,
+      ),
+      children: [
+        LiquidGlassCard(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.menu_book_rounded),
+                title: const Text('Instrucciones'),
+                subtitle: const Text('Cómo se juega cada modo'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => mostrarInstrucciones(context),
+              ),
+              ListTile(
+                leading: const Icon(Icons.tour_rounded),
+                title: const Text('Recorrido guiado'),
+                subtitle: const Text('Las burbujas que explican la app'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: widget.onRecorrido,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        LiquidGlassCard(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            children: [
+              SwitchListTile(
+                secondary: Icon(
+                  musica.silenciada
+                      ? Icons.music_off_rounded
+                      : Icons.music_note_rounded,
+                ),
+                title: const Text('Música del menú'),
+                value: !musica.silenciada,
+                onChanged: (_) async {
+                  await musica.alternarSilencio();
+                  if (mounted) setState(() {});
+                },
+              ),
+              SwitchListTile(
+                secondary: Icon(
+                  oscuro ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                ),
+                title: const Text('Modo oscuro'),
+                value: oscuro,
+                onChanged: (valor) => ref
+                    .read(modoTemaProvider.notifier)
+                    .cambiar(valor ? ThemeMode.dark : ThemeMode.light),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (widget.onReiniciar case final reiniciar?) ...[
+          LiquidGlassCard(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: ListTile(
+              leading: Icon(
+                Icons.restart_alt_rounded,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              title: Text(
+                'Reiniciar progreso',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+              subtitle: const Text('Empezar el juego desde cero'),
+              onTap: reiniciar,
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+        LiquidGlassCard(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: ListTile(
+            leading: Icon(
+              Icons.logout_rounded,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            title: Text(
+              'Cerrar sesión',
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+            onTap: widget.onCerrarSesion,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -888,6 +1950,28 @@ class _ProgresoGeneral extends StatelessWidget {
   final List<ProgresoDificultadRemoto> dificultades;
   final EstadoIntros? intros;
   final bool cargandoIntros;
+
+  /// Avance total del juego (niveles más intros adivinadas), de 0 a 1.
+  static double porcentajeDe(
+    List<ProgresoDificultadRemoto> dificultades,
+    EstadoIntros? intros,
+  ) {
+    final totalNiveles = dificultades.length * _nivelesPorDificultad;
+    final niveles = dificultades.fold<int>(
+      0,
+      (sum, item) => sum + item.completados,
+    );
+    final totalIntros = intros == null
+        ? _totalIntros
+        : intros.intros.length + intros.restantes;
+    final adivinadas =
+        intros?.intros
+            .where((item) => item.estado == EstadoIntro.completada)
+            .length ??
+        0;
+    final total = totalNiveles + totalIntros;
+    return total == 0 ? 0.0 : (niveles + adivinadas) / total;
+  }
 
   Widget _fila(
     BuildContext context, {
@@ -945,8 +2029,7 @@ class _ProgresoGeneral extends StatelessWidget {
             .where((item) => item.estado == EstadoIntro.completada)
             .length ??
         0;
-    final total = totalNiveles + totalIntros;
-    final porcentaje = total == 0 ? 0.0 : (niveles + adivinadas) / total;
+    final porcentaje = porcentajeDe(dificultades, intros);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -989,32 +2072,36 @@ class _ProgresoGeneral extends StatelessWidget {
                 color: AppColors.signalOrange,
                 detalle: intros == null
                     ? 'Se desbloquea al completar tu primer nivel.'
-                    : '${intros.intros.length} cartas obtenidas · '
-                          '${intros.monedas} 🪙',
+                    : '${intros.intros.length} cartas obtenidas',
               ),
       ],
     );
   }
 }
 
-/// Menú principal: dos cuadros para elegir a qué jugar.
+/// Menú principal: carrusel de los tres modos que gira solo de izquierda a
+/// derecha (se pausa al tocarlo).
 class _MenuPrincipal extends StatelessWidget {
   const _MenuPrincipal({
-    required this.claveInstrumentos,
-    required this.claveSalas,
-    required this.claveIntros,
+    super.key,
+    required this.claveCarrusel,
     required this.onVisible,
     required this.introsDisponibles,
     required this.offlineMode,
     required this.esInvitado,
+    required this.infoCancion,
+    required this.infoIntros,
+    required this.infoSalas,
     required this.onInstrumentos,
     required this.onSalas,
     required this.onIntros,
   });
 
-  final GlobalKey claveInstrumentos;
-  final GlobalKey claveSalas;
-  final GlobalKey claveIntros;
+  final GlobalKey claveCarrusel;
+  // Una línea de datos del jugador en cada tarjeta (null si no hay).
+  final String infoCancion;
+  final String? infoIntros;
+  final String? infoSalas;
   // Avisa cuando el menú ya está en pantalla (para el recorrido inicial).
   final VoidCallback onVisible;
   final bool introsDisponibles;
@@ -1024,68 +2111,86 @@ class _MenuPrincipal extends StatelessWidget {
   final VoidCallback onSalas;
   final VoidCallback onIntros;
 
+  static const _colores = [
+    AppColors.verde,
+    AppColors.medio,
+    AppColors.signalOrange,
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final introsBloqueadas = !introsDisponibles;
     WidgetsBinding.instance.addPostFrameCallback((_) => onVisible());
-    return SafeArea(
-      top: false,
-      minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Column(
-            children: [
-              Expanded(
-                key: claveInstrumentos,
-                child: _CuadroModo(
-                  emoji: '🥁🪗🎸',
-                  animacion: _Animacion.tocar,
-                  titulo: 'Adivina la canción',
-                  detalle: 'Compra instrumentos y descubre la canción.',
-                  color: AppColors.verde,
-                  onTap: onInstrumentos,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                key: claveSalas,
-                child: _CuadroModo(
-                  emoji: '🏆',
-                  animacion: _Animacion.saltar,
-                  titulo: 'Desafía a tus amigos',
-                  detalle: esInvitado
-                      ? 'Crea una cuenta para jugar en salas.'
-                      : offlineMode
-                      ? 'Necesitas conexión para jugar en salas.'
-                      : 'Crea o únete a una sala de hasta 5 jugadores.',
-                  color: AppColors.medio,
-                  bloqueado: esInvitado || offlineMode,
-                  onTap: esInvitado || offlineMode ? null : onSalas,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                key: claveIntros,
-                child: _CuadroModo(
-                  emoji: '🎧',
-                  animacion: _Animacion.mecer,
-                  titulo: 'Adivina la intro',
-                  detalle: !introsDisponibles
-                      ? 'Se desbloquea al completar tu primer nivel.'
-                      : offlineMode
-                      ? 'Sin conexión: juega las intros descargadas.'
-                      : 'Escucha 20 segundos y adivina la canción.',
-                  color: AppColors.signalOrange,
-                  bloqueado: introsBloqueadas,
-                  onTap: introsBloqueadas ? null : onIntros,
-                ),
-              ),
-            ],
-          ),
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: CarruselGiratorio(
+        key: claveCarrusel,
+        itemCount: _colores.length,
+        autoGiro: const Duration(seconds: 5),
+        // Más pequeñas y con las otras dos asomando detrás.
+        compacto: true,
+        proporcion: 1.25,
+        colorDe: (index) => _colores[index],
+        itemBuilder: (context, index, alFrente) => ConReflejo(
+          color: _colores[index],
+          tarjeta: _cuadro(index, alFrente),
+          // La copia del reflejo va sin desenfoque: es lo más caro de pintar.
+          reflejo: _cuadro(index, false, animar: false),
         ),
       ),
     );
+  }
+
+  Widget _cuadro(int index, bool alFrente, {bool animar = true}) {
+    final introsBloqueadas = !introsDisponibles;
+    final salasBloqueadas = esInvitado || offlineMode;
+    return switch (index) {
+      0 => _CuadroModo(
+        emoji: '🥁🪗🎸',
+        animacion: _Animacion.tocar,
+        titulo: 'Adivina la canción',
+        detalle: 'Compra instrumentos y descubre la canción.',
+        info: infoCancion,
+        color: AppColors.verde,
+        alFrente: alFrente,
+        // Solo la del frente se mueve; laterales y reflejo, quietas.
+        animar: animar && alFrente,
+        onTap: onInstrumentos,
+      ),
+      1 => _CuadroModo(
+        emoji: '🏆',
+        animacion: _Animacion.saltar,
+        titulo: 'Desafía a tus amigos',
+        detalle: esInvitado
+            ? 'Crea una cuenta para jugar en salas.'
+            : offlineMode
+            ? 'Necesitas conexión para jugar en salas.'
+            : 'Crea o únete a una sala de hasta 5 jugadores.',
+        info: salasBloqueadas ? null : infoSalas,
+        color: AppColors.medio,
+        alFrente: alFrente,
+        // Solo la del frente se mueve; laterales y reflejo, quietas.
+        animar: animar && alFrente,
+        bloqueado: salasBloqueadas,
+        onTap: salasBloqueadas ? null : onSalas,
+      ),
+      _ => _CuadroModo(
+        emoji: '🎧',
+        animacion: _Animacion.mecer,
+        titulo: 'Adivina la intro',
+        detalle: !introsDisponibles
+            ? 'Se desbloquea al completar tu primer nivel.'
+            : offlineMode
+            ? 'Sin conexión: juega las intros descargadas.'
+            : 'Escucha 20 segundos y adivina la canción.',
+        info: introsBloqueadas ? null : infoIntros,
+        color: AppColors.signalOrange,
+        alFrente: alFrente,
+        // Solo la del frente se mueve; laterales y reflejo, quietas.
+        animar: animar && alFrente,
+        bloqueado: introsBloqueadas,
+        onTap: introsBloqueadas ? null : onIntros,
+      ),
+    };
   }
 }
 
@@ -1097,7 +2202,10 @@ class _CuadroModo extends StatelessWidget {
     required this.detalle,
     required this.color,
     required this.onTap,
+    this.info,
+    this.alFrente = true,
     this.bloqueado = false,
+    this.animar = true,
   });
 
   final String emoji;
@@ -1106,7 +2214,11 @@ class _CuadroModo extends StatelessWidget {
   final String detalle;
   final Color color;
   final VoidCallback? onTap;
+  // Dato del jugador (nivel, intros, salas ganadas) bajo la descripción.
+  final String? info;
+  final bool alFrente;
   final bool bloqueado;
+  final bool animar;
 
   @override
   Widget build(BuildContext context) {
@@ -1114,6 +2226,9 @@ class _CuadroModo extends StatelessWidget {
     return LiquidGlassCard(
       borderRadius: 28,
       opacity: bloqueado ? 0.35 : 0.6,
+      // Las laterales solo se ven al girar: sin desenfoque, que es caro.
+      blur: alFrente ? LiquidGlass.glassBlur : 0,
+      borderColor: alFrente && !bloqueado ? color : null,
       tintColor: bloqueado ? null : color,
       child: LiquidRippleEffect(
         onTap: onTap,
@@ -1134,7 +2249,7 @@ class _CuadroModo extends StatelessWidget {
                         emoji: emoji,
                         animacion: animacion,
                         // Bloqueado se queda quieto: no invita a tocarlo.
-                        activo: !bloqueado,
+                        activo: !bloqueado && animar,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -1170,6 +2285,29 @@ class _CuadroModo extends StatelessWidget {
                         ),
                       ],
                     ),
+                    if (info case final dato?) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(99),
+                          border: Border.all(
+                            color: color.withValues(alpha: 0.6),
+                          ),
+                        ),
+                        child: Text(
+                          dato,
+                          textAlign: TextAlign.center,
+                          style: text.labelLarge?.copyWith(
+                            color: context.paleta.tonoTexto(color),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1200,12 +2338,8 @@ class _EmojiAnimado extends StatefulWidget {
   State<_EmojiAnimado> createState() => _EmojiAnimadoState();
 }
 
-class _EmojiAnimadoState extends State<_EmojiAnimado>
-    with SingleTickerProviderStateMixin {
-  late final _ciclo = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1600),
-  );
+class _EmojiAnimadoState extends State<_EmojiAnimado> {
+  final _ciclo = CicloLento(periodo: const Duration(milliseconds: 1600));
 
   @override
   void didChangeDependencies() {
@@ -1219,16 +2353,12 @@ class _EmojiAnimadoState extends State<_EmojiAnimado>
     _actualizar();
   }
 
-  // Con "reducir movimiento" del sistema o bloqueado, quieto.
-  void _actualizar() {
-    if (!widget.activo || MediaQuery.disableAnimationsOf(context)) {
-      _ciclo
-        ..stop()
-        ..value = 0;
-    } else if (!_ciclo.isAnimating) {
-      _ciclo.repeat();
-    }
-  }
+  // Quieto si está bloqueado, con "reducir movimiento" o con la pantalla
+  // tapada por otra.
+  void _actualizar() => _ciclo.activo =
+      widget.activo &&
+      !MediaQuery.disableAnimationsOf(context) &&
+      TickerMode.valuesOf(context).enabled;
 
   @override
   void dispose() {
@@ -1239,39 +2369,45 @@ class _EmojiAnimadoState extends State<_EmojiAnimado>
   @override
   Widget build(BuildContext context) {
     final emojis = widget.emoji.characters.toList();
-    return ExcludeSemantics(
-      child: AnimatedBuilder(
-        animation: _ciclo,
-        builder: (context, _) {
-          final t = _ciclo.value * 2 * pi;
-          return Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final (i, emoji) in emojis.indexed)
-                Transform.translate(
-                  offset: Offset(0, switch (widget.animacion) {
-                    // Cada instrumento rebota desfasado, como una banda.
-                    _Animacion.tocar => -sin(t + i * 2).abs() * 6,
-                    _Animacion.saltar => -sin(t).abs() * 10,
-                    _Animacion.mecer => 0,
-                  }),
-                  child: Transform.rotate(
-                    angle: switch (widget.animacion) {
-                      _Animacion.tocar => sin(t + i * 2) * 0.15,
-                      _Animacion.saltar => sin(t * 2) * 0.05,
-                      _Animacion.mecer => sin(t) * 0.25,
-                    },
-                    child: Transform.scale(
-                      scale: widget.animacion == _Animacion.saltar
-                          ? 1 + sin(t).abs() * 0.08
-                          : 1,
-                      child: Text(emoji, style: const TextStyle(fontSize: 48)),
+    // Capa propia: el rebote no repinta la tarjeta de vidrio ni su sombra.
+    return RepaintBoundary(
+      child: ExcludeSemantics(
+        child: AnimatedBuilder(
+          animation: _ciclo,
+          builder: (context, _) {
+            final t = _ciclo.value * 2 * pi;
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final (i, emoji) in emojis.indexed)
+                  Transform.translate(
+                    offset: Offset(0, switch (widget.animacion) {
+                      // Cada instrumento rebota desfasado, como una banda.
+                      _Animacion.tocar => -sin(t + i * 2).abs() * 6,
+                      _Animacion.saltar => -sin(t).abs() * 10,
+                      _Animacion.mecer => 0,
+                    }),
+                    child: Transform.rotate(
+                      angle: switch (widget.animacion) {
+                        _Animacion.tocar => sin(t + i * 2) * 0.15,
+                        _Animacion.saltar => sin(t * 2) * 0.05,
+                        _Animacion.mecer => sin(t) * 0.25,
+                      },
+                      child: Transform.scale(
+                        scale: widget.animacion == _Animacion.saltar
+                            ? 1 + sin(t).abs() * 0.08
+                            : 1,
+                        child: Text(
+                          emoji,
+                          style: const TextStyle(fontSize: 48),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -1285,12 +2421,16 @@ class _PanelDificultades extends StatelessWidget {
     required this.nivelesDe,
     required this.esInvitado,
     required this.offlineMode,
+    required this.abierta,
     required this.onCambio,
+    required this.onAbrir,
     required this.onJugar,
     required this.onRefresh,
   });
 
   final EstadoJuegoRemoto estado;
+  final bool abierta;
+  final ValueChanged<Dificultad> onAbrir;
   final Dificultad seleccionada;
   final List<NivelAsignado> Function(Dificultad) nivelesDe;
   final bool esInvitado;
@@ -1326,24 +2466,7 @@ class _PanelDificultades extends StatelessWidget {
             bottom: !esInvitado,
             child: Padding(
               padding: const EdgeInsets.only(top: 12),
-              child: CarruselGiratorio(
-                itemCount: dificultades.length,
-                inicial: dificultades
-                    .indexWhere((item) => item.dificultad == seleccionada)
-                    .clamp(0, dificultades.length - 1),
-                onCambio: (index) => onCambio(dificultades[index].dificultad),
-                colorDe: (index) =>
-                    colorDificultad(dificultades[index].dificultad),
-                itemBuilder: (context, index, alFrente) => _TarjetaDificultad(
-                  progreso: dificultades[index],
-                  anterior: index == 0 ? null : dificultades[index - 1],
-                  niveles: nivelesDe(dificultades[index].dificultad),
-                  alFrente: alFrente,
-                  onJugar: (nivel) =>
-                      onJugar(dificultades[index].dificultad, nivel),
-                  onRefresh: onRefresh,
-                ),
-              ),
+              child: abierta ? _niveles() : _carrusel(dificultades),
             ),
           ),
         ),
@@ -1368,7 +2491,221 @@ class _PanelDificultades extends StatelessWidget {
   }
 }
 
-/// Una "pantalla" del carrusel: la dificultad con su lista de niveles.
+extension on _PanelDificultades {
+  /// Carrusel de dificultades como el del menú: compactas y con reflejo.
+  Widget _carrusel(List<ProgresoDificultadRemoto> dificultades) =>
+      CarruselGiratorio(
+        itemCount: dificultades.length,
+        inicial: dificultades
+            .indexWhere((item) => item.dificultad == seleccionada)
+            .clamp(0, dificultades.length - 1),
+        compacto: true,
+        proporcion: 1.25,
+        onCambio: (index) => onCambio(dificultades[index].dificultad),
+        colorDe: (index) => colorDificultad(dificultades[index].dificultad),
+        itemBuilder: (context, index, alFrente) {
+          final progreso = dificultades[index];
+          Widget tarjeta(bool alFrente) => _ResumenDificultad(
+            progreso: progreso,
+            anterior: index == 0 ? null : dificultades[index - 1],
+            niveles: nivelesDe(progreso.dificultad),
+            alFrente: alFrente,
+            onTap: () => onAbrir(progreso.dificultad),
+          );
+          return ConReflejo(
+            color: colorDificultad(progreso.dificultad),
+            tarjeta: tarjeta(alFrente),
+            // La copia del reflejo va sin desenfoque.
+            reflejo: tarjeta(false),
+          );
+        },
+      );
+
+  /// Todos los niveles de la dificultad seleccionada.
+  Widget _niveles() {
+    final dificultades = estado.dificultades;
+    final index = dificultades
+        .indexWhere((item) => item.dificultad == seleccionada)
+        .clamp(0, dificultades.length - 1);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 640),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: _TarjetaDificultad(
+            progreso: dificultades[index],
+            anterior: index == 0 ? null : dificultades[index - 1],
+            niveles: nivelesDe(dificultades[index].dificultad),
+            alFrente: true,
+            onJugar: (nivel) => onJugar(dificultades[index].dificultad, nivel),
+            onRefresh: onRefresh,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tarjeta compacta del carrusel de dificultades: avance y los niveles ya
+/// completados; tocarla abre la tarjeta con todos los niveles.
+class _ResumenDificultad extends StatelessWidget {
+  const _ResumenDificultad({
+    required this.progreso,
+    required this.anterior,
+    required this.niveles,
+    required this.alFrente,
+    required this.onTap,
+  });
+
+  final ProgresoDificultadRemoto progreso;
+  final ProgresoDificultadRemoto? anterior;
+  final List<NivelAsignado> niveles;
+  final bool alFrente;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final color = colorDificultad(progreso.dificultad);
+    final tono = context.paleta.tonoTexto(color);
+    final bloqueada = !progreso.desbloqueada;
+    final completados = [
+      for (var i = 0; i < niveles.length; i++)
+        if (niveles[i].completado) i + 1,
+    ];
+    return LiquidGlassCard(
+      borderRadius: 28,
+      tintColor: color,
+      borderColor: alFrente ? color : null,
+      // Las laterales solo se ven al girar: sin desenfoque, que es caro.
+      blur: alFrente ? LiquidGlass.glassBlur : 0,
+      child: LiquidRippleEffect(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(28),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Center(
+            // Con letra grande se encoge en vez de desbordarse.
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: SizedBox(
+                width: 280,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox.square(
+                      dimension: 76,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          CircularProgressIndicator(
+                            value: progreso.total == 0
+                                ? 0
+                                : progreso.completados / progreso.total,
+                            strokeWidth: 7,
+                            color: color,
+                            backgroundColor: color.withValues(alpha: 0.2),
+                            strokeCap: StrokeCap.round,
+                          ),
+                          Center(
+                            child: bloqueada
+                                ? Icon(
+                                    Icons.lock_rounded,
+                                    color: context.paleta.tintaSuave,
+                                  )
+                                : Text(
+                                    '${progreso.completados}/'
+                                    '${max(progreso.total, 5)}',
+                                    style: text.titleLarge,
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      _nombreDificultad(progreso.dificultad),
+                      style: text.headlineMedium?.copyWith(color: tono),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      bloqueada
+                          ? 'Completa ${_nombreDificultad(anterior?.dificultad ?? progreso.dificultad)} para desbloquearla'
+                          : completados.isEmpty
+                          ? 'Aún no completas niveles'
+                          : progreso.completados >= progreso.total
+                          ? '¡Completada! 🎉'
+                          : 'Niveles completados',
+                      textAlign: TextAlign.center,
+                      style: text.bodyMedium?.copyWith(
+                        color: context.paleta.tintaSuave,
+                      ),
+                    ),
+                    if (completados.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      // Solo los completados; los demás se ven al abrirla.
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final numero in completados)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: color.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(99),
+                                border: Border.all(
+                                  color: color.withValues(alpha: 0.6),
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'Nivel $numero',
+                                    style: text.labelMedium?.copyWith(
+                                      color: tono,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    Icons.check_circle_rounded,
+                                    size: 16,
+                                    color: tono,
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 14),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Ver niveles',
+                          style: text.labelLarge?.copyWith(color: tono),
+                        ),
+                        Icon(Icons.chevron_right_rounded, color: tono),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Una "pantalla" con todos los niveles de la dificultad.
 class _TarjetaDificultad extends StatelessWidget {
   const _TarjetaDificultad({
     required this.progreso,
@@ -1408,47 +2745,67 @@ class _TarjetaDificultad extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(
-                  child: Text(
-                    'DIFICULTAD',
-                    style: text.labelMedium?.copyWith(
-                      color: context.paleta.tonoTexto(color),
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 2,
-                    ),
+                // Anillo de avance con "3/5" (o candado) en el centro.
+                SizedBox.square(
+                  dimension: 64,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CircularProgressIndicator(
+                        value: progreso.total == 0
+                            ? 0
+                            : progreso.completados / progreso.total,
+                        strokeWidth: 6,
+                        color: color,
+                        backgroundColor: color.withValues(alpha: 0.2),
+                        strokeCap: StrokeCap.round,
+                      ),
+                      Center(
+                        child: bloqueada
+                            ? Icon(
+                                Icons.lock_rounded,
+                                color: context.paleta.tintaSuave,
+                              )
+                            : Text(
+                                '${progreso.completados}/'
+                                '${max(progreso.total, 5)}',
+                                style: text.titleMedium,
+                              ),
+                      ),
+                    ],
                   ),
                 ),
-                Text(
-                  _nombreDificultad(progreso.dificultad),
-                  style: text.displaySmall?.copyWith(
-                    color: context.paleta.tonoTexto(color),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _nombreDificultad(progreso.dificultad),
+                        style: text.headlineMedium?.copyWith(
+                          color: context.paleta.tonoTexto(color),
+                        ),
+                      ),
+                      Text(
+                        bloqueada
+                            ? 'Completa ${_nombreDificultad(anterior?.dificultad ?? progreso.dificultad)} para desbloquearla'
+                            : progreso.total == 0
+                            ? 'Todavía no hay niveles publicados'
+                            : progreso.completados >= progreso.total
+                            ? '¡Completada! 🎉'
+                            : 'Niveles completados',
+                        style: text.bodyMedium?.copyWith(
+                          color: context.paleta.tintaSuave,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
-            Text(
-              bloqueada
-                  ? 'Completa la dificultad ${_nombreDificultad(anterior?.dificultad ?? progreso.dificultad)} para desbloquear estos niveles'
-                  : progreso.total == 0
-                  ? 'Todavía no hay niveles publicados'
-                  : '${progreso.completados}/${progreso.total} niveles completados',
-              style: text.bodyMedium?.copyWith(
-                color: context.paleta.tintaSuave,
-              ),
-            ),
-            const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(99),
-              child: LinearProgressIndicator(
-                value: progreso.total == 0
-                    ? 0
-                    : progreso.completados / progreso.total,
-                minHeight: 6,
-                color: color,
-              ),
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            Divider(color: color.withValues(alpha: 0.35), height: 1),
+            const SizedBox(height: 12),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: onRefresh,
@@ -1600,7 +2957,6 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
   bool _showPassword = false;
   bool _busy = false;
   String? _error;
-  Future<void>? _googleSignInReady;
 
   @override
   void dispose() {
@@ -1646,7 +3002,7 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
       _error = null;
     });
     try {
-      await (_googleSignInReady ??= GoogleSignIn.instance.initialize());
+      await prepararGoogle();
       final account = await GoogleSignIn.instance.authenticate();
       final idToken = account.authentication.idToken;
       if (idToken == null || idToken.isEmpty) {
@@ -1699,7 +3055,7 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            const LiquidBackground(child: SizedBox.expand()),
+            const FondoLogin(),
             SafeArea(
               child: Center(
                 child: SingleChildScrollView(
@@ -1712,163 +3068,183 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Center(
-                            child: Image.asset(
-                              'lib/assets/images/logo/riff_logo.png',
-                              height: 180,
-                              semanticLabel: 'Riff',
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Adivina la canción: pon a prueba tu oído y descubre la melodía',
-                            textAlign: TextAlign.center,
-                            style: text.bodyLarge?.copyWith(
-                              color: context.paleta.tintaSuave,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
                           LiquidGlassCard(
-                            tintColor: AppColors.verde,
-                            // Algo más opaco que el estándar: es un formulario
-                            // y el texto debe leerse bien.
-                            opacity: 0.4,
+                            // Más opaca y con borde naranja: resalta sobre los
+                            // instrumentos del fondo y el texto se lee bien.
+                            opacity: 0.6,
+                            borderRadius: 28,
+                            borderColor: AppColors.signalOrange,
                             padding: const EdgeInsets.all(24),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Text(
-                                  _registering
-                                      ? 'Crea tu cuenta'
-                                      : 'Bienvenido',
-                                  style: text.headlineMedium,
-                                ),
-                                const SizedBox(height: 16),
-                                if (_registering) ...[
+                            // Campos con contorno cian y etiqueta arriba.
+                            child: Theme(
+                              data: Theme.of(context).copyWith(
+                                inputDecorationTheme: camposLogin(context),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  const Center(child: LogoCircular()),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    _registering
+                                        ? 'Crea tu cuenta'
+                                        : 'Bienvenido',
+                                    textAlign: TextAlign.center,
+                                    style: text.headlineMedium?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Pon a prueba tu oído y descubre la melodía',
+                                    textAlign: TextAlign.center,
+                                    style: text.bodyMedium?.copyWith(
+                                      color: context.paleta.tintaSuave,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 20),
+                                  if (_registering) ...[
+                                    TextFormField(
+                                      controller: _name,
+                                      textInputAction: TextInputAction.next,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Nombre',
+                                        prefixIcon: Icon(Icons.person_outline),
+                                      ),
+                                      validator: (value) =>
+                                          value == null || value.trim().isEmpty
+                                          ? 'Escribe tu nombre'
+                                          : null,
+                                    ),
+                                    const SizedBox(height: 12),
+                                  ],
                                   TextFormField(
-                                    controller: _name,
+                                    controller: _email,
+                                    keyboardType: TextInputType.emailAddress,
                                     textInputAction: TextInputAction.next,
                                     decoration: const InputDecoration(
-                                      labelText: 'Nombre',
-                                      prefixIcon: Icon(Icons.person_outline),
+                                      labelText: 'Correo',
+                                      prefixIcon: Icon(Icons.mail_outline),
                                     ),
                                     validator: (value) =>
-                                        value == null || value.trim().isEmpty
-                                        ? 'Escribe tu nombre'
+                                        value == null || !value.contains('@')
+                                        ? 'Escribe un correo válido'
                                         : null,
                                   ),
                                   const SizedBox(height: 12),
-                                ],
-                                TextFormField(
-                                  controller: _email,
-                                  keyboardType: TextInputType.emailAddress,
-                                  textInputAction: TextInputAction.next,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Correo',
-                                    prefixIcon: Icon(Icons.mail_outline),
-                                  ),
-                                  validator: (value) =>
-                                      value == null || !value.contains('@')
-                                      ? 'Escribe un correo válido'
-                                      : null,
-                                ),
-                                const SizedBox(height: 12),
-                                TextFormField(
-                                  controller: _password,
-                                  obscureText: !_showPassword,
-                                  decoration: InputDecoration(
-                                    labelText: 'Contraseña',
-                                    prefixIcon: const Icon(Icons.lock_outline),
-                                    suffixIcon: IconButton(
-                                      tooltip: _showPassword
-                                          ? 'Ocultar contraseña'
-                                          : 'Mostrar contraseña',
-                                      onPressed: () => setState(
-                                        () => _showPassword = !_showPassword,
+                                  TextFormField(
+                                    controller: _password,
+                                    obscureText: !_showPassword,
+                                    decoration: InputDecoration(
+                                      labelText: 'Contraseña',
+                                      prefixIcon: const Icon(
+                                        Icons.lock_outline,
                                       ),
-                                      icon: Icon(
-                                        _showPassword
-                                            ? Icons.visibility_off_outlined
-                                            : Icons.visibility_outlined,
-                                      ),
-                                    ),
-                                  ),
-                                  validator: (value) =>
-                                      value == null || value.length < 6
-                                      ? 'Usa al menos 6 caracteres'
-                                      : null,
-                                ),
-                                if (_error != null) ...[
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    _error!,
-                                    style: TextStyle(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.error,
-                                    ),
-                                  ),
-                                ],
-                                const SizedBox(height: 20),
-                                LiquidGlassButton(
-                                  variant: LiquidGlassButtonVariant.secondary,
-                                  onPressed: _busy ? null : _submit,
-                                  label: _registering
-                                      ? 'Crear cuenta'
-                                      : 'Iniciar sesión',
-                                ),
-                                // El invitado ya tiene "Jugar sin registrarme",
-                                // que retoma la misma sesión anónima.
-                                if (!_registering &&
-                                    widget.savedUser != null &&
-                                    !widget.savedUser!.isAnonymous) ...[
-                                  const SizedBox(height: 12),
-                                  OutlinedButton.icon(
-                                    onPressed: _busy ? null : widget.onSignedIn,
-                                    icon: const Icon(Icons.play_circle_outline),
-                                    label: Text(
-                                      'Continuar como ${_nombreSesion(widget.savedUser!)}',
-                                    ),
-                                  ),
-                                ],
-                                if (!_registering) ...[
-                                  const SizedBox(height: 16),
-                                  Row(
-                                    children: [
-                                      const Expanded(child: Divider()),
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
+                                      suffixIcon: IconButton(
+                                        tooltip: _showPassword
+                                            ? 'Ocultar contraseña'
+                                            : 'Mostrar contraseña',
+                                        onPressed: () => setState(
+                                          () => _showPassword = !_showPassword,
                                         ),
-                                        child: Text('o', style: text.bodySmall),
-                                      ),
-                                      const Expanded(child: Divider()),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  OutlinedButton.icon(
-                                    onPressed: _busy ? null : _signInWithGoogle,
-                                    style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 14,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
+                                        icon: Icon(
+                                          _showPassword
+                                              ? Icons.visibility_off_outlined
+                                              : Icons.visibility_outlined,
+                                        ),
                                       ),
                                     ),
-                                    icon: const _LogoGoogle(),
-                                    label: const Text('Continuar con Google'),
+                                    validator: (value) =>
+                                        value == null || value.length < 6
+                                        ? 'Usa al menos 6 caracteres'
+                                        : null,
                                   ),
-                                  const SizedBox(height: 8),
-                                  TextButton.icon(
-                                    onPressed: _busy ? null : _continueAsGuest,
-                                    icon: const Icon(
-                                      Icons.sports_esports_outlined,
+                                  if (_error != null) ...[
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      _error!,
+                                      style: TextStyle(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.error,
+                                      ),
                                     ),
-                                    label: const Text('Jugar sin registrarme'),
+                                  ],
+                                  const SizedBox(height: 20),
+                                  BotonDegradado(
+                                    onPressed: _busy ? null : _submit,
+                                    label: _registering
+                                        ? 'Crear cuenta'
+                                        : 'Iniciar sesión',
                                   ),
+                                  // El invitado ya tiene "Jugar sin registrarme",
+                                  // que retoma la misma sesión anónima.
+                                  if (!_registering &&
+                                      widget.savedUser != null &&
+                                      !widget.savedUser!.isAnonymous) ...[
+                                    const SizedBox(height: 12),
+                                    OutlinedButton.icon(
+                                      onPressed: _busy
+                                          ? null
+                                          : widget.onSignedIn,
+                                      icon: const Icon(
+                                        Icons.play_circle_outline,
+                                      ),
+                                      label: Text(
+                                        'Continuar como ${_nombreSesion(widget.savedUser!)}',
+                                      ),
+                                    ),
+                                  ],
+                                  if (!_registering) ...[
+                                    const SizedBox(height: 16),
+                                    Row(
+                                      children: [
+                                        const Expanded(child: Divider()),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                          ),
+                                          child: Text(
+                                            'o',
+                                            style: text.bodySmall,
+                                          ),
+                                        ),
+                                        const Expanded(child: Divider()),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 16),
+                                    OutlinedButton.icon(
+                                      onPressed: _busy
+                                          ? null
+                                          : _signInWithGoogle,
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 14,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
+                                        ),
+                                      ),
+                                      icon: const _LogoGoogle(),
+                                      label: const Text('Continuar con Google'),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    TextButton.icon(
+                                      onPressed: _busy
+                                          ? null
+                                          : _continueAsGuest,
+                                      icon: const Icon(
+                                        Icons.sports_esports_outlined,
+                                      ),
+                                      label: const Text(
+                                        'Jugar sin registrarme',
+                                      ),
+                                    ),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
                           ),
                           const SizedBox(height: 12),

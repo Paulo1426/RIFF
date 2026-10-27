@@ -98,10 +98,8 @@ scripts/       carga de niveles e intros en Firestore
 
 ## Ejecutar el proyecto
 
-Necesitas Flutter, un proyecto de Firebase y uno de Supabase. La configuración
-completa (colecciones, secretos y reglas) está en
-[FIREBASE_SETUP.md](./FIREBASE_SETUP.md), y las reglas detalladas del juego en
-[LOGICA_DEL_JUEGO.md](./LOGICA_DEL_JUEGO.md).
+Necesitas Flutter, un proyecto de Firebase y uno de Supabase. Las reglas de
+acceso están en `firestore.rules` y `storage.rules`.
 
 Desplegar el backend (con los secretos ya configurados en Supabase Dashboard):
 
@@ -119,8 +117,8 @@ flutter pub get
 flutter run --dart-define=SUPABASE_URL=https://TU_PROYECTO.supabase.co --dart-define=SUPABASE_ANON_KEY=TU_CLAVE_PUBLICA
 ```
 
-El juego no abre hasta que haya niveles publicados en Firestore con el formato
-de `FIREBASE_SETUP.md`. La respuesta de cada canción va en
+El juego no abre hasta que haya niveles publicados en Firestore (se cargan con
+`scripts/cargar_niveles_firestore.mjs`). La respuesta de cada canción va en
 `privateLevelAnswers`, nunca dentro del documento del nivel.
 
 ## Plataformas

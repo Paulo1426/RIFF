@@ -85,13 +85,20 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   final Map<String, int> _prices = {};
   bool _melodyFound = false;
   bool _won = false;
+  // Lo ganado al acertar; se muestra en la barra de arriba.
+  (String, int, String)? _premio;
   bool _avanzando = false;
   // Canción revelada al acertar, para el reproductor final.
   String? _titulo;
   String? _artista;
   String? _portadaUrl;
-  Timer? _reloj;
   final _confeti = ConfettiController(duration: const Duration(seconds: 2));
+  // Al descubrir la melodía: confeti y el aviso que se desvanece (cada
+  // descubrimiento cambia la clave y reinicia la animación).
+  final _confetiMelodia = ConfettiController(
+    duration: const Duration(milliseconds: 1500),
+  );
+  int _celebracion = 0;
   late bool _playingOffline;
   int _playbackGeneration = 0;
   late final Partida? _offlinePartida;
@@ -132,8 +139,8 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   @override
   void dispose() {
     _musicaMenu.salirNivel();
-    _reloj?.cancel();
     _confeti.dispose();
+    _confetiMelodia.dispose();
     _playbackGeneration++;
     _answerController.dispose();
     unawaited(_stopAudioOnDispose());
@@ -179,6 +186,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         instrumento: instrumento.id,
       );
       if (!mounted) return;
+      final descubierta = result.melodiaDescubierta && !_melodyFound;
       setState(() {
         if (result.compraRealizada) {
           _prices[instrumento.id] = result.precioInstrumento;
@@ -192,6 +200,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             ? '¡Encontraste la melodía! Se desbloquearon todos los instrumentos.'
             : null;
       });
+      if (descubierta) _celebrarMelodia();
       try {
         await _playStems([instrumento]);
       } catch (error) {
@@ -235,6 +244,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         melodyFound = partida.melodiaDescubierta;
       }
       if (!mounted) return;
+      final descubierta = melodyFound && !_melodyFound;
       setState(() {
         _prices[instrumento.id] = price;
         _setBalance(partida.presupuestoRestante);
@@ -246,6 +256,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             ? '¡Encontraste la melodía! Se desbloquearon todos los instrumentos.'
             : null;
       });
+      if (descubierta) _celebrarMelodia();
       await _playStems([instrumento]);
     } catch (error) {
       if (mounted) {
@@ -392,20 +403,107 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     _balance = nuevo;
   }
 
+  /// Dos bloques: presupuesto restante (con barra de lo que queda) y
+  /// instrumentos comprados de los 3 posibles (con un punto por compra).
   Widget _presupuesto() {
     final text = Theme.of(context).textTheme;
-    // Wrap: en pantallas angostas el monto baja de línea en vez de desbordar.
+    final color = colorDificultad(widget.nivel.dificultad);
+    final etiqueta = text.labelSmall?.copyWith(
+      color: context.paleta.tonoTexto(color),
+      fontWeight: FontWeight.w800,
+      letterSpacing: 1,
+    );
+    const maxCompras = 3;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 3,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('PRESUPUESTO', style: etiqueta),
+              _monto(text),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(99),
+                child: LinearProgressIndicator(
+                  value: _balance / Nivel.presupuestoTotal,
+                  minHeight: 6,
+                  color: color,
+                  backgroundColor: color.withValues(alpha: 0.2),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'de \$${formatearMiles(Nivel.presupuestoTotal)}',
+                style: text.bodySmall?.copyWith(
+                  color: context.paleta.tintaSuave,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          flex: 2,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('INSTRUMENTOS', style: etiqueta),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  '${_purchased.length} de $maxCompras',
+                  style: text.titleLarge,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  for (var i = 0; i < maxCompras; i++)
+                    Container(
+                      width: 14,
+                      height: 14,
+                      margin: const EdgeInsets.only(right: 6),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: i < _purchased.length ? color : null,
+                        border: Border.all(color: color, width: 2),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'de ${widget.nivel.instrumentos.length} disponibles',
+                style: text.bodySmall?.copyWith(
+                  color: context.paleta.tintaSuave,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Monto restante animado y, al comprar, el descuento que sube y se borra.
+  Widget _monto(TextTheme text) {
+    // Wrap: en pantallas angostas el descuento baja de línea.
     return Wrap(
       crossAxisAlignment: WrapCrossAlignment.end,
       spacing: 8,
       children: [
-        const Text('Presupuesto restante:'),
         TweenAnimationBuilder<int>(
           tween: IntTween(end: _balance),
           duration: const Duration(milliseconds: 900),
           curve: Curves.easeOutCubic,
-          builder: (context, value, _) =>
-              Text('\$${formatearMiles(value)}', style: text.titleMedium),
+          builder: (context, value, _) => FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text('\$${formatearMiles(value)}', style: text.titleLarge),
+          ),
         ),
         if (_descuentoId > 0)
           // La clave reinicia la animación en cada compra.
@@ -670,8 +768,11 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           }
           return;
         }
-        // La portada se descarga antes de mostrar el reproductor para que
-        // aparezca junto con la canción.
+        if (!mounted) return;
+        // Canción y portada se piden a la vez: el reproductor aparece con la
+        // portada lista (máx. ~2 s) y la canción ya cargando, así salen
+        // juntas sin sumar las dos esperas.
+        unawaited(_playSong('fullSong', replaceCurrent: true));
         await _cargarPortada();
         if (!mounted) return;
         setState(() {
@@ -681,21 +782,12 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           );
           _correct = true;
           _message = '¡Correcto! Reproduciendo la canción original.';
+          _premio = resultado.puntos > 0
+              ? ('🏆', resultado.puntos, 'puntos')
+              : resultado.monedas > 0
+              ? ('🪙', resultado.monedas, 'monedas para Adivina la intro')
+              : null;
         });
-        if (resultado.monedas > 0 || resultado.puntos > 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                resultado.puntos > 0
-                    ? '🏆 +${resultado.puntos} puntos'
-                    : '🪙 +${resultado.monedas} monedas para Adivina la intro',
-              ),
-            ),
-          );
-        }
-        // Sin await: la canción sigue sonando en el reproductor y la pantalla
-        // queda libre (si no, "Comprobando respuesta" duraba toda la canción).
-        unawaited(_playSong('fullSong', replaceCurrent: true));
       } else {
         setState(() {
           _correct = false;
@@ -741,9 +833,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     if (offlineLevel == null) {
       throw StateError('El nivel no está guardado para jugar offline');
     }
-    final correct =
-        OfflineGameStore.normalizeAnswer(answer) ==
-        OfflineGameStore.normalizeAnswer(offlineLevel.respuesta);
+    final correct = offlineLevel.acierta(answer);
     if (!mounted) return;
     if (!correct) {
       setState(() {
@@ -770,10 +860,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     _titulo = titulo;
     _artista = artista;
     _confeti.play();
-    // Refresca la barra de progreso del reproductor mientras suena.
-    _reloj ??= Timer.periodic(const Duration(milliseconds: 300), (_) {
-      if (mounted && _playing && !_paused) setState(() {});
-    });
   }
 
   Future<void> _cargarPortada() async {
@@ -782,17 +868,17 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           (await ref
                   .read(firebaseGameRepositoryProvider)
                   .obtenerAudio(gameId: widget.gameId, tipo: 'cover')
-                  .timeout(const Duration(seconds: 4)))
+                  .timeout(const Duration(seconds: 2)))
               .url;
       if (!mounted) return;
       // Se baja a la caché de imágenes antes de mostrarla; si no existe o
-      // tarda más de 4 s se sigue con el disco en su lugar.
+      // tarda más de 2 s se sigue con el disco en su lugar.
       var cargada = true;
       await precacheImage(
         NetworkImage(url),
         context,
         onError: (_, _) => cargada = false,
-      ).timeout(const Duration(seconds: 4), onTimeout: () => cargada = false);
+      ).timeout(const Duration(seconds: 2), onTimeout: () => cargada = false);
       if (mounted && cargada) _portadaUrl = url;
     } catch (error) {
       // Sin portada subida se muestra el disco; no es un error para el jugador.
@@ -808,6 +894,76 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     }
   }
 
+  void _celebrarMelodia() {
+    _confetiMelodia.play();
+    setState(() => _celebracion++);
+  }
+
+  /// Confeti desde arriba y "¡Encontraste la melodía!" que aparece, crece un
+  /// poco y se desvanece, encima de la vista de juego sin bloquear toques.
+  Widget _conCelebracion(Widget vista) => Stack(
+    children: [
+      vista,
+      Align(
+        alignment: Alignment.topCenter,
+        child: ConfettiWidget(
+          confettiController: _confetiMelodia,
+          blastDirectionality: BlastDirectionality.explosive,
+          numberOfParticles: 30,
+          maxBlastForce: 20,
+          minBlastForce: 8,
+          gravity: 0.3,
+          colors: [
+            colorDificultad(widget.nivel.dificultad),
+            AppColors.signalOrange,
+            AppColors.medio,
+            AppColors.verde,
+            AppColors.paperWhite,
+          ],
+        ),
+      ),
+      if (_celebracion > 0)
+        Center(
+          child: IgnorePointer(
+            child: TweenAnimationBuilder<double>(
+              key: ValueKey(_celebracion),
+              tween: Tween(begin: 0, end: 1),
+              duration: const Duration(milliseconds: 2600),
+              builder: (context, t, hijo) => Opacity(
+                // Aparece rápido, se queda y se desvanece.
+                opacity: t < 0.15
+                    ? t / 0.15
+                    : t > 0.65
+                    ? (1 - t) / 0.35
+                    : 1,
+                child: Transform.scale(scale: 0.9 + 0.15 * t, child: hijo),
+              ),
+              child: Semantics(
+                liveRegion: true,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(
+                    '¡Encontraste la melodía! 🎶',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                      color: AppColors.paperWhite,
+                      shadows: [
+                        Shadow(
+                          blurRadius: 16,
+                          color: colorDificultad(widget.nivel.dificultad),
+                        ),
+                        const Shadow(blurRadius: 4, color: Colors.black54),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
+
   /// Pantalla al acertar: reproductor de la canción con su portada y, debajo,
   /// los botones para terminar o pasar al siguiente nivel.
   Widget _vistaGanada() => ReproductorCancion(
@@ -819,10 +975,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     portada: _portadaUrl == null ? null : NetworkImage(_portadaUrl!),
     reproduciendo: _playing,
     enPausa: _paused,
-    posicion: _playing ? _audioService.posicion : Duration.zero,
-    duracion: _playing
-        ? (_audioService.duracion ?? Duration.zero)
-        : Duration.zero,
+    posicion: () => _playing ? _audioService.posicion : Duration.zero,
+    duracion: () =>
+        _playing ? (_audioService.duracion ?? Duration.zero) : Duration.zero,
     onReproducirPausar: _playingOffline ? null : _playPauseFinal,
     onDesdeInicio: _playingOffline
         ? null
@@ -832,8 +987,10 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     onDetener: _playing ? () => _audioService.detener() : null,
     onBuscar: _playing ? _audioService.buscar : null,
     confeti: _confeti,
+    sinConexion: _playingOffline,
     nota: _playingOffline
-        ? 'La canción original se reproducirá cuando tengas conexión a internet.'
+        ? '¡Felicitaciones! La canción original sonará cuando tengas '
+              'conexión a internet.'
         : null,
     botones: _botonesFinales(),
   );
@@ -981,6 +1138,8 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                 ),
                 onPressed: _abrirDialogoPistas,
               ),
+            if (_premio case (final emoji, final cantidad, final nombre))
+              _Premio(emoji: emoji, cantidad: cantidad, nombre: nombre),
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 250),
               child: _playing
@@ -1002,230 +1161,232 @@ class _GameScreenState extends ConsumerState<GameScreen> {
               : 'Comprobando respuesta...',
           child: _won
               ? _vistaGanada()
-              : LayoutBuilder(
-                  builder: (context, espacio) => ListView(
-                    // En tablets el contenido queda centrado con un ancho máximo.
-                    padding: EdgeInsets.symmetric(
-                      horizontal: max(
-                        16,
-                        (MediaQuery.sizeOf(context).width - 680) / 2,
-                      ),
-                      vertical: 16,
-                    ),
-                    children: [
-                      if (widget.cabecera case final cabecera?) ...[
-                        cabecera,
-                        const SizedBox(height: 12),
-                      ],
-                      Text(
-                        widget.nivel.modoPrueba
-                            ? 'Modo de prueba: ${widget.nivel.duracionFragmentoSegundos} segundos por escucha.'
-                            : 'Compra un instrumento para escuchar un fragmento de la canción.',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 12),
-                      LiquidGlassCard(
-                        borderRadius: 18,
-                        tintColor: colorDificultad(widget.nivel.dificultad),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
+              : _conCelebracion(
+                  LayoutBuilder(
+                    builder: (context, espacio) => ListView(
+                      // En tablets el contenido queda centrado con un ancho máximo.
+                      padding: EdgeInsets.symmetric(
+                        horizontal: max(
+                          16,
+                          (MediaQuery.sizeOf(context).width - 680) / 2,
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        vertical: 16,
+                      ),
+                      children: [
+                        if (widget.cabecera case final cabecera?) ...[
+                          cabecera,
+                          const SizedBox(height: 12),
+                        ],
+                        Text(
+                          widget.nivel.modoPrueba
+                              ? 'Modo de prueba: ${widget.nivel.duracionFragmentoSegundos} segundos por escucha.'
+                              : 'Compra un instrumento para escuchar un fragmento de la canción.',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 12),
+                        LiquidGlassCard(
+                          borderRadius: 18,
+                          tintColor: colorDificultad(widget.nivel.dificultad),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          child: _presupuesto(),
+                        ),
+                        const SizedBox(height: 8),
+                        GridView(
+                          shrinkWrap: true,
+                          // Sin el margen del sistema: la grilla va en medio de
+                          // la pantalla, no contra el borde.
+                          padding: EdgeInsets.zero,
+                          physics: const NeverScrollableScrollPhysics(),
+                          // 2 columnas en teléfonos, 3-4 en tablets. El alto sale
+                          // del espacio libre para que el nivel quepa sin
+                          // desplazar en teléfonos bajos.
+                          gridDelegate:
+                              SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 240,
+                                mainAxisExtent: _altoCasilla(espacio.maxHeight),
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
+                              ),
                           children: [
-                            _presupuesto(),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Puedes comprar hasta 3 de los ${widget.nivel.instrumentos.length} instrumentos.',
-                            ),
+                            for (final instrumento in widget.nivel.instrumentos)
+                              _instrumentoTile(instrumento),
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      GridView(
-                        shrinkWrap: true,
-                        // Sin el margen del sistema: la grilla va en medio de
-                        // la pantalla, no contra el borde.
-                        padding: EdgeInsets.zero,
-                        physics: const NeverScrollableScrollPhysics(),
-                        // 2 columnas en teléfonos, 3-4 en tablets. El alto sale
-                        // del espacio libre para que el nivel quepa sin
-                        // desplazar en teléfonos bajos.
-                        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 240,
-                          mainAxisExtent: _altoCasilla(espacio.maxHeight),
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                        children: [
-                          for (final instrumento in widget.nivel.instrumentos)
-                            _instrumentoTile(instrumento),
+                        if (_purchased.isNotEmpty && !_melodyFound) ...[
+                          const SizedBox(height: 8),
+                          LiquidGlassButton(
+                            variant: LiquidGlassButtonVariant.secondary,
+                            onPressed: _buying || _playing
+                                ? null
+                                : _playPurchased,
+                            icon: Icons.queue_music,
+                            label: 'Escuchar instrumentos comprados',
+                          ),
                         ],
-                      ),
-                      if (_purchased.isNotEmpty && !_melodyFound) ...[
-                        const SizedBox(height: 8),
-                        LiquidGlassButton(
-                          variant: LiquidGlassButtonVariant.secondary,
-                          onPressed: _buying || _playing
-                              ? null
-                              : _playPurchased,
-                          icon: Icons.queue_music,
-                          label: 'Escuchar instrumentos comprados',
-                        ),
-                      ],
-                      if (_melodyFound) ...[
-                        const SizedBox(height: 8),
-                        LiquidGlassButton(
-                          variant: LiquidGlassButtonVariant.secondary,
-                          onPressed: _playing
-                              ? null
-                              : () => _playSong('instrumentalSong'),
-                          icon: Icons.queue_music,
-                          label: 'Escuchar canción',
-                        ),
-                      ],
-                      AnimatedSize(
-                        duration: const Duration(milliseconds: 250),
-                        curve: Curves.easeOut,
-                        child: _playing
-                            ? Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: _reproductor(),
-                              )
-                            : const SizedBox(width: double.infinity),
-                      ),
-                      const Divider(height: 24),
-                      if (_pistasDesbloqueadas.containsKey(TipoPista.artista))
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: AppColors.signalOrange.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: AppColors.signalOrange.withValues(alpha: 0.3),
-                            ),
+                        if (_melodyFound) ...[
+                          const SizedBox(height: 8),
+                          LiquidGlassButton(
+                            variant: LiquidGlassButtonVariant.secondary,
+                            onPressed: _playing
+                                ? null
+                                : () => _playSong('instrumentalSong'),
+                            icon: Icons.queue_music,
+                            label: 'Escuchar canción',
                           ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.person_rounded,
-                                size: 16,
-                                color: AppColors.signalOrange,
+                        ],
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeOut,
+                          child: _playing
+                              ? Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: _reproductor(),
+                                )
+                              : const SizedBox(width: double.infinity),
+                        ),
+                        const Divider(height: 24),
+                        if (_pistasDesbloqueadas.containsKey(TipoPista.artista))
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppColors.signalOrange.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: AppColors.signalOrange.withValues(alpha: 0.3),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Artista: ${_pistasDesbloqueadas[TipoPista.artista]}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.person_rounded,
+                                  size: 16,
+                                  color: AppColors.signalOrange,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Artista: ${_pistasDesbloqueadas[TipoPista.artista]}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (_pistasDesbloqueadas.containsKey(TipoPista.iniciales))
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: AppColors.verde.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: AppColors.verde.withValues(alpha: 0.3),
+                              ],
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.text_fields_rounded,
-                                size: 16,
-                                color: AppColors.verde,
+                        if (_pistasDesbloqueadas.containsKey(TipoPista.iniciales))
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppColors.verde.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: AppColors.verde.withValues(alpha: 0.3),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Iniciales: ${_pistasDesbloqueadas[TipoPista.iniciales]}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
-                                    letterSpacing: 1.5,
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.text_fields_rounded,
+                                  size: 16,
+                                  color: AppColors.verde,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Iniciales: ${_pistasDesbloqueadas[TipoPista.iniciales]}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      letterSpacing: 1.5,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (_pistasDesbloqueadas.containsKey(TipoPista.cuartoInstrumento))
-                        Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: Colors.blue.withValues(alpha: 0.3),
+                              ],
                             ),
                           ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.music_note_rounded,
-                                size: 16,
-                                color: Colors.blue,
+                        if (_pistasDesbloqueadas.containsKey(TipoPista.cuartoInstrumento))
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Colors.blue.withValues(alpha: 0.3),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  '4to instrumento desbloqueado: ${_pistasDesbloqueadas[TipoPista.cuartoInstrumento]}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.music_note_rounded,
+                                  size: 16,
+                                  color: Colors.blue,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    '4to instrumento desbloqueado: ${_pistasDesbloqueadas[TipoPista.cuartoInstrumento]}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
+                          ),
+                        TextField(
+                          controller: _answerController,
+                          enabled: !_sending,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => _submitAnswer(),
+                          decoration: InputDecoration(
+                            labelText: '¿Qué canción es?',
+                            hintText: _pistasDesbloqueadas[TipoPista.iniciales],
                           ),
                         ),
-                      TextField(
-                        controller: _answerController,
-                        enabled: !_sending,
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) => _submitAnswer(),
-                        decoration: InputDecoration(
-                          labelText: '¿Qué canción es?',
-                          hintText: _pistasDesbloqueadas[TipoPista.iniciales],
-                        ),
-                      ),
-                      if (_message != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          _message!,
-                          style: TextStyle(
-                            color: _correct == false
-                                ? Theme.of(context).colorScheme.error
-                                : null,
+                        if (_message != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            _message!,
+                            style: TextStyle(
+                              color: _correct == false
+                                  ? Theme.of(context).colorScheme.error
+                                  : null,
+                            ),
                           ),
-                        ),
+                        ],
+                            _message!,
+                            style: TextStyle(
+                              color: _correct == false
+                                  ? Theme.of(context).colorScheme.error
+                                  : null,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        if (!_won)
+                          LiquidGlassButton(
+                            onPressed: _sending ? null : _submitAnswer,
+                            label: 'Comprobar respuesta',
+                          ),
+                        if (!_won && widget.onSaltar != null) ...[
+                          const SizedBox(height: 8),
+                          TextButton.icon(
+                            onPressed: _sending ? null : widget.onSaltar,
+                            icon: const Icon(Icons.skip_next_rounded),
+                            label: const Text('Saltar canción (0 puntos)'),
+                          ),
+                        ],
                       ],
-                      const SizedBox(height: 16),
-                      if (!_won)
-                        LiquidGlassButton(
-                          onPressed: _sending ? null : _submitAnswer,
-                          label: 'Comprobar respuesta',
-                        ),
-                      if (!_won && widget.onSaltar != null) ...[
-                        const SizedBox(height: 8),
-                        TextButton.icon(
-                          onPressed: _sending ? null : widget.onSaltar,
-                          icon: const Icon(Icons.skip_next_rounded),
-                          label: const Text('Saltar canción (0 puntos)'),
-                        ),
-                      ],
-                    ],
+                    ),
                   ),
                 ),
         ),
@@ -1246,3 +1407,46 @@ String _emojiDe(TipoInstrumento tipo) => switch (tipo) {
   TipoInstrumento.guitarra => '🎸',
   TipoInstrumento.bajo => '🎵',
 };
+
+/// Lo ganado al acertar, en la barra de arriba: aparece con un rebote junto a
+/// su nombre para que se entienda qué se ganó.
+class _Premio extends StatelessWidget {
+  const _Premio({
+    required this.emoji,
+    required this.cantidad,
+    required this.nombre,
+  });
+
+  final String emoji;
+  final int cantidad;
+  final String nombre;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(right: 8),
+    child: TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 900),
+      curve: Curves.elasticOut,
+      builder: (context, t, hijo) => Transform.scale(scale: t, child: hijo),
+      child: Semantics(
+        liveRegion: true,
+        label: 'Ganaste $cantidad $nombre',
+        excludeSemantics: true,
+        child: Tooltip(
+          message: '+$cantidad $nombre',
+          child: Chip(
+            visualDensity: VisualDensity.compact,
+            backgroundColor: AppColors.medio.withValues(alpha: 0.3),
+            side: const BorderSide(color: AppColors.medio, width: 1.5),
+            avatar: Text(emoji),
+            label: Text(
+              '+$cantidad',
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}

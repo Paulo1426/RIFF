@@ -4,6 +4,7 @@ import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 
 import '../animations/liquid_shimmer.dart';
+import '../animations/refresco.dart';
 import '../theme.dart';
 import 'liquid_glass/liquid_glass_card.dart';
 
@@ -29,6 +30,7 @@ class ReproductorCancion extends StatelessWidget {
     required this.confeti,
     required this.botones,
     this.nota,
+    this.sinConexion = false,
   });
 
   final Color color;
@@ -40,8 +42,10 @@ class ReproductorCancion extends StatelessWidget {
   final ImageProvider? portada;
   final bool reproduciendo;
   final bool enPausa;
-  final Duration posicion;
-  final Duration duracion;
+  // Se leen en cada refresco de la barra mientras suena: así no hace falta
+  // reconstruir la pantalla entera para moverla.
+  final ValueGetter<Duration> posicion;
+  final ValueGetter<Duration> duracion;
   // null deshabilita el botón (p. ej. sin conexión).
   final VoidCallback? onReproducirPausar;
   final VoidCallback? onDesdeInicio;
@@ -51,6 +55,40 @@ class ReproductorCancion extends StatelessWidget {
   final Widget botones;
   // Aviso bajo los controles, p. ej. que falta conexión.
   final String? nota;
+  // Acierto sin internet: no hay canción que sonar; en lugar de la portada
+  // y los controles, la banda animada y el aviso.
+  final bool sinConexion;
+
+  Widget _sinConexion(BuildContext context, double lado) => ColoredBox(
+    color: color.withValues(alpha: 0.18),
+    child: Stack(
+      children: [
+        Positioned.fill(child: BandaMusical(color: color)),
+        Align(
+          alignment: const Alignment(0, -0.75),
+          // Con letra grande se encoge en vez de salirse del cuadro.
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: context.paleta.superficie.withValues(alpha: 0.85),
+                borderRadius: BorderRadius.circular(99),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.wifi_off_rounded, size: lado * 0.08),
+                  const SizedBox(width: 6),
+                  const Text('Sin conexión'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _portada(double lado) {
     final disco = ColoredBox(
@@ -76,7 +114,6 @@ class ReproductorCancion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final total = max(duracion.inMilliseconds, 1).toDouble();
     return LayoutBuilder(
       builder: (context, espacio) {
         final lado = min(
@@ -101,7 +138,9 @@ class ReproductorCancion extends StatelessWidget {
                       borderRadius: BorderRadius.circular(18),
                       child: SizedBox.square(
                         dimension: lado,
-                        child: _portada(lado),
+                        child: sinConexion
+                            ? _sinConexion(context, lado)
+                            : _portada(lado),
                       ),
                     ),
                   ),
@@ -174,85 +213,101 @@ class ReproductorCancion extends StatelessWidget {
                   ),
                 ),
               ),
-              SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  activeTrackColor: color,
-                  inactiveTrackColor: context.paleta.borde,
-                  thumbColor: color,
-                  overlayColor: color.withValues(alpha: 0.15),
-                  trackHeight: 4,
+              if (!sinConexion) ...[
+                Refresco(
+                  activo: reproduciendo && !enPausa,
+                  builder: (context) {
+                    final posicion = this.posicion();
+                    final duracion = this.duracion();
+                    final total = max(duracion.inMilliseconds, 1).toDouble();
+                    return Column(
+                      children: [
+                        SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            activeTrackColor: color,
+                            inactiveTrackColor: context.paleta.borde,
+                            thumbColor: color,
+                            overlayColor: color.withValues(alpha: 0.15),
+                            trackHeight: 4,
+                          ),
+                          child: Slider(
+                            value: posicion.inMilliseconds
+                                .clamp(0, total)
+                                .toDouble(),
+                            max: total,
+                            onChanged: onBuscar == null
+                                ? null
+                                : (valor) => onBuscar!(
+                                    Duration(milliseconds: valor.round()),
+                                  ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(_tiempo(posicion), style: text.bodySmall),
+                              Text(_tiempo(duracion), style: text.bodySmall),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
-                child: Slider(
-                  value: posicion.inMilliseconds.clamp(0, total).toDouble(),
-                  max: total,
-                  onChanged: onBuscar == null
-                      ? null
-                      : (valor) =>
-                            onBuscar!(Duration(milliseconds: valor.round())),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(_tiempo(posicion), style: text.bodySmall),
-                    Text(_tiempo(duracion), style: text.bodySmall),
+                    IconButton(
+                      tooltip: 'Desde el inicio',
+                      iconSize: 34,
+                      onPressed: onDesdeInicio,
+                      icon: const Icon(Icons.skip_previous_rounded),
+                    ),
+                    const SizedBox(width: 16),
+                    IconButton.filled(
+                      tooltip: reproduciendo && !enPausa
+                          ? 'Pausar'
+                          : 'Reproducir',
+                      iconSize: 44,
+                      style: IconButton.styleFrom(
+                        backgroundColor: color,
+                        // Ícono oscuro sobre colores claros (amarillo, verde).
+                        foregroundColor:
+                            ThemeData.estimateBrightnessForColor(color) ==
+                                Brightness.light
+                            ? AppColors.graphiteInk
+                            : AppColors.paperWhite,
+                        shape: const CircleBorder(),
+                        padding: const EdgeInsets.all(14),
+                      ),
+                      onPressed: onReproducirPausar,
+                      icon: Icon(
+                        reproduciendo && !enPausa
+                            ? Icons.pause_rounded
+                            : Icons.play_arrow_rounded,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    IconButton(
+                      tooltip: 'Detener',
+                      iconSize: 34,
+                      onPressed: onDetener,
+                      icon: const Icon(Icons.stop_rounded),
+                    ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    tooltip: 'Desde el inicio',
-                    iconSize: 34,
-                    onPressed: onDesdeInicio,
-                    icon: const Icon(Icons.skip_previous_rounded),
-                  ),
-                  const SizedBox(width: 16),
-                  IconButton.filled(
-                    tooltip: reproduciendo && !enPausa
-                        ? 'Pausar'
-                        : 'Reproducir',
-                    iconSize: 44,
-                    style: IconButton.styleFrom(
-                      backgroundColor: color,
-                      // Ícono oscuro sobre colores claros (amarillo, verde).
-                      foregroundColor:
-                          ThemeData.estimateBrightnessForColor(color) ==
-                              Brightness.light
-                          ? AppColors.graphiteInk
-                          : AppColors.paperWhite,
-                      shape: const CircleBorder(),
-                      padding: const EdgeInsets.all(14),
-                    ),
-                    onPressed: onReproducirPausar,
-                    icon: Icon(
-                      reproduciendo && !enPausa
-                          ? Icons.pause_rounded
-                          : Icons.play_arrow_rounded,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  IconButton(
-                    tooltip: 'Detener',
-                    iconSize: 34,
-                    onPressed: onDetener,
-                    icon: const Icon(Icons.stop_rounded),
-                  ),
-                ],
-              ),
+              ],
               if (nota != null)
                 Padding(
-                  padding: const EdgeInsets.only(top: 8),
+                  padding: EdgeInsets.only(top: sinConexion ? 16 : 8),
                   child: Text(
                     nota!,
                     textAlign: TextAlign.center,
-                    style: text.bodySmall?.copyWith(
-                      color: context.paleta.tintaSuave,
-                    ),
+                    style: (sinConexion ? text.bodyLarge : text.bodySmall)
+                        ?.copyWith(color: context.paleta.tintaSuave),
                   ),
                 ),
               const SizedBox(height: 28),
