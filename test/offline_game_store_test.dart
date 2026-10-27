@@ -101,7 +101,7 @@ void main() {
       nivel: level,
       completado: false,
       puedeIniciar: true,
-      respuesta: 'cancion misteriosa',
+      respuestaHash: OfflineGameStore.huella(level.id, 'cancion misteriosa'),
       audioPaths: const {'bateria': 'cache/bateria.mp3'},
       instrumentalAudioPath: 'cache/cancion-instrumental.mp3',
       artista: 'Diomedes Díaz',
@@ -111,7 +111,7 @@ void main() {
       'nivel': level.toJson(),
       'completado': false,
       'puede_iniciar': true,
-      'respuesta': 'cancion misteriosa',
+      'respuestaHash': OfflineGameStore.huella(level.id, 'cancion misteriosa'),
     });
 
     final restored = OfflineLevelData.fromJson(json);

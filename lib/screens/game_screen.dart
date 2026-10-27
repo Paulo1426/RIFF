@@ -349,9 +349,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       final titulo = catalogInfo?.titulo ??
           (widget.nivel.cancionTitulo != 'Canción misteriosa'
               ? widget.nivel.cancionTitulo
-              : (widget.offlineLevel?.respuesta ??
-                  widget.offlineLevel?.nivel.cancionTitulo ??
-                  ''));
+              : (widget.offlineLevel?.nivel.cancionTitulo ?? ''));
       valor = titulo.isNotEmpty && titulo != 'Canción misteriosa'
           ? maskInitials(titulo)
           : 'Pista no disponible';
@@ -1355,14 +1353,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                         if (_message != null) ...[
                           const SizedBox(height: 8),
                           Text(
-                            _message!,
-                            style: TextStyle(
-                              color: _correct == false
-                                  ? Theme.of(context).colorScheme.error
-                                  : null,
-                            ),
-                          ),
-                        ],
                             _message!,
                             style: TextStyle(
                               color: _correct == false

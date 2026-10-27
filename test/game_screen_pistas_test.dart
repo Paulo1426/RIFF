@@ -32,7 +32,7 @@ void main() {
               nivel: nivel,
               completado: false,
               puedeIniciar: true,
-              respuesta: 'la gota fria',
+              respuestaHash: OfflineGameStore.huella(nivel.id, 'la gota fria'),
               artista: 'Carlos Vives',
               audioPaths: const {},
             ),
