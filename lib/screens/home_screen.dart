@@ -14,6 +14,7 @@ import '../providers/providers.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/offline_game_store.dart';
 import '../animations/ciclo_lento.dart';
+import '../animations/transicion_musical.dart';
 import '../animations/liquid_ripple_effect.dart';
 import '../widgets/aviso_insignia.dart';
 import '../widgets/boton_tema.dart';
@@ -132,6 +133,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   // Barra inferior: 0 menú, 1 Adivina la canción, 2 Adivina la intro,
   // 3 salas, 4 progreso, 5 configuración.
   int _pestana = 0;
+  // Sentido del último cambio de pestaña (0 al abrir: sin onda).
+  int _direccion = 0;
   static const _pCancion = 1, _pIntro = 2, _pSalas = 3, _pProgreso = 4;
   static const _pAjustes = 5;
   Future<EstadoIntros?>? _introsFuturo;
@@ -1023,8 +1026,17 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
               (icon: Icons.insights_rounded, label: 'Progreso'),
             ],
           ),
-          body: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 350),
+          body: TransicionMusical(
+            pestana: _pestana,
+            direccion: _direccion,
+            color: switch (_pestana) {
+              0 => AppColors.verde,
+              _pCancion when estado != null => colorDificultad(
+                _seleccionada ?? estado.dificultadActiva,
+              ),
+              _pSalas => AppColors.medio,
+              _ => AppColors.signalOrange,
+            },
             child: switch (_pestana) {
               _pCancion => _pestanaCancion(estado),
               _pIntro => _pestanaIntro(),
@@ -1094,6 +1106,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
 
   void _cambiarPestana(int pestana) {
     setState(() {
+      // Sentido de la onda de la transición: hacia la pestaña nueva.
+      _direccion = pestana == _pestana ? 0 : (pestana > _pestana ? 1 : -1);
       _pestana = pestana;
       _nivelesAbiertos = false;
       // Progreso se vuelve a pedir al abrir la pestaña, para que esté al día.
