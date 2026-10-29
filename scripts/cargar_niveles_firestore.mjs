@@ -3,6 +3,11 @@ import { resolve } from "node:path";
 import { createSign } from "node:crypto";
 import { pathToFileURL } from "node:url";
 
+// Género del catálogo: prefijo de colecciones ("vallenato_songs") y
+// buckets ("vallenato-instrumentos"). Debe coincidir con
+// supabase/functions/_shared/genero.ts.
+export const genero = "vallenato";
+
 const instruments = ["acordeon", "bajo", "bateria", "guitarra"];
 const difficultyConfigs = [
   {
@@ -99,7 +104,7 @@ function validateLevel(level, expectedNumber, config) {
     }
   }
   // Opcional: por defecto la portada es {songId}/portada.jpg en el bucket
-  // "portadas".
+  // "{genero}-portadas".
   if (level.portadaPath !== undefined) {
     const path = level.portadaPath;
     if (
@@ -214,7 +219,7 @@ async function prepararArchivo(dataPath) {
   const writes = [];
   for (const level of data.levels) {
     writes.push(
-      updateWrite("song-gues-game", "songs", level.songId, {
+      updateWrite("song-gues-game", `${genero}_songs`, level.songId, {
         titulo: level.titulo.trim(),
         artista: level.artista.trim(),
         instrumentalAudioPath: level.instrumentalAudioPath.trim(),
@@ -222,7 +227,7 @@ async function prepararArchivo(dataPath) {
         portadaPath: portadaDe(level),
         published: true,
       }),
-      updateWrite("song-gues-game", "levels", level.levelId, {
+      updateWrite("song-gues-game", `${genero}_levels`, level.levelId, {
         numero: level.numero,
         dificultad: config.firestoreDifficulty,
         cancionId: level.songId,
@@ -232,7 +237,7 @@ async function prepararArchivo(dataPath) {
         puntosInicio: [0],
         instrumentos: createStemPaths(level),
       }),
-      updateWrite("song-gues-game", "privateLevelAnswers", level.levelId, {
+      updateWrite("song-gues-game", `${genero}_privateLevelAnswers`, level.levelId, {
         respuestaCancionNormalizada: normalizeAnswer(level.respuesta),
       }),
     );

@@ -44,6 +44,7 @@ import {
   titleLetter,
 } from "./hints.ts";
 import { objectVersion } from "../_shared/storage_version.ts";
+import { bucketDe, coleccion } from "../_shared/genero.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -486,7 +487,7 @@ function userPath(
 }
 
 async function publishedLevels(token: string): Promise<PublishedLevel[]> {
-  const documents = await listCollection(token, "levels");
+  const documents = await listCollection(token, coleccion("levels"));
   return documents.map((document) => {
     const fields = fromFields(document.fields ?? {});
     return {
@@ -590,7 +591,7 @@ async function buildLevelEntry(
   completed: Set<string>,
   canStart: boolean,
 ): Promise<JsonObject> {
-  const document = await getDocument(token, `levels/${id}`);
+  const document = await getDocument(token, `${coleccion("levels")}/${id}`);
   if (!document || document.fields.published !== true) {
     throw new HttpError(
       409,
@@ -807,7 +808,7 @@ async function getProgress(
 
 async function createOfflineAudioUrl(
   path: string,
-  bucket = Deno.env.get("SUPABASE_STEMS_BUCKET") ?? "instrumentos",
+  bucket = Deno.env.get("SUPABASE_STEMS_BUCKET") ?? bucketDe("instrumentos"),
 ): Promise<string> {
   const supabaseUrl = requiredEnv("SUPABASE_URL").replace(/\/+$/, "");
   const serviceRoleKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
@@ -875,8 +876,8 @@ async function createOfflineBundle(
     const nivel = entry.nivel as JsonObject;
     const levelId = nivel.id as string;
     const [level, answer] = await Promise.all([
-      getDocument(token, `levels/${levelId}`),
-      getDocument(token, `privateLevelAnswers/${levelId}`),
+      getDocument(token, `${coleccion("levels")}/${levelId}`),
+      getDocument(token, `${coleccion("privateLevelAnswers")}/${levelId}`),
     ]);
     if (!level || !answer || answer.fields.respuestaCancionNormalizada === undefined) {
       throw new HttpError(404, `Faltan datos offline para ${levelId}`);
@@ -889,7 +890,7 @@ async function createOfflineBundle(
     if (typeof songId !== "string" || !validId(songId)) {
       throw new HttpError(500, `El nivel ${levelId} no tiene una canción válida`);
     }
-    const song = await getDocument(token, `songs/${songId}`);
+    const song = await getDocument(token, `${coleccion("songs")}/${songId}`);
     const instrumentalPath = song?.fields.instrumentalAudioPath;
     if (
       !song ||
@@ -901,7 +902,7 @@ async function createOfflineBundle(
     }
     const audioUrls: JsonObject = {};
     const audioVersions: JsonObject = {};
-    const stemsBucket = Deno.env.get("SUPABASE_STEMS_BUCKET") ?? "instrumentos";
+    const stemsBucket = Deno.env.get("SUPABASE_STEMS_BUCKET") ?? bucketDe("instrumentos");
     const versionOf = (bucket: string, path: string) =>
       objectVersion(
         requiredEnv("SUPABASE_URL").replace(/\/+$/, ""),
@@ -922,7 +923,7 @@ async function createOfflineBundle(
     }
     const instrumentalBucket =
       Deno.env.get("SUPABASE_INSTRUMENTAL_SONGS_BUCKET") ??
-        "canciones-instrumentales";
+        bucketDe("canciones-instrumentales");
     audioVersions.instrumental = await versionOf(
       instrumentalBucket,
       instrumentalPath,
@@ -966,7 +967,7 @@ async function purchaseInstrument(
   if (typeof levelId !== "string" || !validId(levelId)) {
     throw new HttpError(500, "La partida no tiene un nivel válido");
   }
-  const level = await getDocument(token, `levels/${levelId}`);
+  const level = await getDocument(token, `${coleccion("levels")}/${levelId}`);
   if (!level || level.fields.published !== true) {
     throw new HttpError(404, "El nivel no está disponible");
   }
@@ -1182,7 +1183,7 @@ async function revealedSong(
 ): Promise<JsonObject> {
   const songId = level.fields.cancionId;
   const song = typeof songId === "string" && validId(songId)
-    ? await getDocument(token, `songs/${songId}`)
+    ? await getDocument(token, `${coleccion("songs")}/${songId}`)
     : null;
   return {
     titulo: typeof song?.fields.titulo === "string" ? song.fields.titulo : null,
@@ -1227,8 +1228,8 @@ async function submitAnswer(
   const salaId = game.fields.salaId;
   const enSala = typeof salaId === "string";
   const [level, answerDoc, order, progress] = await Promise.all([
-    getDocument(token, `levels/${levelId}`),
-    getDocument(token, `privateLevelAnswers/${levelId}`),
+    getDocument(token, `${coleccion("levels")}/${levelId}`),
+    getDocument(token, `${coleccion("privateLevelAnswers")}/${levelId}`),
     enSala
       ? [] as string[]
       : ensureOrder(token, uid, difficulty as Difficulty, guest),
@@ -1380,14 +1381,14 @@ async function handleRequestHint(
   if (typeof levelId !== "string" || !validId(levelId)) {
     throw new HttpError(500, "La partida no tiene un nivel válido");
   }
-  const level = await getDocument(token, `levels/${levelId}`);
+  const level = await getDocument(token, `${coleccion("levels")}/${levelId}`);
   if (!level) throw new HttpError(404, "No se encontró el nivel");
 
   const songId = level.fields.cancionId;
   if (typeof songId !== "string" || !validId(songId)) {
     throw new HttpError(500, "El nivel no tiene una canción válida");
   }
-  const song = await getDocument(token, `songs/${songId}`);
+  const song = await getDocument(token, `${coleccion("songs")}/${songId}`);
   if (!song) throw new HttpError(404, "No se encontró la canción");
 
   const pistasUsadas = stringList(game.fields.pistasUsadas);
@@ -1809,7 +1810,7 @@ async function updateRoom<T>(
             fields: toFields({
               codigo,
               nombre: `Sala de ${creador?.nombre ?? "Alguien"}`,
-              tipo: final.tipo ?? "instrumentos",
+              tipo: final.tipo ?? bucketDe("instrumentos"),
               modo: final.modo ?? null,
               ganadorNombre: ganador?.nombre ?? null,
               ganaste: jugador.uid === ganadorUid,
@@ -1866,7 +1867,7 @@ async function createRoom(
   nombre: string,
   body: JsonObject,
 ): Promise<JsonObject> {
-  const tipo = body.tipo ?? "instrumentos";
+  const tipo = body.tipo ?? bucketDe("instrumentos");
   if (
     !modosSala.includes(body.modo as ModoSala) ||
     !tiposSala.includes(tipo as TipoSala) ||
@@ -2015,7 +2016,7 @@ function leaveRoom(
 /// todas las intros) mezcladas y, en contrarreloj, el reloj desde ahora.
 async function roomStart(token: string, sala: JsonObject): Promise<JsonObject> {
   const levelIds = sala.tipo === "intros"
-    ? (await listCollection(token, "intros"))
+    ? (await listCollection(token, coleccion("intros")))
       .filter((document) => fromFields(document.fields ?? {}).published === true)
       .map((document) => document.name?.split("/").at(-1) ?? "")
       .filter(validId)
@@ -2314,7 +2315,7 @@ async function roomIntroAudio(
   if (type === "intro" ? !actual && !acertada : !acertada) {
     throw new HttpError(403, "Esa canción no está disponible para ti");
   }
-  const intro = await getDocument(token, `intros/${introId}`);
+  const intro = await getDocument(token, `${coleccion("intros")}/${introId}`);
   if (!intro || intro.fields.published !== true) {
     throw new HttpError(404, "Esa intro no está disponible");
   }
@@ -2371,7 +2372,7 @@ async function answerRoomIntro(
         sala.levelIds as string[],
         roomSongIndex(sala, jugador),
       );
-      const intro = await getDocument(token, `intros/${introId}`);
+      const intro = await getDocument(token, `${coleccion("intros")}/${introId}`);
       const expected = intro?.fields.respuestaCancionNormalizada ??
         intro?.fields.titulo;
       if (typeof expected !== "string") {
@@ -2460,7 +2461,7 @@ function stringList(value: unknown): string[] {
 async function loadIntroState(token: string, uid: string, guest: boolean) {
   const path = introStatePath(uid, guest);
   const [documents, state, ...progress] = await Promise.all([
-    listCollection(token, "intros"),
+    listCollection(token, coleccion("intros")),
     getDocument(token, path),
     ...difficulties.map((difficulty) =>
       getDocument(token, userPath(uid, "progress", difficulty, guest))
@@ -2583,7 +2584,7 @@ async function introOfflineBundle(
   guest: boolean,
 ): Promise<JsonObject> {
   const state = await loadIntroState(token, uid, guest);
-  const bucket = Deno.env.get("SUPABASE_INTRO_BUCKET") ?? "cancion_intro";
+  const bucket = Deno.env.get("SUPABASE_INTRO_BUCKET") ?? bucketDe("cancion-intro");
   const intros = await Promise.all(
     state.unlocked.filter((id) => state.intros.has(id)).map(async (id) => {
       const fields = state.intros.get(id)!;
@@ -2627,7 +2628,7 @@ async function loadIntroAccess(
 ) {
   const [state, intro] = await Promise.all([
     getDocument(token, introStatePath(uid, guest)),
-    getDocument(token, `intros/${introId}`),
+    getDocument(token, `${coleccion("intros")}/${introId}`),
   ]);
   if (!intro || intro.fields.published !== true) {
     throw new HttpError(404, "Esa intro no está disponible");
@@ -2674,7 +2675,7 @@ async function signedIntroUrl(
   }
   return await createOfflineAudioUrl(
     path,
-    Deno.env.get("SUPABASE_INTRO_BUCKET") ?? "cancion_intro",
+    Deno.env.get("SUPABASE_INTRO_BUCKET") ?? bucketDe("cancion-intro"),
   );
 }
 

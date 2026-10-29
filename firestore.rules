@@ -33,18 +33,6 @@ service cloud.firestore {
       }
     }
 
-    match /songs/{songId} {
-      allow read, write: if false;
-    }
-
-    match /levels/{levelId} {
-      allow read, write: if false;
-
-      match /fragments/{fragmentId} {
-        allow read, write: if false;
-      }
-    }
-
     match /games/{gameId} {
       allow read, write: if false;
 
@@ -68,10 +56,9 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    match /privateLevelAnswers/{levelId} {
-      allow read, write: if false;
-    }
-
+    // Catálogo por género ({genero}_songs, _levels, _privateLevelAnswers,
+    // _intros: vallenato, reggaeton, rock_pop, salsa, popular) y todo lo
+    // demás: solo el servidor, con la cuenta de servicio.
     match /{document=**} {
       allow read, write: if false;
     }

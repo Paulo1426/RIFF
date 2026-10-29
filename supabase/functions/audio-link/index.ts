@@ -1,5 +1,6 @@
 import { createRemoteJWKSet, jwtVerify } from "https://esm.sh/jose@5.9.6";
 import { objectVersion } from "../_shared/storage_version.ts";
+import { bucketDe, coleccion } from "../_shared/genero.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -429,7 +430,7 @@ async function handleRequest(request: Request): Promise<Response> {
       const level = await firestoreGet(
         projectId,
         firestoreToken,
-        `levels/${levelId}`,
+        `${coleccion("levels")}/${levelId}`,
       );
       if (!boolField(level, "published")) {
         throw new HttpError(404, "El nivel no está publicado");
@@ -441,7 +442,7 @@ async function handleRequest(request: Request): Promise<Response> {
       const song = await firestoreGet(
         projectId,
         firestoreToken,
-        `songs/${songId}`,
+        `${coleccion("songs")}/${songId}`,
       );
       if (!boolField(song, "published")) {
         throw new HttpError(404, "La canción no está publicada");
@@ -449,17 +450,17 @@ async function handleRequest(request: Request): Promise<Response> {
       if (type === "cover") {
         // Ruta por defecto: portadas/{songId}/portada.jpg; `portadaPath` en
         // songs/{songId} permite otro nombre o formato.
-        bucket = Deno.env.get("SUPABASE_COVERS_BUCKET") ?? "portadas";
+        bucket = Deno.env.get("SUPABASE_COVERS_BUCKET") ?? bucketDe("portadas");
         objectPath = typeof song.portadaPath === "string" && song.portadaPath
           ? safeObjectPath(song.portadaPath)
           : `${songId}/portada.jpg`;
       } else if (type === "instrumentalSong") {
         bucket = Deno.env.get("SUPABASE_INSTRUMENTAL_SONGS_BUCKET") ??
-          "canciones-instrumentales";
+          bucketDe("canciones-instrumentales");
         objectPath = safeObjectPath(song.instrumentalAudioPath);
       } else {
         bucket = Deno.env.get("SUPABASE_FULL_SONGS_BUCKET") ??
-          "canciones-completas";
+          bucketDe("canciones-completas");
         objectPath = safeObjectPath(song.fullAudioPath);
       }
       expiresIn = 1800;
@@ -477,7 +478,7 @@ async function handleRequest(request: Request): Promise<Response> {
       const level = await firestoreGet(
         projectId,
         firestoreToken,
-        `levels/${levelId}`,
+        `${coleccion("levels")}/${levelId}`,
       );
       if (!boolField(level, "published")) {
         throw new HttpError(404, "El nivel no está publicado");
@@ -526,7 +527,7 @@ async function handleRequest(request: Request): Promise<Response> {
         ? (instrumentData as JsonObject).storagePath
         : undefined;
       objectPath = safeObjectPath(pathFromFragment ?? pathFromLevel);
-      bucket = Deno.env.get("SUPABASE_STEMS_BUCKET") ?? "instrumentos";
+      bucket = Deno.env.get("SUPABASE_STEMS_BUCKET") ?? bucketDe("instrumentos");
       const songId = stringField(level, "cancionId");
       if (!songId || !validId(songId)) {
         throw new HttpError(404, "El nivel no tiene una canción válida");
