@@ -44,7 +44,7 @@ import {
   titleLetter,
 } from "./hints.ts";
 import { objectVersion } from "../_shared/storage_version.ts";
-import { bucketDe, coleccion } from "../_shared/genero.ts";
+import { coleccion, type TipoAudio, ubicacion } from "../_shared/genero.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -807,12 +807,13 @@ async function getProgress(
 }
 
 async function createOfflineAudioUrl(
+  tipo: TipoAudio,
   path: string,
-  bucket = Deno.env.get("SUPABASE_STEMS_BUCKET") ?? bucketDe("instrumentos"),
 ): Promise<string> {
   const supabaseUrl = requiredEnv("SUPABASE_URL").replace(/\/+$/, "");
   const serviceRoleKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
-  const objectPath = path.split("/").map(encodeURIComponent).join("/");
+  const { bucket, ruta } = ubicacion(tipo, path);
+  const objectPath = ruta.split("/").map(encodeURIComponent).join("/");
   const result = await fetch(
     `${supabaseUrl}/storage/v1/object/sign/${
       encodeURIComponent(bucket)
@@ -902,14 +903,15 @@ async function createOfflineBundle(
     }
     const audioUrls: JsonObject = {};
     const audioVersions: JsonObject = {};
-    const stemsBucket = Deno.env.get("SUPABASE_STEMS_BUCKET") ?? bucketDe("instrumentos");
-    const versionOf = (bucket: string, path: string) =>
-      objectVersion(
+    const versionOf = (tipo: TipoAudio, path: string) => {
+      const { bucket, ruta } = ubicacion(tipo, path);
+      return objectVersion(
         requiredEnv("SUPABASE_URL").replace(/\/+$/, ""),
         requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
         bucket,
-        path,
+        ruta,
       );
+    };
     for (const [instrument, value] of Object.entries(instruments as JsonObject)) {
       if (!instrumentTypes.has(instrument) || !value || typeof value !== "object") {
         throw new HttpError(500, `Instrumentos inválidos en ${levelId}`);
@@ -918,14 +920,14 @@ async function createOfflineBundle(
       if (typeof storagePath !== "string" || !storagePath) {
         throw new HttpError(500, `Falta la ruta del instrumento ${instrument}`);
       }
-      audioUrls[instrument] = await createOfflineAudioUrl(storagePath);
-      audioVersions[instrument] = await versionOf(stemsBucket, storagePath);
+      audioUrls[instrument] = await createOfflineAudioUrl(
+        "instrumentos",
+        storagePath,
+      );
+      audioVersions[instrument] = await versionOf("instrumentos", storagePath);
     }
-    const instrumentalBucket =
-      Deno.env.get("SUPABASE_INSTRUMENTAL_SONGS_BUCKET") ??
-        bucketDe("canciones-instrumentales");
     audioVersions.instrumental = await versionOf(
-      instrumentalBucket,
+      "canciones-instrumentales",
       instrumentalPath,
     );
     return {
@@ -937,8 +939,8 @@ async function createOfflineBundle(
       audioUrls,
       audioVersions,
       instrumentalAudioUrl: await createOfflineAudioUrl(
+        "canciones-instrumentales",
         instrumentalPath,
-        instrumentalBucket,
       ),
     };
   }));
@@ -1810,7 +1812,7 @@ async function updateRoom<T>(
             fields: toFields({
               codigo,
               nombre: `Sala de ${creador?.nombre ?? "Alguien"}`,
-              tipo: final.tipo ?? bucketDe("instrumentos"),
+              tipo: final.tipo ?? "instrumentos",
               modo: final.modo ?? null,
               ganadorNombre: ganador?.nombre ?? null,
               ganaste: jugador.uid === ganadorUid,
@@ -1867,7 +1869,7 @@ async function createRoom(
   nombre: string,
   body: JsonObject,
 ): Promise<JsonObject> {
-  const tipo = body.tipo ?? bucketDe("instrumentos");
+  const tipo = body.tipo ?? "instrumentos";
   if (
     !modosSala.includes(body.modo as ModoSala) ||
     !tiposSala.includes(tipo as TipoSala) ||
@@ -2584,7 +2586,6 @@ async function introOfflineBundle(
   guest: boolean,
 ): Promise<JsonObject> {
   const state = await loadIntroState(token, uid, guest);
-  const bucket = Deno.env.get("SUPABASE_INTRO_BUCKET") ?? bucketDe("cancion-intro");
   const intros = await Promise.all(
     state.unlocked.filter((id) => state.intros.has(id)).map(async (id) => {
       const fields = state.intros.get(id)!;
@@ -2599,11 +2600,11 @@ async function introOfflineBundle(
       }
       const done = state.completed.has(id);
       const [intro, fullSong, cover] = await Promise.all([
-        createOfflineAudioUrl(pathOf("intro"), bucket),
-        done ? createOfflineAudioUrl(pathOf("fullSong"), bucket) : null,
+        createOfflineAudioUrl("intro", pathOf("intro")),
+        done ? createOfflineAudioUrl("intro", pathOf("fullSong")) : null,
         // Sin portada subida se juega igual: el reproductor muestra el disco.
         done
-          ? createOfflineAudioUrl(pathOf("cover"), bucket).catch(() => null)
+          ? createOfflineAudioUrl("intro", pathOf("cover")).catch(() => null)
           : null,
       ]);
       return {
@@ -2673,10 +2674,7 @@ async function signedIntroUrl(
   ) {
     throw new HttpError(500, `La ruta ${field} de ${introId} no es válida`);
   }
-  return await createOfflineAudioUrl(
-    path,
-    Deno.env.get("SUPABASE_INTRO_BUCKET") ?? bucketDe("cancion-intro"),
-  );
+  return await createOfflineAudioUrl("intro", path);
 }
 
 async function submitIntroAnswer(

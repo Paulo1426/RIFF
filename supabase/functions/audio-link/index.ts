@@ -1,6 +1,6 @@
 import { createRemoteJWKSet, jwtVerify } from "https://esm.sh/jose@5.9.6";
 import { objectVersion } from "../_shared/storage_version.ts";
-import { bucketDe, coleccion } from "../_shared/genero.ts";
+import { coleccion, type TipoAudio, ubicacion } from "../_shared/genero.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -404,7 +404,8 @@ async function handleRequest(request: Request): Promise<Response> {
       throw new HttpError(404, "La partida no tiene un nivel válido");
     }
 
-    let bucket: string;
+    // Carpeta del archivo en el bucket del género y su ruta dentro de ella.
+    let tipoAudio: TipoAudio;
     let objectPath: string;
     let fallbackObjectPath: string | undefined;
     let expiresIn: number;
@@ -448,19 +449,18 @@ async function handleRequest(request: Request): Promise<Response> {
         throw new HttpError(404, "La canción no está publicada");
       }
       if (type === "cover") {
-        // Ruta por defecto: portadas/{songId}/portada.jpg; `portadaPath` en
+        // Va junto a la canción completa: canciones-completas/{songId}/
+        // portada.jpg por defecto; `portadaPath` en
         // songs/{songId} permite otro nombre o formato.
-        bucket = Deno.env.get("SUPABASE_COVERS_BUCKET") ?? bucketDe("portadas");
+        tipoAudio = "canciones-completas";
         objectPath = typeof song.portadaPath === "string" && song.portadaPath
           ? safeObjectPath(song.portadaPath)
           : `${songId}/portada.jpg`;
       } else if (type === "instrumentalSong") {
-        bucket = Deno.env.get("SUPABASE_INSTRUMENTAL_SONGS_BUCKET") ??
-          bucketDe("canciones-instrumentales");
+        tipoAudio = "canciones-instrumentales";
         objectPath = safeObjectPath(song.instrumentalAudioPath);
       } else {
-        bucket = Deno.env.get("SUPABASE_FULL_SONGS_BUCKET") ??
-          bucketDe("canciones-completas");
+        tipoAudio = "canciones-completas";
         objectPath = safeObjectPath(song.fullAudioPath);
       }
       expiresIn = 1800;
@@ -488,7 +488,7 @@ async function handleRequest(request: Request): Promise<Response> {
       const fragmentsResponse = await fetch(
         `https://firestore.googleapis.com/v1/projects/${
           encodeURIComponent(projectId)
-        }/databases/(default)/documents/levels/${
+        }/databases/(default)/documents/${coleccion("levels")}/${
           encodeURIComponent(levelId)
         }/fragments?pageSize=100`,
         { headers: { Authorization: `Bearer ${firestoreToken}` } },
@@ -527,7 +527,7 @@ async function handleRequest(request: Request): Promise<Response> {
         ? (instrumentData as JsonObject).storagePath
         : undefined;
       objectPath = safeObjectPath(pathFromFragment ?? pathFromLevel);
-      bucket = Deno.env.get("SUPABASE_STEMS_BUCKET") ?? bucketDe("instrumentos");
+      tipoAudio = "instrumentos";
       const songId = stringField(level, "cancionId");
       if (!songId || !validId(songId)) {
         throw new HttpError(404, "El nivel no tiene una canción válida");
@@ -537,8 +537,10 @@ async function handleRequest(request: Request): Promise<Response> {
     }
 
     let url: string;
+    const { bucket } = ubicacion(tipoAudio, objectPath);
+    const enBucket = (path: string) => ubicacion(tipoAudio, path).ruta;
     try {
-      url = await signedStorageUrl(bucket, objectPath, expiresIn);
+      url = await signedStorageUrl(bucket, enBucket(objectPath), expiresIn);
     } catch (error) {
       if (
         type !== "stem" ||
@@ -554,14 +556,18 @@ async function handleRequest(request: Request): Promise<Response> {
         configuredPath: objectPath,
         fallbackPath: fallbackObjectPath,
       });
-      url = await signedStorageUrl(bucket, fallbackObjectPath, expiresIn);
+      url = await signedStorageUrl(
+        bucket,
+        enBucket(fallbackObjectPath),
+        expiresIn,
+      );
       objectPath = fallbackObjectPath;
     }
     const version = await objectVersion(
       requiredEnv("SUPABASE_URL").replace(/\/+$/, ""),
       requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
       bucket,
-      objectPath,
+      enBucket(objectPath),
     );
     return jsonResponse(200, { url, expiresIn, version });
   } catch (error) {

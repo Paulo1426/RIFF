@@ -2,7 +2,7 @@
 // `{genero}_intros`, p. ej. `vallenato_intros`). Uso:
 //   node scripts/cargar_intros_firestore.mjs intros.json          (vista previa)
 //   node scripts/cargar_intros_firestore.mjs intros.json --apply  (guarda)
-// Los audios y la portada van en el bucket `{genero}-cancion-intro`, en la carpeta de
+// Los audios y la portada van en el bucket `{genero}`, carpeta `intro_{genero}/`, en la de
 // cada intro: {id}/intro.mp3, {id}/original.mp3 y {id}/portada.jpg (o las
 // rutas que indique el JSON).
 import { resolve } from "node:path";

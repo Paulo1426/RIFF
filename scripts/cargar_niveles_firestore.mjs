@@ -4,7 +4,7 @@ import { createSign } from "node:crypto";
 import { pathToFileURL } from "node:url";
 
 // Género del catálogo: prefijo de colecciones ("vallenato_songs") y
-// buckets ("vallenato-instrumentos"). Debe coincidir con
+// nombre de su bucket ("vallenato"). Debe coincidir con
 // supabase/functions/_shared/genero.ts.
 export const genero = "vallenato";
 
@@ -104,7 +104,7 @@ function validateLevel(level, expectedNumber, config) {
     }
   }
   // Opcional: por defecto la portada es {songId}/portada.jpg en el bucket
-  // "{genero}-portadas".
+  // del género, junto a la canción completa (carpeta "canciones-completas/").
   if (level.portadaPath !== undefined) {
     const path = level.portadaPath;
     if (
@@ -264,7 +264,7 @@ async function main() {
     );
     for (const level of levels) {
       console.log(
-        `  ${level.levelId} -> ${level.songId} "${level.titulo.trim()}" - ${level.artista.trim()}; portada: portadas/${portadaDe(level)}; stems: ${
+        `  ${level.levelId} -> ${level.songId} "${level.titulo.trim()}" - ${level.artista.trim()}; portada: canciones-completas/${portadaDe(level)}; stems: ${
           Object.values(createStemPaths(level))
             .map((item) => item.storagePath)
             .join(", ")
