@@ -8,12 +8,19 @@ import '../../theme.dart';
 /// Fondo líquido: gris claro con manchas verdes/menta muy suaves que flotan
 /// despacio, para que el vidrio tenga algo que desenfocar. [acento] tiñe
 /// dos de las manchas (p. ej. con el color de la dificultad) y cambia con una
-/// transición suave.
+/// transición suave. [manchas] cambia las otras dos (menta y verde por
+/// defecto), p. ej. con los colores de un género.
 class LiquidBackground extends StatefulWidget {
-  const LiquidBackground({super.key, required this.child, this.acento});
+  const LiquidBackground({
+    super.key,
+    required this.child,
+    this.acento,
+    this.manchas,
+  });
 
   final Widget child;
   final Color? acento;
+  final (Color, Color)? manchas;
 
   @override
   State<LiquidBackground> createState() => _LiquidBackgroundState();
@@ -53,8 +60,13 @@ class _LiquidBackgroundState extends State<LiquidBackground> {
             tween: ColorTween(end: widget.acento ?? AppColors.verde),
             duration: const Duration(milliseconds: 500),
             curve: Curves.easeInOut,
-            builder: (context, color, _) =>
-                CustomPaint(painter: _BlobsPainter(_ciclo, color!)),
+            builder: (context, color, _) => CustomPaint(
+              painter: _BlobsPainter(
+                _ciclo,
+                color!,
+                widget.manchas ?? (_BlobsPainter._menta, AppColors.verde),
+              ),
+            ),
           ),
         ),
       ),
@@ -64,10 +76,11 @@ class _LiquidBackgroundState extends State<LiquidBackground> {
 }
 
 class _BlobsPainter extends CustomPainter {
-  _BlobsPainter(this.ciclo, this.acento) : super(repaint: ciclo);
+  _BlobsPainter(this.ciclo, this.acento, this.manchas) : super(repaint: ciclo);
 
   final CicloLento ciclo;
   final Color acento;
+  final (Color, Color) manchas;
 
   // Menta suave de la paleta.
   static const _menta = Color(0xFFB8F2D0);
@@ -79,8 +92,8 @@ class _BlobsPainter extends CustomPainter {
     // mancha para que no se muevan al unísono.
     for (final (x, y, r, color, fase) in [
       (0.05, 0.08, 0.85, acento, 0.0),
-      (0.95, 0.35, 0.7, _menta, 1.6),
-      (0.2, 0.75, 0.8, AppColors.verde, 3.1),
+      (0.95, 0.35, 0.7, manchas.$1, 1.6),
+      (0.2, 0.75, 0.8, manchas.$2, 3.1),
       (0.9, 1.0, 0.75, acento, 4.4),
     ]) {
       final center = Offset(
@@ -102,5 +115,6 @@ class _BlobsPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_BlobsPainter oldDelegate) => oldDelegate.acento != acento;
+  bool shouldRepaint(_BlobsPainter oldDelegate) =>
+      oldDelegate.acento != acento || oldDelegate.manchas != manchas;
 }

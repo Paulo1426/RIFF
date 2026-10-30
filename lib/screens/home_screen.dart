@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../models/genero.dart';
 import '../models/logros.dart';
 import '../models/nivel.dart';
 import '../models/sala.dart';
@@ -53,6 +54,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _entered = false;
   // El login estaba en pantalla: al entrar se muestra la bienvenida.
   bool _desdeLogin = false;
+  // Género elegido en el selector; null muestra el selector.
+  Genero? _genero;
   late final Stream<User?> _authStateChanges =
       widget.authStateChanges ?? FirebaseAuth.instance.authStateChanges();
 
@@ -81,6 +84,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         final user = snapshot.data;
         if (user == null || (!_entered && user.isAnonymous)) {
           _desdeLogin = true;
+          // Al volver a entrar se elige género otra vez.
+          _genero = null;
           return FirebaseAuthScreen(
             savedUser: user,
             onSignedIn: () => setState(() => _entered = true),
@@ -94,8 +99,98 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             },
           );
         }
-        return _AuthenticatedHome(key: ValueKey(user.uid), user: user);
+        final genero = _genero;
+        if (genero == null) {
+          return _SelectorGenero(
+            onElegir: (genero) => setState(() => _genero = genero),
+          );
+        }
+        return _AuthenticatedHome(
+          key: ValueKey(user.uid),
+          user: user,
+          genero: genero,
+          onCambiarGenero: () => setState(() => _genero = null),
+        );
       },
+    );
+  }
+}
+
+/// Primera pantalla tras el login: los cinco géneros y uno aleatorio. Solo
+/// los géneros disponibles abren su menú; el resto sale bloqueado.
+class _SelectorGenero extends StatelessWidget {
+  const _SelectorGenero({required this.onElegir});
+
+  final ValueChanged<Genero> onElegir;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    return LiquidBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: LiquidGlassAppBar(
+          centerTitle: false,
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'lib/assets/images/logo/riff_logo.png',
+                height: 48,
+                excludeFromSemantics: true,
+              ),
+              const SizedBox(width: 10),
+              const Text('RIFF'),
+            ],
+          ),
+        ),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  '¿Qué quieres adivinar hoy?',
+                  textAlign: TextAlign.center,
+                  style: text.headlineSmall,
+                ),
+              ),
+              Expanded(
+                child: GridView.count(
+                  padding: const EdgeInsets.all(16),
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 14,
+                  crossAxisSpacing: 14,
+                  childAspectRatio: 0.85,
+                  children: [
+                    for (final genero in Genero.values)
+                      _CuadroModo(
+                        emoji: genero.instrumentos,
+                        animacion: _Animacion.tocar,
+                        titulo: genero.nombre,
+                        detalle: genero.disponible ? 'Jugar' : 'Próximamente',
+                        color: colorGenero(genero),
+                        bloqueado: !genero.disponible,
+                        onTap: genero.disponible
+                            ? () => onElegir(genero)
+                            : null,
+                      ),
+                    const _CuadroModo(
+                      emoji: '🎲',
+                      animacion: _Animacion.saltar,
+                      titulo: 'Aleatorio',
+                      detalle: 'Próximamente',
+                      color: colorAleatorio,
+                      bloqueado: true,
+                      onTap: null,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -109,9 +204,18 @@ Future<void> prepararGoogle() =>
     _googleListo ??= GoogleSignIn.instance.initialize();
 
 class _AuthenticatedHome extends ConsumerStatefulWidget {
-  const _AuthenticatedHome({super.key, required this.user});
+  const _AuthenticatedHome({
+    super.key,
+    required this.user,
+    required this.genero,
+    required this.onCambiarGenero,
+  });
 
   final User user;
+  // Tiñe el menú con el color e instrumentos del género.
+  final Genero genero;
+  // Vuelve al selector de géneros.
+  final VoidCallback onCambiarGenero;
 
   @override
   ConsumerState<_AuthenticatedHome> createState() => _AuthenticatedHomeState();
@@ -978,16 +1082,23 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         _pCancion when estado != null => colorDificultad(
           _seleccionada ?? estado.dificultadActiva,
         ),
-        _pIntro => AppColors.signalOrange,
-        _ => null,
+        _pIntro => paletaGenero(widget.genero).intro,
+        _ => colorGenero(widget.genero),
       },
-      // Atrás desde cualquier pestaña vuelve al menú.
+      manchas: (
+        paletaGenero(widget.genero).mancha1,
+        paletaGenero(widget.genero).mancha2,
+      ),
+      // Atrás desde cualquier pestaña vuelve al menú, y desde el menú, a los
+      // géneros.
       child: PopScope(
-        canPop: _pestana == 0,
+        canPop: false,
         onPopInvokedWithResult: (didPop, _) {
           if (didPop) return;
-          // Desde los niveles se vuelve primero a las dificultades.
-          if (_pestana == _pCancion && _nivelesAbiertos) {
+          if (_pestana == 0) {
+            widget.onCambiarGenero();
+            // Desde los niveles se vuelve primero a las dificultades.
+          } else if (_pestana == _pCancion && _nivelesAbiertos) {
             setState(() => _nivelesAbiertos = false);
           } else {
             _cambiarPestana(0);
@@ -1010,6 +1121,12 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
                     icon: const Icon(Icons.arrow_back_rounded),
                     onPressed: () => setState(() => _nivelesAbiertos = false),
                   )
+                : _pestana == 0
+                ? IconButton(
+                    tooltip: 'Cambiar de género',
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    onPressed: widget.onCambiarGenero,
+                  )
                 : null,
             title: _tituloBarra(estado),
             actions: [..._accionesBarra(), const SizedBox(width: 8)],
@@ -1030,12 +1147,12 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
             pestana: _pestana,
             direccion: _direccion,
             color: switch (_pestana) {
-              0 => AppColors.verde,
+              0 => colorGenero(widget.genero),
               _pCancion when estado != null => colorDificultad(
                 _seleccionada ?? estado.dificultadActiva,
               ),
-              _pSalas => AppColors.medio,
-              _ => AppColors.signalOrange,
+              _pSalas => paletaGenero(widget.genero).salas,
+              _ => paletaGenero(widget.genero).intro,
             },
             child: switch (_pestana) {
               _pCancion => _pestanaCancion(estado),
@@ -1146,6 +1263,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     if (_esperandoProgreso() case final espera?) return espera;
     return _MenuPrincipal(
       key: const ValueKey('menu'),
+      genero: widget.genero,
       claveCarrusel: _claveMenu,
       onVisible: _recorridoSiEsNuevo,
       introsDisponibles: _introsDisponibles,
@@ -2100,6 +2218,7 @@ class _ProgresoGeneral extends StatelessWidget {
 class _MenuPrincipal extends StatelessWidget {
   const _MenuPrincipal({
     super.key,
+    required this.genero,
     required this.claveCarrusel,
     required this.onVisible,
     required this.introsDisponibles,
@@ -2113,6 +2232,8 @@ class _MenuPrincipal extends StatelessWidget {
     required this.onIntros,
   });
 
+  // Color e instrumentos de la tarjeta "Adivina la canción".
+  final Genero genero;
   final GlobalKey claveCarrusel;
   // Una línea de datos del jugador en cada tarjeta (null si no hay).
   final String infoCancion;
@@ -2127,10 +2248,10 @@ class _MenuPrincipal extends StatelessWidget {
   final VoidCallback onSalas;
   final VoidCallback onIntros;
 
-  static const _colores = [
-    AppColors.verde,
-    AppColors.medio,
-    AppColors.signalOrange,
+  List<Color> get _colores => [
+    colorGenero(genero),
+    paletaGenero(genero).salas,
+    paletaGenero(genero).intro,
   ];
 
   @override
@@ -2161,12 +2282,12 @@ class _MenuPrincipal extends StatelessWidget {
     final salasBloqueadas = esInvitado || offlineMode;
     return switch (index) {
       0 => _CuadroModo(
-        emoji: '🥁🪗🎸',
+        emoji: genero.instrumentos,
         animacion: _Animacion.tocar,
         titulo: 'Adivina la canción',
         detalle: 'Compra instrumentos y descubre la canción.',
         info: infoCancion,
-        color: AppColors.verde,
+        color: colorGenero(genero),
         alFrente: alFrente,
         // Solo la del frente se mueve; laterales y reflejo, quietas.
         animar: animar && alFrente,
@@ -2182,7 +2303,7 @@ class _MenuPrincipal extends StatelessWidget {
             ? 'Necesitas conexión para jugar en salas.'
             : 'Crea o únete a una sala de hasta 5 jugadores.',
         info: salasBloqueadas ? null : infoSalas,
-        color: AppColors.medio,
+        color: paletaGenero(genero).salas,
         alFrente: alFrente,
         // Solo la del frente se mueve; laterales y reflejo, quietas.
         animar: animar && alFrente,
@@ -2197,9 +2318,9 @@ class _MenuPrincipal extends StatelessWidget {
             ? 'Se desbloquea al completar tu primer nivel.'
             : offlineMode
             ? 'Sin conexión: juega las intros descargadas.'
-            : 'Escucha 20 segundos y adivina la canción.',
+            : 'Escucha 30 segundos y adivina la canción.',
         info: introsBloqueadas ? null : infoIntros,
-        color: AppColors.signalOrange,
+        color: paletaGenero(genero).intro,
         alFrente: alFrente,
         // Solo la del frente se mueve; laterales y reflejo, quietas.
         animar: animar && alFrente,

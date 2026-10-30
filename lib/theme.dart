@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'models/genero.dart';
 import 'models/logros.dart';
 import 'models/nivel.dart';
 
@@ -45,6 +46,39 @@ Color colorDificultad(Dificultad dificultad) => switch (dificultad) {
   Dificultad.medio => AppColors.medio,
   Dificultad.avanzado => AppColors.avanzado,
 };
+
+/// Color de cada género en el selector y en su menú. Vallenato conserva el
+/// verde de la marca.
+Color colorGenero(Genero genero) => switch (genero) {
+  Genero.vallenato => AppColors.verde,
+  Genero.reggaeton => const Color(0xFF2563EB),
+  Genero.rockPop => const Color(0xFFE53935),
+  Genero.salsa => const Color(0xFFFFB300),
+  Genero.popular => const Color(0xFF8E24AA),
+};
+
+/// Colores del menú de cada género: tarjetas de Salas e Intro y las dos
+/// manchas del fondo que no siguen al acento. Reggaetón usa azules de
+/// confianza (rey, cian, esmeralda y azul marino); el resto, los de la marca.
+({Color salas, Color intro, Color mancha1, Color mancha2}) paletaGenero(
+  Genero genero,
+) => switch (genero) {
+  Genero.reggaeton => (
+    salas: const Color(0xFF06B6D4),
+    intro: const Color(0xFF10B981),
+    mancha1: const Color(0xFF67E8F9),
+    mancha2: const Color(0xFF1E3A8A),
+  ),
+  _ => (
+    salas: AppColors.medio,
+    intro: AppColors.signalOrange,
+    mancha1: const Color(0xFFB8F2D0),
+    mancha2: AppColors.verde,
+  ),
+};
+
+/// Tarjeta "Aleatorio" del selector de géneros.
+const colorAleatorio = Color(0xFF00BFA5);
 
 /// Neutros que cambian entre modo claro y oscuro. Los acentos de marca
 /// (naranja, verde y colores de dificultad) siguen en [AppColors] y son

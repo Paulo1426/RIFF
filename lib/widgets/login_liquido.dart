@@ -2,7 +2,6 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
-import '../animations/ciclo_lento.dart';
 import '../theme.dart';
 import 'liquid_glass/liquid_glass_card.dart';
 
@@ -10,103 +9,16 @@ import 'liquid_glass/liquid_glass_card.dart';
 const verdeLogin = AppColors.verde;
 const naranjaLogin = AppColors.signalOrange;
 
-/// Fondo del login: los instrumentos de la app (batería, acordeón, guitarra
-/// y bajo) repartidos por la pantalla, flotando despacio, cada uno con un
-/// brillo de los colores de la app.
-class FondoLogin extends StatefulWidget {
+/// Fondo del login: liso, sin adornos que distraigan del formulario.
+class FondoLogin extends StatelessWidget {
   const FondoLogin({super.key});
 
   @override
-  State<FondoLogin> createState() => _FondoLoginState();
-}
-
-class _FondoLoginState extends State<FondoLogin> {
-  // (emoji, posición, color del brillo, tamaño, desfase de la animación)
-  // En los bordes y esquinas: asoman alrededor de la tarjeta del login.
-  static const _instrumentos = [
-    ('🥁', Alignment(-0.95, -0.97), AppColors.signalOrange, 50.0, 0.0),
-    ('🪗', Alignment(0.95, -0.95), AppColors.verde, 54.0, 0.25),
-    ('🎸', Alignment(-1.08, -0.25), AppColors.medio, 48.0, 0.5),
-    ('🎵', Alignment(1.08, 0.1), AppColors.avanzado, 42.0, 0.75),
-    ('🪗', Alignment(-1.05, 0.55), AppColors.verde, 48.0, 0.4),
-    ('🎸', Alignment(0.95, 0.98), AppColors.medio, 50.0, 0.9),
-    ('🥁', Alignment(-0.55, 1.0), AppColors.signalOrange, 44.0, 0.6),
-  ];
-
-  // Flotan despacio: basta el reloj compartido de 30 cuadros.
-  final _ciclo = CicloLento(periodo: const Duration(seconds: 6));
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Quieto con "reducir movimiento" o con la pantalla tapada por otra.
-    _ciclo.activo =
-        !MediaQuery.disableAnimationsOf(context) &&
-        TickerMode.valuesOf(context).enabled;
-  }
-
-  @override
-  void dispose() {
-    _ciclo.dispose();
-    super.dispose();
-  }
-
-  @override
-  // Capa propia: mover los instrumentos no repinta el formulario de encima.
-  Widget build(BuildContext context) => RepaintBoundary(
-    child: ExcludeSemantics(
-      child: ColoredBox(
-        color: context.paleta.oscuro
-            ? const Color(0xFF0B0F17)
-            : context.paleta.fondo,
-        child: AnimatedBuilder(
-          animation: _ciclo,
-          builder: (context, _) => Stack(
-            children: [
-              for (final (emoji, donde, color, tamano, desfase)
-                  in _instrumentos)
-                _instrumento(emoji, donde, color, tamano, desfase),
-            ],
-          ),
-        ),
-      ),
-    ),
+  Widget build(BuildContext context) => ColoredBox(
+    color: context.paleta.oscuro
+        ? const Color(0xFF0B0F17)
+        : context.paleta.fondo,
   );
-
-  Widget _instrumento(
-    String emoji,
-    Alignment donde,
-    Color color,
-    double tamano,
-    double desfase,
-  ) {
-    final t = (_ciclo.value + desfase) * 2 * pi;
-    return Align(
-      alignment: donde,
-      child: Transform.translate(
-        // Sube y baja, y se mece un poco, cada uno a su ritmo.
-        offset: Offset(0, 10 * sin(t)),
-        child: Transform.rotate(
-          angle: 0.18 * sin(t + 1),
-          child: Container(
-            width: tamano * 1.9,
-            height: tamano * 1.9,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [
-                  color.withValues(alpha: 0.35),
-                  color.withValues(alpha: 0),
-                ],
-              ),
-            ),
-            child: Text(emoji, style: TextStyle(fontSize: tamano)),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// Logo dentro de un círculo con degradado y brillo.
