@@ -5,8 +5,8 @@ import { pathToFileURL } from "node:url";
 
 // Género del catálogo: prefijo de colecciones ("vallenato_songs") y
 // nombre de su bucket ("vallenato"). Debe coincidir con
-// supabase/functions/_shared/genero.ts.
-export const genero = "vallenato";
+// supabase/functions/_shared/genero.ts. GENERO=reggaeton carga otro género.
+export const genero = process.env.GENERO ?? "vallenato";
 
 const instruments = ["acordeon", "bajo", "bateria", "guitarra"];
 const difficultyConfigs = [
