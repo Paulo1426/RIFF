@@ -8,6 +8,8 @@ import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../models/genero.dart';
+
 class AudioService {
   // [carpeta] y [cliente] se cambian solo en los tests.
   AudioService({Future<Directory> Function()? carpeta, http.Client? cliente})
@@ -31,13 +33,17 @@ class AudioService {
   Future<void> buscar(Duration posicion) =>
       Future.wait(_players.map((player) => player.seek(posicion)));
 
+  // Cada género guarda aparte: "intro:cancion-01" existe en todos. Se aplica
+  // al entrar, antes de cualquier await.
+  static String _conGenero(String key) => '${generoActivo.prefijo}$key';
+
   Future<File?> cachedFile(String key) async {
-    final file = await _cacheFile(key);
+    final file = await _cacheFile(_conGenero(key));
     return await file.exists() ? file : null;
   }
 
   Future<File> descargarYGuardar(String url, String key) =>
-      _ensureCached(url, key);
+      _ensureCached(url, _conGenero(key));
 
   Future<void> reproducir({
     required List<String> urls,
@@ -51,6 +57,9 @@ class AudioService {
     if (cacheKeys != null && cacheKeys.length != urls.length) {
       throw ArgumentError('Debe existir una clave de caché por cada audio');
     }
+    final claves = cacheKeys
+        ?.map((key) => key == null ? null : _conGenero(key))
+        .toList(growable: false);
     final playbackGeneration = ++_playbackGeneration;
     await _detenerPlayers();
     if (playbackGeneration != _playbackGeneration) return;
@@ -64,7 +73,7 @@ class AudioService {
         final player = AudioPlayer();
         _players.add(player);
         final index = _players.length - 1;
-        final cacheKey = cacheKeys == null ? null : cacheKeys[index];
+        final cacheKey = claves == null ? null : claves[index];
         if (cacheKey == null) {
           final uri = Uri.parse(url);
           if (uri.scheme == 'file') {

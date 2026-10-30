@@ -7,7 +7,8 @@ import '../../theme.dart';
 import 'liquid_glass_card.dart';
 
 /// Barra de navegación inferior flotante de vidrio. La pestaña activa se
-/// marca con una gota líquida (verde en el menú, naranja en las demás) que
+/// marca con una gota líquida ([colorMenu] en el menú, [colorSecciones] en
+/// las demás; por defecto verde y naranja) que
 /// salta de una a otra con rebote y, en reposo, se deforma despacio.
 class LiquidGlassBottomNav extends StatefulWidget {
   const LiquidGlassBottomNav({
@@ -16,6 +17,8 @@ class LiquidGlassBottomNav extends StatefulWidget {
     required this.currentIndex,
     required this.onTap,
     this.claves,
+    this.colorMenu = AppColors.verde,
+    this.colorSecciones = AppColors.signalOrange,
   });
 
   final List<({IconData icon, String label})> items;
@@ -24,6 +27,9 @@ class LiquidGlassBottomNav extends StatefulWidget {
   // Fuera de rango (p. ej. Ajustes, que no está en la barra) no marca ninguna.
   final int currentIndex;
   final ValueChanged<int> onTap;
+  // Color de la gota: en el menú y en las demás pestañas (p. ej. del género).
+  final Color colorMenu;
+  final Color colorSecciones;
 
   @override
   State<LiquidGlassBottomNav> createState() => _LiquidGlassBottomNavState();
@@ -32,9 +38,8 @@ class LiquidGlassBottomNav extends StatefulWidget {
 class _LiquidGlassBottomNavState extends State<LiquidGlassBottomNav> {
   // Rebote al llegar a la pestaña: se pasa un poco y vuelve.
   static const _salto = Cubic(0.68, -0.55, 0.27, 1.55);
-  // Colores de la app: verde para el menú, naranja para las demás.
-  static Color _colorDe(int index) =>
-      index == 0 ? AppColors.verde : AppColors.signalOrange;
+  Color _colorDe(int index) =>
+      index == 0 ? widget.colorMenu : widget.colorSecciones;
 
   // Deformación en reposo: lenta, con el reloj compartido de 30 cuadros.
   final _reposo = CicloLento(periodo: const Duration(seconds: 4));

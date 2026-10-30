@@ -58,22 +58,33 @@ Color colorGenero(Genero genero) => switch (genero) {
 };
 
 /// Colores del menú de cada género: tarjetas de Salas e Intro y las dos
-/// manchas del fondo que no siguen al acento. Reggaetón usa azules de
+/// manchas del fondo que no siguen al acento, y la gota de la barra de abajo
+/// (en el menú y en las demás pestañas). Reggaetón usa azules de
 /// confianza (rey, cian, esmeralda y azul marino); el resto, los de la marca.
-({Color salas, Color intro, Color mancha1, Color mancha2}) paletaGenero(
-  Genero genero,
-) => switch (genero) {
+({
+  Color salas,
+  Color intro,
+  Color mancha1,
+  Color mancha2,
+  Color barraMenu,
+  Color barraSecciones,
+})
+paletaGenero(Genero genero) => switch (genero) {
   Genero.reggaeton => (
     salas: const Color(0xFF06B6D4),
     intro: const Color(0xFF10B981),
     mancha1: const Color(0xFF67E8F9),
     mancha2: const Color(0xFF1E3A8A),
+    barraMenu: const Color(0xFF7C3AED),
+    barraSecciones: const Color(0xFF2563EB),
   ),
   _ => (
     salas: AppColors.medio,
     intro: AppColors.signalOrange,
     mancha1: const Color(0xFFB8F2D0),
     mancha2: AppColors.verde,
+    barraMenu: AppColors.verde,
+    barraSecciones: AppColors.signalOrange,
   ),
 };
 

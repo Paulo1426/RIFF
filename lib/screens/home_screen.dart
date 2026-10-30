@@ -102,7 +102,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         final genero = _genero;
         if (genero == null) {
           return _SelectorGenero(
-            onElegir: (genero) => setState(() => _genero = genero),
+            onElegir: (genero) => setState(() {
+              generoActivo = genero;
+              _genero = genero;
+            }),
           );
         }
         return _AuthenticatedHome(
@@ -526,6 +529,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
 
   Future<void> _actualizarPaquete(bool sinCopia) async {
     try {
+      _seguirEnGenero();
       final bundle = await ref
           .read(firebaseGameRepositoryProvider)
           .descargarPaqueteOffline();
@@ -606,6 +610,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         final key =
             'level:${nivel.id}:stem:${instrument.id}:'
             '${versiones[instrument.id] ?? ''}';
+        _seguirEnGenero();
         final file = await audioService.descargarYGuardar(url, key);
         paths[instrument.id] = file.path;
       }
@@ -615,6 +620,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           'Falta el enlace offline de la pista instrumental de ${nivel.id}',
         );
       }
+      _seguirEnGenero();
       final instrumentalFile = await audioService.descargarYGuardar(
         instrumentalUrl,
         'song:${nivel.cancionId}:instrumentalSong:'
@@ -653,8 +659,15 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           ? _offlineSnapshot!.pendingCompletions
           : const [],
     );
+    _seguirEnGenero();
     await _offlineStore.save(snapshot);
     return snapshot;
+  }
+
+  /// Las descargas y sincronizaciones siguen en segundo plano al volver al
+  /// selector: si ya se eligió otro género, paran antes de mezclar los dos.
+  void _seguirEnGenero() {
+    if (generoActivo != widget.genero) throw StateError('Cambió el género');
   }
 
   Future<void> _syncPendingCompletions(OfflineGameSnapshot snapshot) async {
@@ -666,11 +679,13 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       if (levelId == null || answer == null) {
         throw const FormatException('Hay un progreso offline incompleto');
       }
+      _seguirEnGenero();
       await repository.sincronizarNivelOffline(
         levelId: levelId,
         respuesta: answer,
       );
       current = current.withoutPendingCompletion(levelId);
+      _seguirEnGenero();
       await _offlineStore.save(current);
     }
     _offlineSnapshot = current;
@@ -1132,6 +1147,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
             actions: [..._accionesBarra(), const SizedBox(width: 8)],
           ),
           bottomNavigationBar: LiquidGlassBottomNav(
+            colorMenu: paletaGenero(widget.genero).barraMenu,
+            colorSecciones: paletaGenero(widget.genero).barraSecciones,
             claves: _clavesPestanas,
             currentIndex: _pestana,
             onTap: _cambiarPestana,

@@ -1,6 +1,11 @@
 import { createRemoteJWKSet, jwtVerify } from "https://esm.sh/jose@5.9.6";
 import { objectVersion } from "../_shared/storage_version.ts";
-import { coleccion, type TipoAudio, ubicacion } from "../_shared/genero.ts";
+import {
+  coleccion,
+  esGenero,
+  type TipoAudio,
+  ubicacion,
+} from "../_shared/genero.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -399,6 +404,9 @@ async function handleRequest(request: Request): Promise<Response> {
       throw new HttpError(403, "La partida no pertenece a este usuario");
     }
 
+    // Género de la partida (las viejas, sin campo, son de vallenato): el
+    // audio sale siempre del catálogo con el que se jugó.
+    const genero = esGenero(game.genero) ? game.genero : "vallenato";
     const levelId = stringField(game, "levelId");
     if (!levelId || !validId(levelId)) {
       throw new HttpError(404, "La partida no tiene un nivel válido");
@@ -431,7 +439,7 @@ async function handleRequest(request: Request): Promise<Response> {
       const level = await firestoreGet(
         projectId,
         firestoreToken,
-        `${coleccion("levels")}/${levelId}`,
+        `${coleccion("levels", genero)}/${levelId}`,
       );
       if (!boolField(level, "published")) {
         throw new HttpError(404, "El nivel no está publicado");
@@ -443,7 +451,7 @@ async function handleRequest(request: Request): Promise<Response> {
       const song = await firestoreGet(
         projectId,
         firestoreToken,
-        `${coleccion("songs")}/${songId}`,
+        `${coleccion("songs", genero)}/${songId}`,
       );
       if (!boolField(song, "published")) {
         throw new HttpError(404, "La canción no está publicada");
@@ -478,7 +486,7 @@ async function handleRequest(request: Request): Promise<Response> {
       const level = await firestoreGet(
         projectId,
         firestoreToken,
-        `${coleccion("levels")}/${levelId}`,
+        `${coleccion("levels", genero)}/${levelId}`,
       );
       if (!boolField(level, "published")) {
         throw new HttpError(404, "El nivel no está publicado");
@@ -488,7 +496,7 @@ async function handleRequest(request: Request): Promise<Response> {
       const fragmentsResponse = await fetch(
         `https://firestore.googleapis.com/v1/projects/${
           encodeURIComponent(projectId)
-        }/databases/(default)/documents/${coleccion("levels")}/${
+        }/databases/(default)/documents/${coleccion("levels", genero)}/${
           encodeURIComponent(levelId)
         }/fragments?pageSize=100`,
         { headers: { Authorization: `Bearer ${firestoreToken}` } },
@@ -537,8 +545,8 @@ async function handleRequest(request: Request): Promise<Response> {
     }
 
     let url: string;
-    const { bucket } = ubicacion(tipoAudio, objectPath);
-    const enBucket = (path: string) => ubicacion(tipoAudio, path).ruta;
+    const { bucket } = ubicacion(tipoAudio, objectPath, genero);
+    const enBucket = (path: string) => ubicacion(tipoAudio, path, genero).ruta;
     try {
       url = await signedStorageUrl(bucket, enBucket(objectPath), expiresIn);
     } catch (error) {

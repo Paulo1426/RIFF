@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../models/genero.dart';
+
 import '../models/nivel.dart';
 import 'firebase_game_repository.dart';
 
@@ -227,11 +229,13 @@ class OfflineGameStore {
   }
 
   Future<File> _file(String uid) async {
+    // Una copia por género; se lee antes del await.
+    final prefijo = generoActivo.prefijo.replaceAll(':', '_');
     final directory = await getApplicationSupportDirectory();
     final store = Directory('${directory.path}/offline_game');
     await store.create(recursive: true);
     final safeUid = base64Url.encode(utf8.encode(uid)).replaceAll('=', '');
-    return File('${store.path}/$safeUid.json');
+    return File('${store.path}/$prefijo$safeUid.json');
   }
 
   Future<void> save(OfflineGameSnapshot snapshot) async {

@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
+import '../models/genero.dart';
+
 import 'audio_service.dart';
 import 'firebase_game_repository.dart';
 import 'offline_game_store.dart';
@@ -141,8 +143,9 @@ class OfflineIntroStore {
 
   final FirebaseGameRepository _repository;
   final AudioService _audio;
-  // Una sola descarga a la vez aunque la pidan el inicio y la pantalla.
-  static Future<OfflineIntroSnapshot?>? _enCurso;
+  // Una sola descarga a la vez por género aunque la pidan el inicio y la
+  // pantalla.
+  static final _enCurso = <Genero, Future<OfflineIntroSnapshot?>>{};
 
   /// Borra la copia guardada de [uid] (al reiniciar el progreso).
   Future<void> borrar(String uid) async {
@@ -151,11 +154,13 @@ class OfflineIntroStore {
   }
 
   Future<File> _file(String uid) async {
+    // Una copia por género; se lee antes del await.
+    final prefijo = generoActivo.prefijo.replaceAll(':', '_');
     final directory = await getApplicationSupportDirectory();
     final store = Directory('${directory.path}/offline_intros');
     await store.create(recursive: true);
     final safeUid = base64Url.encode(utf8.encode(uid)).replaceAll('=', '');
-    return File('${store.path}/$safeUid.json');
+    return File('${store.path}/$prefijo$safeUid.json');
   }
 
   Future<void> save(OfflineIntroSnapshot snapshot) async {
@@ -183,13 +188,25 @@ class OfflineIntroStore {
 
   /// Envía los aciertos pendientes y descarga intro, original y portada de
   /// cada intro obtenida. Ya descargadas no se bajan otra vez (caché por id).
-  Future<OfflineIntroSnapshot?> actualizar(String uid) =>
-      _enCurso ??= _actualizar(uid).whenComplete(() => _enCurso = null);
+  Future<OfflineIntroSnapshot?> actualizar(String uid) {
+    final genero = generoActivo;
+    return _enCurso[genero] ??= _actualizar(
+      uid,
+      genero,
+    ).whenComplete(() => _enCurso.remove(genero));
+  }
 
-  Future<OfflineIntroSnapshot?> _actualizar(String uid) async {
+  Future<OfflineIntroSnapshot?> _actualizar(String uid, Genero genero) async {
+    // Cada llamada al servidor, a la caché o al disco lee el género activo:
+    // si el jugador cambió de género, se para antes de mezclar los dos.
+    void seguir() {
+      if (generoActivo != genero) throw StateError('Cambió el género');
+    }
+
     var actual = await load(uid);
     for (final pendiente
         in actual?.pendientes ?? const <Map<String, String>>[]) {
+      seguir();
       try {
         await _repository.sincronizarIntroOffline(
           introId: pendiente['introId']!,
@@ -201,8 +218,10 @@ class OfflineIntroStore {
         if (error.statusCode == 429 || error.statusCode >= 500) rethrow;
       }
       actual = actual!.sinPendiente(pendiente['introId']!);
+      seguir();
       await save(actual);
     }
+    seguir();
     final paquete = await _repository.descargarPaqueteIntros();
     final intros = <String, OfflineIntroData>{};
     for (final raw in paquete['intros'] as List<dynamic>) {
@@ -211,6 +230,7 @@ class OfflineIntroStore {
       final urls = Map<String, dynamic>.from(item['urls'] as Map);
       final full = urls['fullSong'] as String?;
       final cover = urls['cover'] as String?;
+      seguir();
       final (introFile, fullFile, coverFile) = await (
         _audio.descargarYGuardar(urls['intro'] as String, 'intro:$id'),
         full == null
@@ -240,6 +260,7 @@ class OfflineIntroStore {
       intros: intros,
       pendientes: const [],
     );
+    seguir();
     await save(snapshot);
     return snapshot;
   }

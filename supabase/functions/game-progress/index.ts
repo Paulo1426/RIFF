@@ -44,7 +44,16 @@ import {
   titleLetter,
 } from "./hints.ts";
 import { objectVersion } from "../_shared/storage_version.ts";
-import { coleccion, type TipoAudio, ubicacion } from "../_shared/genero.ts";
+import {
+  coleccion,
+  coleccionJugador,
+  conGenero,
+  esGenero,
+  generoActual,
+  generos,
+  type TipoAudio,
+  ubicacion,
+} from "../_shared/genero.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -380,11 +389,14 @@ async function clearDocuments(
 }
 
 async function clearGuestSession(token: string, uid: string): Promise<void> {
+  // El invitado se limpia en todos los géneros.
   const collections = [
     "games",
-    `guestSessions/${uid}/progress`,
-    `guestSessions/${uid}/difficultyOrders`,
-    `guestSessions/${uid}/introProgress`,
+    ...generos.flatMap((genero) =>
+      ["progress", "difficultyOrders", "introProgress"].map((nombre) =>
+        `guestSessions/${uid}/${coleccionJugador(nombre, genero)}`
+      )
+    ),
   ];
   for (const collection of collections) {
     const documents = await listCollection(token, collection);
@@ -399,12 +411,14 @@ async function clearGuestSession(token: string, uid: string): Promise<void> {
 }
 
 /// Empezar desde cero: borra progreso, orden de niveles, intros, fichas y
-/// estadísticas de salas de una cuenta registrada.
+/// estadísticas de salas de una cuenta registrada, en todos los géneros.
 async function resetUserProgress(token: string, uid: string): Promise<void> {
   for (const coleccion of [
-    "progress",
-    "difficultyOrders",
-    "introProgress",
+    ...generos.flatMap((genero) =>
+      ["progress", "difficultyOrders", "introProgress"].map((nombre) =>
+        coleccionJugador(nombre, genero)
+      )
+    ),
     "fichas",
   ]) {
     const documentos = await listCollection(token, `users/${uid}/${coleccion}`);
@@ -414,6 +428,14 @@ async function resetUserProgress(token: string, uid: string): Promise<void> {
         .map((documento) => documento.name)
         .filter((name): name is string => typeof name === "string"),
     );
+  }
+}
+
+/// La partida es del género de la petición (las viejas, sin campo, son de
+/// vallenato).
+function mismoGenero(game: JsonObject): void {
+  if ((game.genero ?? "vallenato") !== generoActual()) {
+    throw new HttpError(409, "La partida es de otro género");
   }
 }
 
@@ -483,7 +505,7 @@ function userPath(
   guest = false,
 ) {
   const root = guest ? `guestSessions/${uid}` : `users/${uid}`;
-  return `${root}/${collection}/${difficulty}`;
+  return `${root}/${coleccionJugador(collection)}/${difficulty}`;
 }
 
 async function publishedLevels(token: string): Promise<PublishedLevel[]> {
@@ -962,6 +984,7 @@ async function purchaseInstrument(
   if (game.fields.uid !== uid) {
     throw new HttpError(403, "La partida no pertenece a este usuario");
   }
+  mismoGenero(game.fields);
   if (game.fields.ganada === true) {
     throw new HttpError(409, "La partida ya fue completada");
   }
@@ -1171,6 +1194,9 @@ function newGame(
       ganada: false,
       failedAnswerAttempts: 0,
       nextAnswerAt: null,
+      // audio-link y las respuestas usan el género de la partida, no el de
+      // la petición: así una partida no abre canciones de otro género.
+      genero: generoActual(),
       ...extra,
       createdAt: now,
       updatedAt: now,
@@ -1208,6 +1234,7 @@ async function submitAnswer(
   if (game.fields.uid !== uid) {
     throw new HttpError(403, "La partida no pertenece a este usuario");
   }
+  mismoGenero(game.fields);
   if (game.fields.ganada === true) return { correct: true };
   const nextAnswerAt = game.fields.nextAnswerAt;
   if (
@@ -1371,6 +1398,7 @@ async function handleRequestHint(
   if (game.fields.uid !== uid) {
     throw new HttpError(403, "La partida no pertenece a este usuario");
   }
+  mismoGenero(game.fields);
   if (game.fields.ganada === true) {
     throw new HttpError(409, "La partida ya fue completada");
   }
@@ -1891,6 +1919,8 @@ async function createRoom(
         createWrite(roomPath(codigo), {
           codigo,
           creadorUid: uid,
+          // Quien se une juega las canciones de este género.
+          genero: generoActual(),
           publica: body.publica,
           tipo,
           modo: body.modo,
@@ -2451,7 +2481,9 @@ const introAudioTypes = {
 } as const;
 
 function introStatePath(uid: string, guest: boolean): string {
-  return `${guest ? "guestSessions" : "users"}/${uid}/introProgress/state`;
+  return `${guest ? "guestSessions" : "users"}/${uid}/${
+    coleccionJugador("introProgress")
+  }/state`;
 }
 
 function stringList(value: unknown): string[] {
@@ -2793,6 +2825,9 @@ async function handle(request: Request): Promise<Response> {
       throw new HttpError(400, "El cuerpo debe ser un objeto JSON");
     }
     const body = rawBody as JsonObject;
+    if (body.genero !== undefined && !esGenero(body.genero)) {
+      throw new HttpError(400, "El género no es válido");
+    }
     const action = body.action;
     const token = await firestoreToken();
     if (action === "startGuestSession") {
@@ -2991,7 +3026,15 @@ async function handle(request: Request): Promise<Response> {
       if (!codigoValido(body.codigo)) {
         throw new HttpError(400, "El código de sala no es válido");
       }
-      return response(200, await roomActions[action as string](body.codigo));
+      // Cada sala juega con su género, venga de donde venga el jugador.
+      const sala = await getDocument(token, roomPath(body.codigo));
+      return response(
+        200,
+        await conGenero(
+          sala?.fields.genero ?? "vallenato",
+          () => roomActions[action as string](body.codigo as string),
+        ),
+      );
     }
     if (action === "reiniciarProgreso") {
       if (guest) {
@@ -3030,4 +3073,11 @@ async function handle(request: Request): Promise<Response> {
   }
 }
 
-Deno.serve(handle);
+// El género del cuerpo vale para toda la petición (ver _shared/genero.ts);
+// handle vuelve a leer el cuerpo y rechaza un género inválido.
+Deno.serve(async (request) => {
+  const genero = await request.clone().json()
+    .then((body) => body?.genero)
+    .catch(() => undefined);
+  return conGenero(genero, () => handle(request));
+});

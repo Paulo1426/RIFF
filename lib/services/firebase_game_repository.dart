@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
+import '../models/genero.dart';
 import '../models/nivel.dart';
 import '../models/pista.dart';
 import '../models/sala.dart';
@@ -445,6 +446,8 @@ class FirebaseGameRepository {
     Map<String, dynamic> body, {
     String functionName = 'game-progress',
   }) async {
+    // Antes de cualquier await: la petición va con el género de quien la pidió.
+    body = {...body, 'genero': generoActivo.id};
     if (_supabaseUrl.isEmpty || _supabaseAnonKey.isEmpty) {
       throw StateError(
         'Configura SUPABASE_URL y SUPABASE_ANON_KEY con --dart-define.',
