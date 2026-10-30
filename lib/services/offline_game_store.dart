@@ -222,15 +222,17 @@ class OfflineGameSnapshot {
 }
 
 class OfflineGameStore {
-  /// Borra la copia guardada de [uid] (al reiniciar el progreso).
+  /// Borra las copias de [uid] en todos los géneros (al reiniciar el progreso).
   Future<void> borrar(String uid) async {
-    final archivo = await _file(uid);
-    if (await archivo.exists()) await archivo.delete();
+    for (final genero in Genero.values) {
+      final archivo = await _file(uid, genero);
+      if (await archivo.exists()) await archivo.delete();
+    }
   }
 
-  Future<File> _file(String uid) async {
+  Future<File> _file(String uid, [Genero? genero]) async {
     // Una copia por género; se lee antes del await.
-    final prefijo = generoActivo.prefijo.replaceAll(':', '_');
+    final prefijo = (genero ?? generoActivo).prefijo.replaceAll(':', '_');
     final directory = await getApplicationSupportDirectory();
     final store = Directory('${directory.path}/offline_game');
     await store.create(recursive: true);

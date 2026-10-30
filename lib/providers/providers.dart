@@ -29,10 +29,7 @@ final firebaseGameRepositoryProvider = Provider(
 );
 
 final offlineIntroStoreProvider = Provider(
-  (ref) => OfflineIntroStore(
-    ref.read(firebaseGameRepositoryProvider),
-    ref.read(audioServiceProvider),
-  ),
+  (ref) => OfflineIntroStore(ref.read(firebaseGameRepositoryProvider)),
 );
 
 final nivelRepositoryProvider = Provider<NivelRepository>(

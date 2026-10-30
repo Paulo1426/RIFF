@@ -21,6 +21,11 @@ enum Genero {
   final String instrumentos;
   final bool disponible;
 
+  /// Género de un documento del servidor; los viejos, sin campo, son de
+  /// vallenato.
+  static Genero deId(Object? id) =>
+      values.where((genero) => genero.id == id).firstOrNull ?? vallenato;
+
   /// Prefijo para lo guardado en el teléfono (caché de audio, copias
   /// offline). Vallenato va sin prefijo para conservar lo ya descargado.
   String get prefijo => this == vallenato ? '' : '$id:';

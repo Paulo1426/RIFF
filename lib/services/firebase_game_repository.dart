@@ -157,15 +157,23 @@ class FirebaseGameRepository {
   // Usuario con sesión; null si no hay.
   String? get uid => _auth.currentUser?.uid;
 
-  Future<EstadoJuegoRemoto> cargarEstado() async {
-    final response = await _post({'action': 'progress'});
+  /// [genero] consulta otro género sin cambiar el activo (selector).
+  Future<EstadoJuegoRemoto> cargarEstado({Genero? genero}) async {
+    final response = await _post({
+      'action': 'progress',
+      if (genero != null) 'genero': genero.id,
+    });
     return EstadoJuegoRemoto.fromJson(
       response['estado'] as Map<String, dynamic>,
     );
   }
 
-  Future<Map<String, dynamic>> descargarPaqueteOffline() async {
-    final response = await _post({'action': 'offlineBundle'});
+  /// Datos y enlaces de [levelId] para repetirlo sin conexión.
+  Future<Map<String, dynamic>> descargarPaqueteOffline(String levelId) async {
+    final response = await _post({
+      'action': 'offlineBundle',
+      'levelId': levelId,
+    });
     final bundle = response['bundle'];
     if (bundle is! Map<String, dynamic>) {
       throw const FormatException('El servicio no devolvió el paquete offline');
@@ -232,9 +240,11 @@ class FirebaseGameRepository {
     required TipoSala tipo,
     required ModoSala modo,
     required bool publica,
+    required Genero genero,
   }) async {
     final response = await _post({
       'action': 'crearSala',
+      'genero': genero.id,
       'tipo': tipo.name,
       'modo': modo.name,
       'publica': publica,
@@ -388,8 +398,13 @@ class FirebaseGameRepository {
     return (url: url, version: response['version'] as String? ?? '');
   }
 
-  Future<EstadoIntros> cargarIntros() async =>
-      EstadoIntros.fromJson(await _post({'action': 'introState'}));
+  Future<EstadoIntros> cargarIntros({Genero? genero}) async =>
+      EstadoIntros.fromJson(
+        await _post({
+          'action': 'introState',
+          if (genero != null) 'genero': genero.id,
+        }),
+      );
 
   /// Gasta una moneda y saca una intro al azar; `nueva` trae su id.
   Future<EstadoIntros> sacarIntro() async =>
@@ -410,9 +425,6 @@ class FirebaseGameRepository {
       artista: response['artista'] as String?,
     );
   }
-
-  Future<Map<String, dynamic>> descargarPaqueteIntros() =>
-      _post({'action': 'introOfflineBundle'});
 
   Future<void> sincronizarIntroOffline({
     required String introId,
@@ -447,7 +459,8 @@ class FirebaseGameRepository {
     String functionName = 'game-progress',
   }) async {
     // Antes de cualquier await: la petición va con el género de quien la pidió.
-    body = {...body, 'genero': generoActivo.id};
+    // Si el cuerpo ya trae género (crear una sala), ese manda.
+    body = {'genero': generoActivo.id, ...body};
     if (_supabaseUrl.isEmpty || _supabaseAnonKey.isEmpty) {
       throw StateError(
         'Configura SUPABASE_URL y SUPABASE_ANON_KEY con --dart-define.',
@@ -528,6 +541,14 @@ class IntroAsignada {
   final String? titulo;
   final String? artista;
 
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'numero': numero,
+    'estado': estado.name,
+    'titulo': titulo,
+    'artista': artista,
+  };
+
   factory IntroAsignada.fromJson(Map<String, dynamic> json) => IntroAsignada(
     id: json['id'] as String,
     numero: (json['numero'] as num).toInt(),
@@ -553,6 +574,15 @@ class EstadoIntros {
   final List<IntroAsignada> intros;
   // Id de la intro recién sacada.
   final String? nueva;
+
+  /// Lo que se guarda para ver la colección sin conexión.
+  Map<String, dynamic> toJson() => {
+    'monedas': monedas,
+    'monedas_ganadas': monedasGanadas,
+    'restantes': restantes,
+    'nueva': nueva,
+    'intros': [for (final intro in intros) intro.toJson()],
+  };
 
   factory EstadoIntros.fromJson(Map<String, dynamic> json) => EstadoIntros(
     monedas: (json['monedas'] as num).toInt(),

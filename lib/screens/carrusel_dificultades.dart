@@ -22,6 +22,7 @@ class CarruselGiratorio extends StatefulWidget {
     this.autoGiro,
     this.compacto = false,
     this.proporcion = 1.75,
+    this.anchoRelativo = 0.76,
   });
 
   final int itemCount;
@@ -39,12 +40,14 @@ class CarruselGiratorio extends StatefulWidget {
   final bool compacto;
   // Alto de la tarjeta respecto a su ancho en modo carrusel.
   final double proporcion;
+  // Ancho de la tarjeta respecto al de la pantalla (con tope en tablets).
+  final double anchoRelativo;
 
   @override
-  State<CarruselGiratorio> createState() => _CarruselGiratorioState();
+  State<CarruselGiratorio> createState() => CarruselGiratorioState();
 }
 
-class _CarruselGiratorioState extends State<CarruselGiratorio>
+class CarruselGiratorioState extends State<CarruselGiratorio>
     with TickerProviderStateMixin {
   // Posición continua: un entero significa esa tarjeta al frente. Moverla no
   // reconstruye las tarjetas (solo el AnimatedBuilder de posiciones); se
@@ -107,6 +110,9 @@ class _CarruselGiratorioState extends State<CarruselGiratorio>
   // Distancia de la tarjeta [i] al frente, en el rango [-n/2, n/2).
   double _distancia(int i) => (i - _posicion.value + _n / 2) % _n - _n / 2;
 
+  /// Gira [pasos] tarjetas (negativo, hacia atrás), p. ej. desde una barra.
+  void girar(int pasos) => _irA(_posicion.value.roundToDouble() + pasos);
+
   Future<void> _irA(double destino) async {
     _giro.animateTo(1, curve: Curves.easeOut);
     await _posicion.animateTo(
@@ -149,7 +155,10 @@ class _CarruselGiratorioState extends State<CarruselGiratorio>
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final ancho = min(constraints.maxWidth * 0.76, 380.0);
+              final ancho = min(
+                constraints.maxWidth * widget.anchoRelativo,
+                500 * widget.anchoRelativo,
+              );
               _anchoArrastre = ancho;
               return GestureDetector(
                 behavior: HitTestBehavior.translucent,

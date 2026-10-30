@@ -431,6 +431,17 @@ async function resetUserProgress(token: string, uid: string): Promise<void> {
   }
 }
 
+/// Corre [fn] con el género guardado en la partida: una partida de sala se
+/// juega con el género de la sala aunque el jugador venga de otro menú.
+async function enGeneroDePartida<T>(
+  token: string,
+  gameId: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const game = await getDocument(token, `games/${gameId}`);
+  return conGenero(game?.fields.genero ?? "vallenato", fn);
+}
+
 /// La partida es del género de la petición (las viejas, sin campo, son de
 /// vallenato).
 function mismoGenero(game: JsonObject): void {
@@ -870,10 +881,13 @@ async function createOfflineAudioUrl(
   return `${supabaseUrl}${pathWithPrefix}`;
 }
 
+/// Con [levelId] trae solo ese nivel: la app baja cada nivel al ganarlo, no
+/// todo el catálogo.
 async function createOfflineBundle(
   token: string,
   uid: string,
   guest: boolean,
+  levelId?: string,
 ): Promise<JsonObject> {
   const state = await getProgress(token, uid, guest);
   const entries = [
@@ -887,7 +901,8 @@ async function createOfflineBundle(
       .filter((entry) => {
         const nivel = entry.nivel as JsonObject;
         return (entry.completado === true || entry.puede_iniciar === true) &&
-          (!guest || nivel.dificultad === "facil");
+          (!guest || nivel.dificultad === "facil") &&
+          (levelId === undefined || nivel.id === levelId);
       })
       .map((entry) => {
         const nivel = entry.nivel as JsonObject;
@@ -1842,6 +1857,7 @@ async function updateRoom<T>(
               nombre: `Sala de ${creador?.nombre ?? "Alguien"}`,
               tipo: final.tipo ?? "instrumentos",
               modo: final.modo ?? null,
+              genero: final.genero ?? "vallenato",
               ganadorNombre: ganador?.nombre ?? null,
               ganaste: jugador.uid === ganadorUid,
               puesto: puesto + 1,
@@ -2844,9 +2860,19 @@ async function handle(request: Request): Promise<Response> {
       return response(200, { estado: await getProgress(token, uid, guest) });
     }
     if (action === "offlineBundle") {
+      if (body.levelId !== undefined && !validId(body.levelId)) {
+        throw new HttpError(400, "levelId no es válido");
+      }
       return response(
         200,
-        { bundle: await createOfflineBundle(token, uid, guest) },
+        {
+          bundle: await createOfflineBundle(
+            token,
+            uid,
+            guest,
+            body.levelId as string | undefined,
+          ),
+        },
       );
     }
     if (action === "completeOfflineLevel") {
@@ -2894,11 +2920,16 @@ async function handle(request: Request): Promise<Response> {
       }
       return response(
         200,
-        await purchaseInstrument(
+        await enGeneroDePartida(
           token,
-          uid,
           body.gameId,
-          body.instrument,
+          () =>
+            purchaseInstrument(
+              token,
+              uid,
+              body.gameId as string,
+              body.instrument as string,
+            ),
         ),
       );
     }
@@ -2912,12 +2943,17 @@ async function handle(request: Request): Promise<Response> {
       }
       return response(
         200,
-        await handleRequestHint(
+        await enGeneroDePartida(
           token,
-          uid,
           body.gameId,
-          body.hintType,
-          guest,
+          () =>
+            handleRequestHint(
+              token,
+              uid,
+              body.gameId as string,
+              body.hintType as string,
+              guest,
+            ),
         ),
       );
     }
@@ -2932,7 +2968,18 @@ async function handle(request: Request): Promise<Response> {
       }
       return response(
         200,
-        await submitAnswer(token, uid, body.gameId, body.answer, guest),
+        await enGeneroDePartida(
+          token,
+          body.gameId,
+          () =>
+            submitAnswer(
+              token,
+              uid,
+              body.gameId as string,
+              body.answer as string,
+              guest,
+            ),
+        ),
       );
     }
     if (action === "introState") {

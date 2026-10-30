@@ -11,6 +11,7 @@ import '../animations/refresco.dart';
 import '../animations/sound_wave_animation.dart';
 import '../providers/providers.dart';
 import '../models/artistas.dart';
+import '../models/genero.dart';
 import '../services/audio_service.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/musica_menu.dart';
@@ -23,7 +24,8 @@ import '../widgets/liquid_glass/liquid_glass_card.dart';
 import '../widgets/recorrido.dart';
 import '../widgets/reproductor_cancion.dart';
 
-const _colorIntros = AppColors.signalOrange;
+// Color de las intros del género que se está jugando.
+Color get _colorIntros => paletaGenero(generoActivo).intro;
 
 /// "Adivina la intro": cada moneda saca una carta con una intro al azar que
 /// el jugador aún no tiene; las obtenidas quedan en su colección.
@@ -44,6 +46,8 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
   // Copia descargada para jugar sin conexión.
   OfflineIntroSnapshot? _offline;
   bool _sinConexion = false;
+  // Portadas guardadas en la caché de las intros adivinadas.
+  Map<String, File> _portadas = const {};
   Object? _error;
   bool _sacando = false;
   final _claveMonedas = GlobalKey();
@@ -103,7 +107,24 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
         _sinConexion = false;
       });
       widget.onEstado?.call(estado);
-      if (uid != null) unawaited(_descargar(uid));
+      unawaited(_cargarPortadas(estado));
+      // Copia del estado para ver la colección sin conexión.
+      if (uid != null) {
+        final copia = OfflineIntroSnapshot(
+          uid: uid,
+          estadoJson: estado.toJson(),
+          intros: _offline?.intros ?? const {},
+          pendientes: _offline?.pendientes ?? const [],
+        );
+        _offline = copia;
+        unawaited(
+          _store
+              .save(copia)
+              .catchError(
+                (Object error) => debugPrint('No se guardó la copia: $error'),
+              ),
+        );
+      }
     } catch (error) {
       if (!mounted) return;
       final offline = _offline;
@@ -115,20 +136,34 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
           _sinConexion = true;
         }
       });
+      if (offline != null) unawaited(_cargarPortadas(offline.estado));
     }
   }
 
-  /// Baja en segundo plano intro, original y portada de cada carta obtenida.
-  Future<void> _descargar(String uid) async {
-    try {
-      final snapshot = await _store.actualizar(uid);
-      if (mounted) setState(() => _offline = snapshot);
-    } catch (error) {
-      debugPrint('No se pudieron descargar las intros offline: $error');
+  Future<void> _cargarPortadas(EstadoIntros estado) async {
+    final audio = ref.read(audioServiceProvider);
+    final portadas = <String, File>{};
+    for (final intro in estado.intros) {
+      if (intro.estado != EstadoIntro.completada) continue;
+      final archivo = await audio.cachedFile('intro:${intro.id}:cover');
+      if (archivo != null) portadas[intro.id] = archivo;
     }
+    if (mounted) setState(() => _portadas = portadas);
   }
 
   Future<void> _abrir(IntroAsignada intro, {bool reproducir = false}) async {
+    // Sin conexión solo se escuchan las ya adivinadas (lo que sonó quedó en
+    // la caché); las demás se juegan con internet.
+    if (_sinConexion && intro.estado != EstadoIntro.completada) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Sin conexión solo puedes escuchar las intros que ya adivinaste.',
+          ),
+        ),
+      );
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => IntroGameScreen(
@@ -165,10 +200,6 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
       if (!mounted) return;
       setState(() => _estado = estado);
       widget.onEstado?.call(estado);
-      final uid = ref.read(firebaseGameRepositoryProvider).uid;
-      // Precarga la portada (y los audios) de la carta nueva mientras se
-      // juega, para que al acertar salga junto con la canción.
-      if (uid != null) unawaited(_descargar(uid));
       final nueva = estado.intros.firstWhere((item) => item.id == estado.nueva);
       final jugar = await showDialog<bool>(
         context: context,
@@ -349,12 +380,10 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
                     itemCount: intros.length,
                     itemBuilder: (context, index) {
                       final intro = intros[index];
-                      final portada = _offline?.intros[intro.id]?.coverPath;
+                      final portada = _portadas[intro.id];
                       return _TarjetaIntro(
                         intro: intro,
-                        portada: portada == null
-                            ? null
-                            : FileImage(File(portada)),
+                        portada: portada == null ? null : FileImage(portada),
                         onTap: () => Navigator.of(context).pop(intro),
                       );
                     },
@@ -399,7 +428,7 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const SizedBox(
+                            SizedBox(
                               height: 160,
                               child: BandaMusical(color: _colorIntros),
                             ),
@@ -717,11 +746,7 @@ class _CartaReveladaState extends State<_CartaRevelada>
           : Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(
-                  Icons.headphones_rounded,
-                  size: 64,
-                  color: _colorIntros,
-                ),
+                Icon(Icons.headphones_rounded, size: 64, color: _colorIntros),
                 const SizedBox(height: 12),
                 Text('¡Lista!', style: text.headlineSmall),
                 const SizedBox(height: 4),
@@ -860,7 +885,7 @@ class _Ruleta extends StatelessWidget {
             ),
           const DiscoGirando(size: 70),
           // Marcador fijo arriba: señala la nota elegida.
-          const Align(
+          Align(
             alignment: Alignment.topCenter,
             child: Icon(
               Icons.arrow_drop_down_rounded,
@@ -990,7 +1015,10 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       final clave = tipo == 'intro'
           ? 'intro:${widget.intro.id}'
           : 'intro:${widget.intro.id}:full';
-      final guardado = await _audioService.cachedFile(clave);
+      // Las salas pueden ser de otro género: su audio no pasa por la caché,
+      // que se guarda por el género del menú.
+      final enCache = widget.sala == null;
+      final guardado = enCache ? await _audioService.cachedFile(clave) : null;
       // La original solo se descarga después de adivinarla con conexión.
       if (guardado == null && tipo == 'fullSong' && widget.sinConexion) {
         if (mounted) {
@@ -1007,7 +1035,7 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       if (!mounted || generation != _playbackGeneration) return;
       await _audioService.reproducir(
         urls: [url],
-        cacheKeys: [guardado == null ? clave : null],
+        cacheKeys: [guardado == null && enCache ? clave : null],
         duracion: null,
       );
     } catch (error) {
@@ -1034,9 +1062,9 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
   }
 
   Future<void> _cargarPortada() async {
-    final guardada = await _audioService.cachedFile(
-      'intro:${widget.intro.id}:cover',
-    );
+    final clave = 'intro:${widget.intro.id}:cover';
+    final enCache = widget.sala == null;
+    final guardada = enCache ? await _audioService.cachedFile(clave) : null;
     if (guardada != null) {
       _portada = FileImage(guardada);
       return;
@@ -1045,6 +1073,14 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     try {
       final url = await _urlRemota('cover').timeout(const Duration(seconds: 4));
       if (!mounted) return;
+      // Se guarda para verla también sin conexión.
+      if (enCache) {
+        final archivo = await _audioService
+            .descargarYGuardar(url, clave)
+            .timeout(const Duration(seconds: 4));
+        if (mounted) _portada = FileImage(archivo);
+        return;
+      }
       var cargada = true;
       await precacheImage(
         NetworkImage(url),

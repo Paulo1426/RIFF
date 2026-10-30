@@ -13,7 +13,7 @@ const cream = Color(0xFFF5F5F5);
 
 void main() {
   test('genera el logo de Riff', () async {
-    final fuente = await quitarFondoNegro(
+    final fuente = await quitarFondoClaro(
       File('tool/riff_logo_fuente.png').readAsBytesSync(),
     );
 
@@ -101,9 +101,11 @@ void main() {
   });
 }
 
-/// El logo viene sobre negro puro: vuelve transparente el negro conectado al
-/// borde. El contorno azul oscuro del dibujo no es (0,0,0) y se conserva.
-Future<Uint8List> quitarFondoNegro(Uint8List bytes) async {
+/// El logo viene en JPG sobre blanco con cuadritos grises (el "transparente"
+/// pintado): vuelve transparente lo claro y sin color conectado al borde. Los
+/// azules del dibujo tienen color y se conservan, también sus brillos claros
+/// del interior, que no tocan el borde.
+Future<Uint8List> quitarFondoClaro(Uint8List bytes) async {
   final codec = await ui.instantiateImageCodec(bytes);
   final image = (await codec.getNextFrame()).image;
   final w = image.width;
@@ -111,9 +113,13 @@ Future<Uint8List> quitarFondoNegro(Uint8List bytes) async {
   final rgba = (await image.toByteData(
     format: ui.ImageByteFormat.rawRgba,
   ))!.buffer.asUint8List();
-  bool esFondo(int p) =>
-      rgba[p * 4 + 3] != 0 &&
-      max(rgba[p * 4], max(rgba[p * 4 + 1], rgba[p * 4 + 2])) <= 10;
+  bool esFondo(int p) {
+    if (rgba[p * 4 + 3] == 0) return false;
+    final r = rgba[p * 4], g = rgba[p * 4 + 1], b = rgba[p * 4 + 2];
+    return min(r, min(g, b)) >= 200 &&
+        max(r, max(g, b)) - min(r, min(g, b)) <= 16;
+  }
+
   final pendientes = <int>[
     for (var x = 0; x < w; x++) ...[x, (h - 1) * w + x],
     for (var y = 0; y < h; y++) ...[y * w, y * w + w - 1],

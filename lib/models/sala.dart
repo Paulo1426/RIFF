@@ -1,3 +1,4 @@
+import 'genero.dart';
 import 'nivel.dart';
 
 /// Contrarreloj: 10 minutos, gana quien sume más puntos. Eliminación: sin
@@ -106,6 +107,7 @@ class Sala {
     required this.jugadores,
     required this.ronda,
     required this.acertaronRonda,
+    this.genero = Genero.vallenato,
     this.finEn,
     this.ganadorUid,
     this.premios = const {},
@@ -116,6 +118,8 @@ class Sala {
   final bool publica;
   final TipoSala tipo;
   final ModoSala modo;
+  // Las canciones de la sala salen de este género.
+  final Genero genero;
   final int maxJugadores;
   final EstadoSala estado;
   // En orden de llegada.
@@ -163,6 +167,7 @@ class Sala {
       publica: map['publica'] as bool? ?? false,
       tipo: TipoSala.values.byName(map['tipo'] as String? ?? 'instrumentos'),
       modo: ModoSala.values.byName(map['modo'] as String),
+      genero: Genero.deId(map['genero']),
       maxJugadores: (map['maxJugadores'] as num?)?.toInt() ?? 5,
       estado: EstadoSala.values.byName(map['estado'] as String),
       jugadores: [
@@ -195,12 +200,14 @@ class HistorialSala {
     required this.puesto,
     required this.jugadores,
     required this.terminadaEn,
+    this.genero = Genero.vallenato,
   });
 
   final String codigo;
   final String nombre;
   final TipoSala tipo;
   final ModoSala? modo;
+  final Genero genero;
   // null si nadie ganó (todos abandonaron o nadie acertó).
   final String? ganadorNombre;
   final bool ganaste;
@@ -213,6 +220,7 @@ class HistorialSala {
     nombre: map['nombre'] as String? ?? 'Sala',
     tipo: TipoSala.values.asNameMap()[map['tipo']] ?? TipoSala.instrumentos,
     modo: ModoSala.values.asNameMap()[map['modo']],
+    genero: Genero.deId(map['genero']),
     ganadorNombre: map['ganadorNombre'] as String?,
     ganaste: map['ganaste'] as bool? ?? false,
     puesto: (map['puesto'] as num?)?.toInt() ?? 0,

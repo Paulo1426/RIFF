@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:riff/models/genero.dart';
 import 'package:riff/providers/providers.dart';
 import 'package:riff/screens/intros_screen.dart';
 import 'package:riff/services/firebase_game_repository.dart';
@@ -19,7 +20,9 @@ class _RepositorioFalso extends FirebaseGameRepository {
   String? get uid => null;
 
   @override
-  Future<EstadoIntros> cargarIntros() async => EstadoIntros.fromJson({
+  Future<EstadoIntros> cargarIntros({
+    Genero? genero,
+  }) async => EstadoIntros.fromJson({
     'monedas': 7,
     'monedas_ganadas': 9,
     'restantes': 43,

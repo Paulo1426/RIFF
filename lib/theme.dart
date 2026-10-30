@@ -47,22 +47,23 @@ Color colorDificultad(Dificultad dificultad) => switch (dificultad) {
   Dificultad.avanzado => AppColors.avanzado,
 };
 
-/// Color de cada género en el selector y en su menú. Vallenato conserva el
-/// verde de la marca.
+/// Color de cada género en el selector y en su menú.
 Color colorGenero(Genero genero) => switch (genero) {
-  Genero.vallenato => AppColors.verde,
+  Genero.vallenato => const Color(0xFFFF6B6B),
   Genero.reggaeton => const Color(0xFF2563EB),
-  Genero.rockPop => const Color(0xFFE53935),
+  Genero.rockPop => const Color(0xFF37474F),
   Genero.salsa => const Color(0xFFFFB300),
   Genero.popular => const Color(0xFF8E24AA),
 };
 
-/// Colores del menú de cada género: tarjetas de Salas e Intro y las dos
-/// manchas del fondo que no siguen al acento, y la gota de la barra de abajo
-/// (en el menú y en las demás pestañas). Reggaetón usa azules de
-/// confianza (rey, cian, esmeralda y azul marino); el resto, los de la marca.
+/// Colores del menú de cada género: tarjetas de Progreso e Intro, las dos
+/// manchas del fondo que no siguen al acento y la gota de la barra de abajo
+/// (en el menú y en las demás pestañas). Vallenato usa colores vivos y
+/// juguetones (coral, turquesa, azul cielo, amarillo sol y morado);
+/// reggaetón, azules de confianza (rey, cian, esmeralda y azul marino); el
+/// resto, los de la marca.
 ({
-  Color salas,
+  Color progreso,
   Color intro,
   Color mancha1,
   Color mancha2,
@@ -70,8 +71,16 @@ Color colorGenero(Genero genero) => switch (genero) {
   Color barraSecciones,
 })
 paletaGenero(Genero genero) => switch (genero) {
+  Genero.vallenato => (
+    progreso: const Color(0xFF4ECDC4),
+    intro: const Color(0xFF4D96FF),
+    mancha1: const Color(0xFFFFD93D),
+    mancha2: const Color(0xFF845EF7),
+    barraMenu: const Color(0xFFFF6B6B),
+    barraSecciones: const Color(0xFF845EF7),
+  ),
   Genero.reggaeton => (
-    salas: const Color(0xFF06B6D4),
+    progreso: const Color(0xFF06B6D4),
     intro: const Color(0xFF10B981),
     mancha1: const Color(0xFF67E8F9),
     mancha2: const Color(0xFF1E3A8A),
@@ -79,7 +88,7 @@ paletaGenero(Genero genero) => switch (genero) {
     barraSecciones: const Color(0xFF2563EB),
   ),
   _ => (
-    salas: AppColors.medio,
+    progreso: AppColors.medio,
     intro: AppColors.signalOrange,
     mancha1: const Color(0xFFB8F2D0),
     mancha2: AppColors.verde,

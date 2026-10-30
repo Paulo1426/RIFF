@@ -8,6 +8,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../animations/liquid_ripple_effect.dart';
+import '../models/genero.dart';
 import '../models/sala.dart';
 import '../providers/providers.dart';
 import '../services/firebase_game_repository.dart';
@@ -39,6 +40,7 @@ Color _colorDe(Sala sala) =>
     sala.tipo == TipoSala.intros ? AppColors.signalOrange : AppColors.verde;
 
 String _descripcion(Sala sala) =>
+    '${sala.genero.nombre} · '
     '${sala.tipo == TipoSala.intros ? '🎧 Intros' : '🥁 Adivina la canción'}'
     ' · ${_nombreModo(sala.modo)}';
 
@@ -149,14 +151,19 @@ class _SalasPanelState extends ConsumerState<SalasPanel> {
   }
 
   Future<void> _crear(TipoSala tipo) async {
-    final opciones = await showDialog<(ModoSala, bool)>(
+    final opciones = await showDialog<(ModoSala, bool, Genero)>(
       context: context,
       builder: (_) => _DialogoCrearSala(tipo: tipo, fichas: _fichas),
     );
     if (opciones == null) return;
-    final (modo, publica) = opciones;
+    final (modo, publica, genero) = opciones;
     await _ejecutar(
-      () => _repo.crearSala(tipo: tipo, modo: modo, publica: publica),
+      () => _repo.crearSala(
+        tipo: tipo,
+        modo: modo,
+        publica: publica,
+        genero: genero,
+      ),
     );
   }
 
@@ -258,7 +265,14 @@ class _SalasPanelState extends ConsumerState<SalasPanel> {
                   if (publicas == null)
                     const Center(child: CircularProgressIndicator())
                   else if (publicas.isEmpty) ...[
-                    SizedBox(height: 100, child: BandaMusical(color: color)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Icon(
+                        Icons.meeting_room_rounded,
+                        size: 56,
+                        color: color.withValues(alpha: 0.7),
+                      ),
+                    ),
                     Text(
                       'No hay salas abiertas ahora. ¡Crea una!',
                       textAlign: TextAlign.center,
@@ -609,6 +623,7 @@ class _FilaHistorial extends StatelessWidget {
                   ),
                 ),
                 Text(
+                  '${sala.genero.nombre} · '
                   '${sala.tipo == TipoSala.intros ? '🎧 Adivina la intro' : '🥁 Adivina la canción'}'
                   '${sala.modo == null ? '' : ' · ${_nombreModo(sala.modo!)}'}',
                   style: suave,
@@ -862,6 +877,8 @@ class _DialogoCrearSala extends StatefulWidget {
 class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
   var _modo = ModoSala.contrarreloj;
   var _publica = true;
+  // null = aleatorio entre los géneros disponibles.
+  Genero? _genero = generoActivo.disponible ? generoActivo : null;
 
   @override
   Widget build(BuildContext context) {
@@ -901,6 +918,27 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
                 style: text.bodySmall?.copyWith(
                   color: context.paleta.tintaSuave,
                 ),
+              ),
+              titulo('Elige el género'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: [
+                  for (final genero in Genero.values.where((g) => g.disponible))
+                    ChoiceChip(
+                      label: Text(genero.nombre),
+                      selected: _genero == genero,
+                      selectedColor: colorGenero(genero).withValues(alpha: 0.3),
+                      onSelected: (_) => setState(() => _genero = genero),
+                    ),
+                  ChoiceChip(
+                    label: const Text('🎲 Aleatorio'),
+                    selected: _genero == null,
+                    selectedColor: colorAleatorio.withValues(alpha: 0.3),
+                    onSelected: (_) => setState(() => _genero = null),
+                  ),
+                ],
               ),
               titulo('Elige el reto'),
               Row(
@@ -973,7 +1011,9 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
               LiquidGlassButton(
                 onPressed: sinFichas
                     ? null
-                    : () => Navigator.of(context).pop((_modo, _publica)),
+                    : () => Navigator.of(
+                        context,
+                      ).pop((_modo, _publica, _genero ?? _generoAlAzar())),
                 icon: Icons.add_rounded,
                 label: 'Crear sala',
                 precio: intros ? '🎟️ $precioCrearSalaIntros' : null,
@@ -988,6 +1028,12 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
       ),
     );
   }
+}
+
+/// Un género disponible al azar para las salas "Aleatorio".
+Genero _generoAlAzar() {
+  final disponibles = Genero.values.where((g) => g.disponible).toList();
+  return disponibles[Random().nextInt(disponibles.length)];
 }
 
 /// Tarjeta seleccionable del diálogo de nueva sala; la elegida se tiñe y

@@ -19,6 +19,7 @@ class LiquidGlassBottomNav extends StatefulWidget {
     this.claves,
     this.colorMenu = AppColors.verde,
     this.colorSecciones = AppColors.signalOrange,
+    this.colores,
   });
 
   final List<({IconData icon, String label})> items;
@@ -30,6 +31,9 @@ class LiquidGlassBottomNav extends StatefulWidget {
   // Color de la gota: en el menú y en las demás pestañas (p. ej. del género).
   final Color colorMenu;
   final Color colorSecciones;
+  // Un color por pestaña (gota e ícono); si está, manda sobre los dos de
+  // arriba.
+  final List<Color>? colores;
 
   @override
   State<LiquidGlassBottomNav> createState() => _LiquidGlassBottomNavState();
@@ -39,7 +43,8 @@ class _LiquidGlassBottomNavState extends State<LiquidGlassBottomNav> {
   // Rebote al llegar a la pestaña: se pasa un poco y vuelve.
   static const _salto = Cubic(0.68, -0.55, 0.27, 1.55);
   Color _colorDe(int index) =>
-      index == 0 ? widget.colorMenu : widget.colorSecciones;
+      widget.colores?[index] ??
+      (index == 0 ? widget.colorMenu : widget.colorSecciones);
 
   // Deformación en reposo: lenta, con el reloj compartido de 30 cuadros.
   final _reposo = CicloLento(periodo: const Duration(seconds: 4));
@@ -158,8 +163,13 @@ class _LiquidGlassBottomNavState extends State<LiquidGlassBottomNav> {
   );
 
   Widget _pestana(BuildContext context, TextTheme text, int i, bool activa) {
-    // Sobre la gota de color, ícono y texto en blanco.
-    final color = activa ? AppColors.paperWhite : context.paleta.tintaSuave;
+    // Sobre la gota de color, ícono y texto en blanco; fuera, el tono de la
+    // pestaña si tiene color propio.
+    final color = activa
+        ? AppColors.paperWhite
+        : widget.colores == null
+        ? context.paleta.tintaSuave
+        : context.paleta.tonoTexto(widget.colores![i]);
     return Semantics(
       selected: activa,
       button: true,

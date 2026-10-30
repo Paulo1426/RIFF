@@ -102,6 +102,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         final genero = _genero;
         if (genero == null) {
           return _SelectorGenero(
+            user: user,
             onElegir: (genero) => setState(() {
               generoActivo = genero;
               _genero = genero;
@@ -119,17 +120,171 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-/// Primera pantalla tras el login: los cinco géneros y uno aleatorio. Solo
-/// los géneros disponibles abren su menú; el resto sale bloqueado.
-class _SelectorGenero extends StatelessWidget {
-  const _SelectorGenero({required this.onElegir});
+/// Primera pantalla tras el login: un carrusel giratorio, como los menús de
+/// cada género, con los cinco géneros, "Aleatorio" y las salas (las salas
+/// tienen su propio género, por eso están aquí y no en cada menú). Solo los
+/// géneros disponibles abren su menú; el resto sale bloqueado.
+class _SelectorGenero extends ConsumerStatefulWidget {
+  const _SelectorGenero({required this.user, required this.onElegir});
 
+  final User user;
   final ValueChanged<Genero> onElegir;
+
+  @override
+  ConsumerState<_SelectorGenero> createState() => _SelectorGeneroState();
+}
+
+class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
+  // Tarjeta al frente: tiñe el fondo.
+  int _frente = 0;
+  final _carrusel = GlobalKey<CarruselGiratorioState>();
+  // Nivel e intros de cada género disponible (sin dato, sin línea).
+  final _avance = <Genero, String>{};
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _avisoAuriculares(context);
+    });
+    for (final genero in Genero.values.where((g) => g.disponible)) {
+      unawaited(_cargarAvance(genero));
+    }
+  }
+
+  Future<void> _cargarAvance(Genero genero) async {
+    final repo = ref.read(firebaseGameRepositoryProvider);
+    try {
+      final estado = await repo.cargarEstado(genero: genero);
+      // Sin niveles cargados (género en preparación) no hay nivel que mostrar.
+      final hayNiveles = estado.dificultades.any((d) => d.total > 0);
+      // Las intros se desbloquean con el primer nivel: si fallan, sin dato.
+      final intros = await repo
+          .cargarIntros(genero: genero)
+          .then<EstadoIntros?>((e) => e, onError: (_) => null);
+      final adivinadas = intros?.intros
+          .where((i) => i.estado == EstadoIntro.completada)
+          .length;
+      final partes = [
+        if (hayNiveles) _textoNivel(estado),
+        if (adivinadas != null) '🎧 $adivinadas intros descubiertas',
+      ];
+      if (mounted && partes.isNotEmpty) {
+        setState(() => _avance[genero] = partes.join('\n'));
+      }
+    } catch (error) {
+      // Sin conexión o sin progreso aún: la tarjeta sale sin la línea.
+      debugPrint('Sin avance de ${genero.nombre}: $error');
+    }
+  }
+
+  // Después de los géneros va "Aleatorio" y al final, las salas.
+  static final _iAleatorio = Genero.values.length;
+
+  int get _total => Genero.values.length + 2;
+
+  ({IconData icon, String label}) _pestanaDe(int index) =>
+      index < Genero.values.length
+      ? (
+          icon: switch (Genero.values[index]) {
+            Genero.vallenato => Icons.music_note_rounded,
+            Genero.reggaeton => Icons.headphones_rounded,
+            Genero.rockPop => Icons.electric_bolt_rounded,
+            Genero.salsa => Icons.nightlife_rounded,
+            Genero.popular => Icons.mic_external_on_rounded,
+          },
+          label: Genero.values[index].nombre,
+        )
+      : index == _iAleatorio
+      ? (icon: Icons.casino_rounded, label: 'Aleatorio')
+      : (icon: Icons.emoji_events_rounded, label: 'Salas');
+
+  Color _color(int index) => index < Genero.values.length
+      ? colorGenero(Genero.values[index])
+      : index == _iAleatorio
+      ? colorAleatorio
+      : AppColors.medio;
+
+  void _abrir(String titulo, Widget cuerpo, {Color? acento}) =>
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => LiquidBackground(
+            acento: acento,
+            child: Scaffold(
+              backgroundColor: Colors.transparent,
+              appBar: LiquidGlassAppBar(title: Text(titulo)),
+              body: cuerpo,
+            ),
+          ),
+        ),
+      );
+
+  void _abrirAjustes() => _abrir(
+    'Ajustes',
+    Consumer(
+      builder: (context, ref, _) => _PestanaConfiguracion(
+        onCerrarSesion: () => _cerrarSesionDe(context, ref, widget.user),
+        onReiniciar: widget.user.isAnonymous
+            ? null
+            : () => _reiniciarCuenta(context, ref),
+      ),
+    ),
+  );
+
+  Widget _cuadro(int index, bool alFrente, {bool animar = true}) {
+    // Solo la del frente se mueve; laterales y reflejo, quietas.
+    final moverse = animar && alFrente;
+    if (index < Genero.values.length) {
+      final genero = Genero.values[index];
+      return _CuadroModo(
+        emoji: genero.instrumentos,
+        animacion: _Animacion.tocar,
+        titulo: genero.nombre,
+        detalle: genero.disponible ? 'Toca para jugar' : 'Próximamente',
+        info: _avance[genero],
+        color: colorGenero(genero),
+        alFrente: alFrente,
+        animar: moverse,
+        bloqueado: !genero.disponible,
+        onTap: genero.disponible ? () => widget.onElegir(genero) : null,
+      );
+    }
+    if (index == _iAleatorio) {
+      return _CuadroModo(
+        emoji: '🎲',
+        animacion: _Animacion.saltar,
+        titulo: 'Aleatorio',
+        detalle: 'Próximamente',
+        color: colorAleatorio,
+        alFrente: alFrente,
+        animar: moverse,
+        bloqueado: true,
+        onTap: null,
+      );
+    }
+    final invitado = widget.user.isAnonymous;
+    return _CuadroModo(
+      emoji: '🏆',
+      animacion: _Animacion.saltar,
+      titulo: 'Salas',
+      detalle: invitado
+          ? 'Crea una cuenta para jugar en salas.'
+          : 'Reta a hasta 5 amigos en el género que elijas. Con historial.',
+      color: AppColors.medio,
+      alFrente: alFrente,
+      animar: moverse,
+      bloqueado: invitado,
+      onTap: invitado
+          ? null
+          : () => _abrir('Salas', const SalasPanel(), acento: AppColors.medio),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return LiquidBackground(
+      acento: _color(_frente),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: LiquidGlassAppBar(
@@ -146,60 +301,199 @@ class _SelectorGenero extends StatelessWidget {
               const Text('RIFF'),
             ],
           ),
+          actions: [
+            IconButton(
+              tooltip: 'Ajustes',
+              icon: const Icon(Icons.settings_rounded),
+              onPressed: _abrirAjustes,
+            ),
+            const SizedBox(width: 8),
+          ],
         ),
-        body: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Text(
-                  '¿Qué quieres adivinar hoy?',
-                  textAlign: TextAlign.center,
-                  style: text.headlineSmall,
+        // Anterior, actual (centro) y siguiente del carrusel; tocar un lado
+        // lo gira hacia allá.
+        bottomNavigationBar: LiquidGlassBottomNav(
+          items: [
+            for (final paso in [-1, 0, 1])
+              _pestanaDe((_frente + paso) % _total),
+          ],
+          colores: [
+            for (final paso in [-1, 0, 1]) _color((_frente + paso) % _total),
+          ],
+          currentIndex: 1,
+          onTap: (i) {
+            if (i != 1) _carrusel.currentState?.girar(i - 1);
+          },
+        ),
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: Text(
+                '¿Qué quieres adivinar hoy?',
+                textAlign: TextAlign.center,
+                style: text.headlineSmall?.copyWith(
+                  color: context.paleta.tonoTexto(_color(_frente)),
                 ),
               ),
-              Expanded(
-                child: GridView.count(
-                  padding: const EdgeInsets.all(16),
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 14,
-                  crossAxisSpacing: 14,
-                  childAspectRatio: 0.85,
-                  children: [
-                    for (final genero in Genero.values)
-                      _CuadroModo(
-                        emoji: genero.instrumentos,
-                        animacion: _Animacion.tocar,
-                        titulo: genero.nombre,
-                        detalle: genero.disponible ? 'Jugar' : 'Próximamente',
-                        color: colorGenero(genero),
-                        bloqueado: !genero.disponible,
-                        onTap: genero.disponible
-                            ? () => onElegir(genero)
-                            : null,
-                      ),
-                    const _CuadroModo(
-                      emoji: '🎲',
-                      animacion: _Animacion.saltar,
-                      titulo: 'Aleatorio',
-                      detalle: 'Próximamente',
-                      color: colorAleatorio,
-                      bloqueado: true,
-                      onTap: null,
-                    ),
-                  ],
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: CarruselGiratorio(
+                  key: _carrusel,
+                  itemCount: _total,
+                  autoGiro: const Duration(seconds: 5),
+                  compacto: true,
+                  // Un poco más grandes que en los menús: llevan el avance.
+                  anchoRelativo: 0.84,
+                  proporcion: 1.3,
+                  colorDe: _color,
+                  onCambio: (index) => setState(() => _frente = index),
+                  itemBuilder: (context, index, alFrente) => ConReflejo(
+                    color: _color(index),
+                    tarjeta: _cuadro(index, alFrente),
+                    // La copia del reflejo va sin desenfoque.
+                    reflejo: _cuadro(index, false, animar: false),
+                  ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
+/// Empezar desde cero: confirma, pide la contraseña (o Google) de nuevo y
+/// borra el progreso de todos los géneros en el servidor y en el teléfono.
+/// [alEmpezar] corre ya confirmada la cuenta. Devuelve si se reinició.
+Future<bool> _reiniciarCuenta(
+  BuildContext context,
+  WidgetRef ref, {
+  VoidCallback? alEmpezar,
+}) async {
+  final confirmar = await showDialog<bool>(
+    context: context,
+    builder: (context) => LiquidGlassDialog(
+      icon: const Icon(Icons.warning_amber_rounded, size: 56),
+      title: const Text('¿Empezar desde cero?', textAlign: TextAlign.center),
+      content: const Text(
+        'Se borrarán tus niveles, intros, monedas, fichas, estadísticas de '
+        'salas e insignias. No se puede deshacer.',
+        textAlign: TextAlign.center,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Continuar'),
+        ),
+      ],
+    ),
+  );
+  final user = FirebaseAuth.instance.currentUser;
+  if (confirmar != true || user == null || !context.mounted) return false;
+  final mensajes = ScaffoldMessenger.of(context);
+  try {
+    final conCorreo = user.providerData.any(
+      (proveedor) => proveedor.providerId == 'password',
+    );
+    if (conCorreo) {
+      final clave = await showDialog<String>(
+        context: context,
+        builder: (_) => const DialogoContrasena(accion: 'Reiniciar'),
+      );
+      if (clave == null) return false;
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: user.email!, password: clave),
+      );
+    } else {
+      await prepararGoogle();
+      final cuenta = await GoogleSignIn.instance.authenticate();
+      final idToken = cuenta.authentication.idToken;
+      if (idToken == null) throw StateError('Google no confirmó la cuenta.');
+      await user.reauthenticateWithCredential(
+        GoogleAuthProvider.credential(idToken: idToken),
+      );
+    }
+    alEmpezar?.call();
+    await ref.read(firebaseGameRepositoryProvider).reiniciarProgreso();
+    await OfflineGameStore().borrar(user.uid);
+    await ref.read(offlineIntroStoreProvider).borrar(user.uid);
+    await InsigniasVistas(user.uid).borrar();
+    mensajes.showSnackBar(
+      const SnackBar(content: Text('Tu progreso empezó desde cero.')),
+    );
+    return true;
+  } catch (error) {
+    final mensaje = switch (error) {
+      FirebaseAuthException(code: 'wrong-password' || 'invalid-credential') =>
+        'La contraseña no es correcta.',
+      GameRepositoryException(:final message) => message,
+      _ => 'No se pudo reiniciar el progreso: $error',
+    };
+    mensajes.showSnackBar(SnackBar(content: Text(mensaje)));
+    return false;
+  }
+}
+
+/// Cierra la sesión; la de invitado se borra entera. Las pantallas abiertas
+/// encima (ajustes, salas) se cierran con ella.
+Future<void> _cerrarSesionDe(
+  BuildContext context,
+  WidgetRef ref,
+  User user,
+) async {
+  final mensajes = ScaffoldMessenger.of(context);
+  Navigator.of(context).popUntil((route) => route.isFirst);
+  try {
+    if (user.isAnonymous) {
+      await ref.read(firebaseGameRepositoryProvider).finalizarSesionInvitado();
+      await user.delete();
+    }
+    await FirebaseAuth.instance.signOut();
+  } catch (error) {
+    mensajes.showSnackBar(
+      SnackBar(content: Text('No se pudo cerrar sesión: $error')),
+    );
+  }
+}
+
 // Una vez por apertura de la app; cerrar sesión y volver a entrar no lo repite.
 var _avisoAuricularesMostrado = false;
+
+/// Tras el login, antes de elegir género: se recomienda usar auriculares.
+Future<void> _avisoAuriculares(BuildContext context) async {
+  if (_avisoAuricularesMostrado) return;
+  _avisoAuricularesMostrado = true;
+  await showDialog<void>(
+    context: context,
+    builder: (context) => LiquidGlassDialog(
+      icon: const Icon(Icons.headphones_rounded, size: 64),
+      title: const Text('Usa auriculares', textAlign: TextAlign.center),
+      content: const Text(
+        'Se recomienda usar cascos (audífonos o auriculares) para '
+        'distinguir bien cada instrumento.',
+        textAlign: TextAlign.center,
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Entendido'),
+        ),
+      ],
+    ),
+  );
+  unawaited(Recordatorios.programar());
+}
 
 // GoogleSignIn se inicializa una sola vez (login y confirmar la cuenta).
 Future<void>? _googleListo;
@@ -238,12 +532,12 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   // tarjeta con todos los niveles de la seleccionada.
   bool _nivelesAbiertos = false;
   // Barra inferior: 0 menú, 1 Adivina la canción, 2 Adivina la intro,
-  // 3 salas, 4 progreso, 5 configuración.
+  // 3 progreso, 4 configuración. Las salas están en el selector de géneros.
   int _pestana = 0;
   // Sentido del último cambio de pestaña (0 al abrir: sin onda).
   int _direccion = 0;
-  static const _pCancion = 1, _pIntro = 2, _pSalas = 3, _pProgreso = 4;
-  static const _pAjustes = 5;
+  static const _pCancion = 1, _pIntro = 2, _pProgreso = 3;
+  static const _pAjustes = 4;
   Future<EstadoIntros?>? _introsFuturo;
   // Para las tarjetas del menú: cuántas intros tiene y salas ganadas.
   EstadoIntros? _resumenIntros;
@@ -260,10 +554,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   Future<void> _paquete = Future.value();
   // Elementos que resalta el recorrido guiado.
   final _claveMenu = GlobalKey();
-  final _clavesPestanas = List.generate(6, (_) => GlobalKey());
+  final _clavesPestanas = List.generate(5, (_) => GlobalKey());
   bool _recorridoRevisado = false;
-  // Se completa al cerrar el aviso de auriculares; el recorrido espera.
-  final _avisoCerrado = Completer<void>();
 
   Future<void> _verRecorrido() => mostrarRecorrido(context, _pasosMenu());
 
@@ -274,8 +566,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       texto:
           'Las tarjetas giran solas; también puedes deslizarlas. 🥁 Adivina '
           'la canción: compra instrumentos con \$1.000.000 y adivina. '
-          '🏆 Desafía a tus amigos. 🎧 Adivina la intro: se desbloquea al '
-          'completar tu primer nivel.',
+          '🎧 Adivina la intro: se desbloquea al completar tu primer nivel. '
+          'Las salas con amigos están en el menú de géneros.',
     ),
     PasoRecorrido(
       clave: _clavesPestanas[_pCancion],
@@ -286,13 +578,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       clave: _clavesPestanas[_pIntro],
       titulo: '🎧 Intro',
       texto: 'Tu colección de Adivina la intro y el botón para sacar cartas.',
-    ),
-    PasoRecorrido(
-      clave: _clavesPestanas[_pSalas],
-      titulo: '👥 Salas',
-      texto:
-          'Juega con hasta 5 amigos: salas de Adivina la canción y de '
-          'Adivina la intro, por tiempo o por eliminación.',
     ),
     PasoRecorrido(
       clave: _clavesPestanas[_pProgreso],
@@ -314,8 +599,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   Future<void> _recorridoSiEsNuevo() async {
     if (_recorridoRevisado) return;
     _recorridoRevisado = true;
-    await _avisoCerrado.future;
-    if (!mounted) return;
     await const RecorridoInicial('menu').mostrarSiEsNuevo(context, _pasosMenu);
   }
 
@@ -341,33 +624,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   // "Adivina la intro" se abre al completar el primer nivel.
   bool get _introsDisponibles =>
       _estado?.dificultades.any((item) => item.completados > 0) ?? false;
-
-  /// Una vez por apertura de la app, antes del menú: usar auriculares.
-  Future<void> _avisoAuriculares() async {
-    if (!_avisoAuricularesMostrado && mounted) {
-      _avisoAuricularesMostrado = true;
-      await showDialog<void>(
-        context: context,
-        builder: (context) => LiquidGlassDialog(
-          icon: const Icon(Icons.headphones_rounded, size: 64),
-          title: const Text('Usa auriculares', textAlign: TextAlign.center),
-          content: const Text(
-            'Se recomienda usar cascos (audífonos o auriculares) para '
-            'distinguir bien cada instrumento.',
-            textAlign: TextAlign.center,
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Entendido'),
-            ),
-          ],
-        ),
-      );
-    }
-    if (!_avisoCerrado.isCompleted) _avisoCerrado.complete();
-    unawaited(Recordatorios.programar());
-  }
 
   /// Avisa de las insignias conseguidas desde la última vez. Solo con todos
   /// los datos cargados, para no tomar como nueva una que ya se tenía.
@@ -408,7 +664,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _avisoAuriculares());
     if (!widget.user.isAnonymous) {
       _suscripcionSaldo = ref
           .read(firebaseGameRepositoryProvider)
@@ -505,34 +760,20 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           }),
         );
       }
-      // Deja listas las intros obtenidas por si luego se pierde la conexión.
-      if (_introsDisponibles) {
-        unawaited(
-          ref
-              .read(offlineIntroStoreProvider)
-              .actualizar(widget.user.uid)
-              .then(
-                (_) {},
-                onError: (Object error) =>
-                    debugPrint('No se pudieron descargar las intros: $error'),
-              ),
-        );
-      }
-      // En segundo plano: los avisos tras un nivel no esperan la descarga.
-      final sinCopia = snapshot == null;
-      _paquete = _paquete.then((_) => _actualizarPaquete(sinCopia));
     } catch (error) {
       if (!mounted) return;
       await _loadOfflineSnapshot(error);
     }
   }
 
-  Future<void> _actualizarPaquete(bool sinCopia) async {
+  /// Baja en segundo plano [levelId] recién ganado para repetirlo sin
+  /// conexión. Los instrumentos que ya sonaron salen de la caché.
+  Future<void> _actualizarPaquete(String levelId) async {
     try {
       _seguirEnGenero();
       final bundle = await ref
           .read(firebaseGameRepositoryProvider)
-          .descargarPaqueteOffline();
+          .descargarPaqueteOffline(levelId);
       final refreshed = await _cacheOfflineBundle(
         bundle,
         widget.user.uid,
@@ -541,16 +782,9 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       if (!mounted) return;
       setState(() => _offlineSnapshot = refreshed);
     } catch (error) {
-      debugPrint('No se pudo actualizar el paquete offline: $error');
-      if (sinCopia && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'No se pudieron descargar todos los niveles para usarlos sin conexión.',
-            ),
-          ),
-        );
-      }
+      debugPrint(
+        'No se pudo descargar $levelId para jugar sin conexión: $error',
+      );
     }
   }
 
@@ -644,12 +878,21 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     // De a 3 niveles: no satura la red, el disco ni la batería mientras el
     // jugador ya está usando la app (corre en segundo plano).
     const lote = 3;
-    final levels = <OfflineLevelData>[];
+    final nuevos = <OfflineLevelData>[];
     for (var i = 0; i < rawLevels.length; i += lote) {
-      levels.addAll(
+      nuevos.addAll(
         await Future.wait(rawLevels.skip(i).take(lote).map(descargarNivel)),
       );
     }
+    // Se suman a los ya guardados: cada nivel llega al ganarlo.
+    final ids = {for (final level in nuevos) level.nivel.id};
+    final levels = [
+      if (_offlineSnapshot?.uid == uid)
+        ..._offlineSnapshot!.levels.where(
+          (level) => !ids.contains(level.nivel.id),
+        ),
+      ...nuevos,
+    ];
     final snapshot = OfflineGameSnapshot(
       uid: uid,
       guest: guest,
@@ -708,9 +951,13 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           break;
         }
       }
+      // Sin conexión solo se repiten niveles ya aprobados y descargados.
+      final repetible = offlineLevel != null && offlineLevel.completado;
       if (_offlineMode) {
-        if (offlineLevel == null) {
-          throw StateError('Este nivel no está descargado para jugar offline');
+        if (!repetible) {
+          throw StateError(
+            'Sin conexión solo puedes repetir niveles que ya aprobaste.',
+          );
         }
         return await _pushGame(
           nivel: offlineLevel.nivel,
@@ -734,7 +981,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           offlineLevel: offlineLevel,
         );
       } catch (error) {
-        if (offlineLevel == null) rethrow;
+        if (!repetible) rethrow;
         debugPrint(
           'No se pudo iniciar online; usando nivel descargado: $error',
         );
@@ -804,6 +1051,10 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       unawaited(navigator.push(route));
     }
     final resultado = await Future.any([route.popped, siguiente.future]);
+    // Ganado con conexión: se baja en segundo plano para repetirlo offline.
+    if (resultado != null && !gameId.startsWith('offline-')) {
+      _paquete = _paquete.then((_) => _actualizarPaquete(nivel.id));
+    }
     if (resultado != null) {
       final antes = _desbloqueadas();
       final terminadoAntes = _juegoTerminado();
@@ -978,222 +1229,164 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     }
   }
 
-  /// Empezar desde cero: confirma, pide la contraseña (o Google) de nuevo y
-  /// borra el progreso en el servidor y la copia offline del teléfono.
   Future<void> _reiniciarProgreso() async {
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (context) => LiquidGlassDialog(
-        icon: const Icon(Icons.warning_amber_rounded, size: 56),
-        title: const Text('¿Empezar desde cero?', textAlign: TextAlign.center),
-        content: const Text(
-          'Se borrarán tus niveles, intros, monedas, fichas, estadísticas de '
-          'salas e insignias. No se puede deshacer.',
-          textAlign: TextAlign.center,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Continuar'),
-          ),
-        ],
-      ),
+    final listo = await _reiniciarCuenta(
+      context,
+      ref,
+      alEmpezar: () {
+        if (mounted) {
+          setState(() {
+            _pestana = 0;
+            _loading = true;
+          });
+        }
+      },
     );
-    final user = FirebaseAuth.instance.currentUser;
-    if (confirmar != true || user == null || !mounted) return;
-    try {
-      final conCorreo = user.providerData.any(
-        (proveedor) => proveedor.providerId == 'password',
-      );
-      if (conCorreo) {
-        final clave = await _pedirContrasena();
-        if (clave == null) return;
-        await user.reauthenticateWithCredential(
-          EmailAuthProvider.credential(email: user.email!, password: clave),
-        );
-      } else {
-        await prepararGoogle();
-        final cuenta = await GoogleSignIn.instance.authenticate();
-        final idToken = cuenta.authentication.idToken;
-        if (idToken == null) throw StateError('Google no confirmó la cuenta.');
-        await user.reauthenticateWithCredential(
-          GoogleAuthProvider.credential(idToken: idToken),
-        );
-      }
-      if (!mounted) return;
-      setState(() {
-        _pestana = 0;
-        _loading = true;
-      });
-      await ref.read(firebaseGameRepositoryProvider).reiniciarProgreso();
-      await _offlineStore.borrar(user.uid);
-      await ref.read(offlineIntroStoreProvider).borrar(user.uid);
-      await InsigniasVistas(user.uid).borrar();
-      if (!mounted) return;
+    if (!mounted) return;
+    if (listo) {
       setState(() {
         _offlineSnapshot = null;
         _resumenIntros = null;
         _monedas = null;
         _seleccionada = null;
       });
-      await _cargar();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tu progreso empezó desde cero.')),
-        );
-      }
-    } catch (error) {
-      if (!mounted) return;
-      final mensaje = switch (error) {
-        FirebaseAuthException(code: 'wrong-password' || 'invalid-credential') =>
-          'La contraseña no es correcta.',
-        GameRepositoryException(:final message) => message,
-        _ => 'No se pudo reiniciar el progreso: $error',
-      };
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(mensaje)));
-      // Si el reinicio falló a medias, se vuelve a cargar lo que haya.
-      if (_loading) await _cargar();
     }
+    // También si falló a medias: se vuelve a cargar lo que haya.
+    if (_loading) await _cargar();
   }
 
-  Future<String?> _pedirContrasena() => showDialog<String>(
-    context: context,
-    builder: (_) => const DialogoContrasena(accion: 'Reiniciar'),
-  );
-
-  Future<void> _cerrarSesion() async {
-    try {
-      if (widget.user.isAnonymous) {
-        await ref
-            .read(firebaseGameRepositoryProvider)
-            .finalizarSesionInvitado();
-        await widget.user.delete();
-      }
-      await FirebaseAuth.instance.signOut();
-    } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No se pudo cerrar sesión: $error')),
-        );
-      }
-    }
-  }
+  Future<void> _cerrarSesion() => _cerrarSesionDe(context, ref, widget.user);
 
   @override
   Widget build(BuildContext context) {
     final estado = _estado;
     // El fondo cubre también la barra para que el vidrio tenga qué mostrar.
-    return LiquidBackground(
-      acento: switch (_pestana) {
-        _pCancion when estado != null => colorDificultad(
-          _seleccionada ?? estado.dificultadActiva,
-        ),
-        _pIntro => paletaGenero(widget.genero).intro,
-        _ => colorGenero(widget.genero),
-      },
-      manchas: (
-        paletaGenero(widget.genero).mancha1,
-        paletaGenero(widget.genero).mancha2,
-      ),
-      // Atrás desde cualquier pestaña vuelve al menú, y desde el menú, a los
-      // géneros.
-      child: PopScope(
-        canPop: false,
-        onPopInvokedWithResult: (didPop, _) {
-          if (didPop) return;
-          if (_pestana == 0) {
-            widget.onCambiarGenero();
-            // Desde los niveles se vuelve primero a las dificultades.
-          } else if (_pestana == _pCancion && _nivelesAbiertos) {
-            setState(() => _nivelesAbiertos = false);
-          } else {
-            _cambiarPestana(0);
-          }
+    return Theme(
+      data: _temaGenero(),
+      child: LiquidBackground(
+        acento: switch (_pestana) {
+          _pCancion when estado != null => colorDificultad(
+            _seleccionada ?? estado.dificultadActiva,
+          ),
+          _pIntro => paletaGenero(widget.genero).intro,
+          _ => colorGenero(widget.genero),
         },
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          appBar: LiquidGlassAppBar(
-            centerTitle: false,
-            // Ajustes no está en la barra de abajo: se vuelve con la flecha.
-            leading: _pestana == _pAjustes
-                ? IconButton(
-                    tooltip: 'Volver al menú',
-                    icon: const Icon(Icons.arrow_back_rounded),
-                    onPressed: () => _cambiarPestana(0),
-                  )
-                : _pestana == _pCancion && _nivelesAbiertos
-                ? IconButton(
-                    tooltip: 'Volver a las dificultades',
-                    icon: const Icon(Icons.arrow_back_rounded),
-                    onPressed: () => setState(() => _nivelesAbiertos = false),
-                  )
-                : _pestana == 0
-                ? IconButton(
-                    tooltip: 'Cambiar de género',
-                    icon: const Icon(Icons.arrow_back_rounded),
-                    onPressed: widget.onCambiarGenero,
-                  )
-                : null,
-            title: _tituloBarra(estado),
-            actions: [..._accionesBarra(), const SizedBox(width: 8)],
-          ),
-          bottomNavigationBar: LiquidGlassBottomNav(
-            colorMenu: paletaGenero(widget.genero).barraMenu,
-            colorSecciones: paletaGenero(widget.genero).barraSecciones,
-            claves: _clavesPestanas,
-            currentIndex: _pestana,
-            onTap: _cambiarPestana,
-            items: const [
-              (icon: Icons.home_rounded, label: 'Menú'),
-              (icon: Icons.music_note_rounded, label: 'Canción'),
-              (icon: Icons.headphones_rounded, label: 'Intro'),
-              (icon: Icons.groups_rounded, label: 'Salas'),
-              (icon: Icons.insights_rounded, label: 'Progreso'),
-            ],
-          ),
-          body: TransicionMusical(
-            pestana: _pestana,
-            direccion: _direccion,
-            color: switch (_pestana) {
-              0 => colorGenero(widget.genero),
-              _pCancion when estado != null => colorDificultad(
-                _seleccionada ?? estado.dificultadActiva,
-              ),
-              _pSalas => paletaGenero(widget.genero).salas,
-              _ => paletaGenero(widget.genero).intro,
-            },
-            child: switch (_pestana) {
-              _pCancion => _pestanaCancion(estado),
-              _pIntro => _pestanaIntro(),
-              _pSalas => _pestanaSalas(),
-              _pProgreso => _PestanaProgreso(
-                key: const ValueKey('progreso'),
-                dificultades: estado?.dificultades ?? const [],
-                intros: _introsFuturo,
-                saldo: _saldo,
-                esInvitado: widget.user.isAnonymous,
-              ),
-              _pAjustes => _PestanaConfiguracion(
-                key: const ValueKey('configuracion'),
-                onRecorrido: _verRecorrido,
-                onCerrarSesion: _cerrarSesion,
-                onReiniciar: widget.user.isAnonymous
-                    ? null
-                    : _reiniciarProgreso,
-              ),
-              _ => _pestanaMenu(estado),
-            },
+        manchas: (
+          paletaGenero(widget.genero).mancha1,
+          paletaGenero(widget.genero).mancha2,
+        ),
+        // Atrás desde cualquier pestaña vuelve al menú, y desde el menú, a los
+        // géneros.
+        child: PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (didPop) return;
+            if (_pestana == 0) {
+              widget.onCambiarGenero();
+              // Desde los niveles se vuelve primero a las dificultades.
+            } else if (_pestana == _pCancion && _nivelesAbiertos) {
+              setState(() => _nivelesAbiertos = false);
+            } else {
+              _cambiarPestana(0);
+            }
+          },
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: LiquidGlassAppBar(
+              centerTitle: false,
+              // Ajustes no está en la barra de abajo: se vuelve con la flecha.
+              leading: _pestana == _pAjustes
+                  ? IconButton(
+                      tooltip: 'Volver al menú',
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      onPressed: () => _cambiarPestana(0),
+                    )
+                  : _pestana == _pCancion && _nivelesAbiertos
+                  ? IconButton(
+                      tooltip: 'Volver a las dificultades',
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      onPressed: () => setState(() => _nivelesAbiertos = false),
+                    )
+                  : _pestana == 0
+                  ? IconButton(
+                      tooltip: 'Cambiar de género',
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      onPressed: widget.onCambiarGenero,
+                    )
+                  : null,
+              title: _tituloBarra(estado),
+              actions: [..._accionesBarra(), const SizedBox(width: 8)],
+            ),
+            bottomNavigationBar: LiquidGlassBottomNav(
+              colorMenu: paletaGenero(widget.genero).barraMenu,
+              colorSecciones: paletaGenero(widget.genero).barraSecciones,
+              claves: _clavesPestanas,
+              currentIndex: _pestana,
+              onTap: _cambiarPestana,
+              items: const [
+                (icon: Icons.home_rounded, label: 'Menú'),
+                (icon: Icons.music_note_rounded, label: 'Canción'),
+                (icon: Icons.headphones_rounded, label: 'Intro'),
+                (icon: Icons.insights_rounded, label: 'Progreso'),
+              ],
+            ),
+            body: TransicionMusical(
+              pestana: _pestana,
+              direccion: _direccion,
+              color: switch (_pestana) {
+                0 => colorGenero(widget.genero),
+                _pCancion when estado != null => colorDificultad(
+                  _seleccionada ?? estado.dificultadActiva,
+                ),
+                _ => paletaGenero(widget.genero).intro,
+              },
+              child: switch (_pestana) {
+                _pCancion => _pestanaCancion(estado),
+                _pIntro => _pestanaIntro(),
+                _pProgreso => _PestanaProgreso(
+                  key: const ValueKey('progreso'),
+                  dificultades: estado?.dificultades ?? const [],
+                  intros: _introsFuturo,
+                  saldo: _saldo,
+                  esInvitado: widget.user.isAnonymous,
+                ),
+                _pAjustes => _PestanaConfiguracion(
+                  key: const ValueKey('configuracion'),
+                  onRecorrido: _verRecorrido,
+                  onCerrarSesion: _cerrarSesion,
+                  onReiniciar: widget.user.isAnonymous
+                      ? null
+                      : _reiniciarProgreso,
+                ),
+                _ => _pestanaMenu(estado),
+              },
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// Títulos del menú (barra, tarjetas, encabezados) con el color del
+  /// género; en modo claro, su tono legible. El texto corrido no cambia.
+  ThemeData _temaGenero() {
+    final tema = Theme.of(context);
+    final color = context.paleta.tonoTexto(colorGenero(widget.genero));
+    final t = tema.textTheme;
+    TextStyle? tenir(TextStyle? estilo) => estilo?.copyWith(color: color);
+    return tema.copyWith(
+      textTheme: t.copyWith(
+        displayLarge: tenir(t.displayLarge),
+        displayMedium: tenir(t.displayMedium),
+        displaySmall: tenir(t.displaySmall),
+        headlineLarge: tenir(t.headlineLarge),
+        headlineMedium: tenir(t.headlineMedium),
+        headlineSmall: tenir(t.headlineSmall),
+        titleLarge: tenir(t.titleLarge),
+        titleMedium: tenir(t.titleMedium),
+      ),
+      appBarTheme: tema.appBarTheme.copyWith(
+        titleTextStyle: tenir(tema.appBarTheme.titleTextStyle),
       ),
     );
   }
@@ -1203,7 +1396,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   Widget _tituloBarra(EstadoJuegoRemoto? estado) => switch (_pestana) {
     _pCancion => const Text('Adivina la canción'),
     _pIntro => const Text('Adivina la intro'),
-    _pSalas => const Text('Salas'),
     _pProgreso => const Text('Progreso'),
     _pAjustes => const Text('Ajustes'),
     _ => Row(
@@ -1233,8 +1425,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       ),
     if ((_pestana == _pIntro || _pestana == _pProgreso) && _monedas != null)
       _Saldo('🪙', _monedas!, 'monedas'),
-    if ((_pestana == _pSalas || _pestana == _pProgreso) &&
-        !widget.user.isAnonymous)
+    if (_pestana == _pProgreso && !widget.user.isAnonymous)
       _Saldo('🎟️', _saldo.fichas, 'fichas'),
   ];
 
@@ -1285,33 +1476,28 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       onVisible: _recorridoSiEsNuevo,
       introsDisponibles: _introsDisponibles,
       offlineMode: _offlineMode,
-      esInvitado: widget.user.isAnonymous,
       infoCancion: _infoCancion(estado!),
       infoIntros: _resumenIntros == null
           ? null
           : '${_resumenIntros!.intros.length} intros desbloqueadas',
-      infoSalas: widget.user.isAnonymous
-          ? null
-          : _saldo.ganadas == 0
-          ? 'Aún no ganas salas'
-          : 'Ganaste ${_saldo.ganadas} '
-                '${_saldo.ganadas == 1 ? 'sala' : 'salas'} · '
-                '🥁 ${_saldo.ganadasCancion} · 🎧 ${_saldo.ganadasIntros}',
       onInstrumentos: () => _cambiarPestana(_pCancion),
-      onSalas: () => _cambiarPestana(_pSalas),
       onIntros: () => _cambiarPestana(_pIntro),
+      onProgreso: () => _cambiarPestana(_pProgreso),
+      infoProgreso: _infoProgreso(estado),
     );
   }
 
-  /// "Vas en el nivel 3 de Fácil" según la dificultad activa.
-  String _infoCancion(EstadoJuegoRemoto estado) {
-    if (_juegoTerminado()) return '¡Completaste las tres dificultades!';
-    final activa = estado.dificultades
-        .where((item) => item.dificultad == estado.dificultadActiva)
-        .firstOrNull;
-    final nivel = min((activa?.completados ?? 0) + 1, 5);
-    return 'Vas en el nivel $nivel de '
-        '${_nombreDificultad(estado.dificultadActiva)}';
+  String _infoCancion(EstadoJuegoRemoto estado) => _textoNivel(estado);
+
+  /// "7 de 15 niveles" del género.
+  String? _infoProgreso(EstadoJuegoRemoto estado) {
+    final total = estado.dificultades.fold(0, (suma, d) => suma + d.total);
+    if (total == 0) return null;
+    final hechos = estado.dificultades.fold(
+      0,
+      (suma, d) => suma + d.completados,
+    );
+    return '$hechos de $total niveles';
   }
 
   Widget _pestanaIntro() {
@@ -1373,18 +1559,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       onRefresh: _cargar,
     );
   }
-
-  Widget _pestanaSalas() {
-    final motivo = widget.user.isAnonymous
-        ? 'Crea una cuenta para jugar en salas con tus amigos.'
-        : _offlineMode
-        ? 'Necesitas conexión a internet para jugar en salas.'
-        : null;
-    if (motivo == null) {
-      return const SalasPanel(key: ValueKey('salas'));
-    }
-    return _bloqueada('salas-bloqueadas', motivo);
-  }
 }
 
 /// Avance del jugador para calcular las insignias.
@@ -1434,10 +1608,11 @@ class _PestanaProgreso extends StatelessWidget {
   final SaldoSalas saldo;
   final bool esInvitado;
 
-  static const _colores = [
-    AppColors.signalOrange,
-    AppColors.medio,
-    AppColors.verde,
+  // Colores del género que se está jugando (las pestañas son de su menú).
+  List<Color> get _colores => [
+    paletaGenero(generoActivo).progreso,
+    paletaGenero(generoActivo).mancha1,
+    colorGenero(generoActivo),
   ];
 
   @override
@@ -1968,12 +2143,13 @@ class _Saldo extends StatelessWidget {
 class _PestanaConfiguracion extends ConsumerStatefulWidget {
   const _PestanaConfiguracion({
     super.key,
-    required this.onRecorrido,
+    this.onRecorrido,
     required this.onCerrarSesion,
     this.onReiniciar,
   });
 
-  final VoidCallback onRecorrido;
+  // null fuera de un género: el recorrido explica el menú del género.
+  final VoidCallback? onRecorrido;
   final VoidCallback onCerrarSesion;
   // null para invitados: su progreso ya se borra al salir.
   final VoidCallback? onReiniciar;
@@ -2005,13 +2181,14 @@ class _PestanaConfiguracionState extends ConsumerState<_PestanaConfiguracion> {
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => mostrarInstrucciones(context),
               ),
-              ListTile(
-                leading: const Icon(Icons.tour_rounded),
-                title: const Text('Recorrido guiado'),
-                subtitle: const Text('Las burbujas que explican la app'),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: widget.onRecorrido,
-              ),
+              if (widget.onRecorrido != null)
+                ListTile(
+                  leading: const Icon(Icons.tour_rounded),
+                  title: const Text('Recorrido guiado'),
+                  subtitle: const Text('Las burbujas que explican la app'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: widget.onRecorrido,
+                ),
             ],
           ),
         ),
@@ -2188,7 +2365,8 @@ class _ProgresoGeneral extends StatelessWidget {
         Text(
           '${(porcentaje * 100).round()}%',
           textAlign: TextAlign.center,
-          style: text.displaySmall?.copyWith(color: AppColors.signalOrange),
+          // Color del género, del tema de su menú.
+          style: text.displaySmall,
         ),
         const SizedBox(height: 8),
         ClipRRect(
@@ -2220,7 +2398,7 @@ class _ProgresoGeneral extends StatelessWidget {
                 nombre: 'Adivina la intro',
                 hechos: adivinadas,
                 total: totalIntros,
-                color: AppColors.signalOrange,
+                color: paletaGenero(generoActivo).intro,
                 detalle: intros == null
                     ? 'Se desbloquea al completar tu primer nivel.'
                     : '${intros.intros.length} cartas obtenidas',
@@ -2230,8 +2408,8 @@ class _ProgresoGeneral extends StatelessWidget {
   }
 }
 
-/// Menú principal: carrusel de los tres modos que gira solo de izquierda a
-/// derecha (se pausa al tocarlo).
+/// Menú del género: carrusel de los dos modos y el progreso que gira solo de
+/// izquierda a derecha (se pausa al tocarlo).
 class _MenuPrincipal extends StatelessWidget {
   const _MenuPrincipal({
     super.key,
@@ -2240,13 +2418,12 @@ class _MenuPrincipal extends StatelessWidget {
     required this.onVisible,
     required this.introsDisponibles,
     required this.offlineMode,
-    required this.esInvitado,
     required this.infoCancion,
     required this.infoIntros,
-    required this.infoSalas,
     required this.onInstrumentos,
-    required this.onSalas,
     required this.onIntros,
+    required this.onProgreso,
+    this.infoProgreso,
   });
 
   // Color e instrumentos de la tarjeta "Adivina la canción".
@@ -2255,20 +2432,19 @@ class _MenuPrincipal extends StatelessWidget {
   // Una línea de datos del jugador en cada tarjeta (null si no hay).
   final String infoCancion;
   final String? infoIntros;
-  final String? infoSalas;
   // Avisa cuando el menú ya está en pantalla (para el recorrido inicial).
   final VoidCallback onVisible;
   final bool introsDisponibles;
   final bool offlineMode;
-  final bool esInvitado;
   final VoidCallback onInstrumentos;
-  final VoidCallback onSalas;
   final VoidCallback onIntros;
+  final VoidCallback onProgreso;
+  final String? infoProgreso;
 
   List<Color> get _colores => [
     colorGenero(genero),
-    paletaGenero(genero).salas,
     paletaGenero(genero).intro,
+    paletaGenero(genero).progreso,
   ];
 
   @override
@@ -2296,7 +2472,6 @@ class _MenuPrincipal extends StatelessWidget {
 
   Widget _cuadro(int index, bool alFrente, {bool animar = true}) {
     final introsBloqueadas = !introsDisponibles;
-    final salasBloqueadas = esInvitado || offlineMode;
     return switch (index) {
       0 => _CuadroModo(
         emoji: genero.instrumentos,
@@ -2311,30 +2486,13 @@ class _MenuPrincipal extends StatelessWidget {
         onTap: onInstrumentos,
       ),
       1 => _CuadroModo(
-        emoji: '🏆',
-        animacion: _Animacion.saltar,
-        titulo: 'Desafía a tus amigos',
-        detalle: esInvitado
-            ? 'Crea una cuenta para jugar en salas.'
-            : offlineMode
-            ? 'Necesitas conexión para jugar en salas.'
-            : 'Crea o únete a una sala de hasta 5 jugadores.',
-        info: salasBloqueadas ? null : infoSalas,
-        color: paletaGenero(genero).salas,
-        alFrente: alFrente,
-        // Solo la del frente se mueve; laterales y reflejo, quietas.
-        animar: animar && alFrente,
-        bloqueado: salasBloqueadas,
-        onTap: salasBloqueadas ? null : onSalas,
-      ),
-      _ => _CuadroModo(
         emoji: '🎧',
         animacion: _Animacion.mecer,
         titulo: 'Adivina la intro',
         detalle: !introsDisponibles
             ? 'Se desbloquea al completar tu primer nivel.'
             : offlineMode
-            ? 'Sin conexión: juega las intros descargadas.'
+            ? 'Sin conexión: escucha las intros que adivinaste.'
             : 'Escucha 30 segundos y adivina la canción.',
         info: introsBloqueadas ? null : infoIntros,
         color: paletaGenero(genero).intro,
@@ -2343,6 +2501,18 @@ class _MenuPrincipal extends StatelessWidget {
         animar: animar && alFrente,
         bloqueado: introsBloqueadas,
         onTap: introsBloqueadas ? null : onIntros,
+      ),
+      _ => _CuadroModo(
+        emoji: '📈',
+        animacion: _Animacion.saltar,
+        titulo: 'Progreso',
+        detalle: 'Tus niveles, intros e insignias.',
+        info: infoProgreso,
+        color: paletaGenero(genero).progreso,
+        alFrente: alFrente,
+        // Solo la del frente se mueve; laterales y reflejo, quietas.
+        animar: animar && alFrente,
+        onTap: onProgreso,
       ),
     };
   }
@@ -3059,6 +3229,23 @@ class _TarjetaDificultad extends StatelessWidget {
   }
 }
 
+/// "Vas en el nivel 3 de Fácil" según la dificultad activa.
+String _textoNivel(EstadoJuegoRemoto estado) {
+  final terminado = estado.dificultades.any(
+    (progreso) =>
+        progreso.dificultad == Dificultad.avanzado &&
+        progreso.total >= 5 &&
+        progreso.completados >= progreso.total,
+  );
+  if (terminado) return '¡Completaste las tres dificultades!';
+  final activa = estado.dificultades
+      .where((item) => item.dificultad == estado.dificultadActiva)
+      .firstOrNull;
+  final nivel = min((activa?.completados ?? 0) + 1, 5);
+  return 'Vas en el nivel $nivel de '
+      '${_nombreDificultad(estado.dificultadActiva)}';
+}
+
 String _nombreDificultad(Dificultad dificultad) {
   switch (dificultad) {
     case Dificultad.facil:
@@ -3202,235 +3389,254 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    return Scaffold(
-      body: ConCarga(
-        cargando: _busy,
-        texto: 'Iniciando sesión...',
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            const FondoLogin(),
-            SafeArea(
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 420),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          LiquidGlassCard(
-                            // Más opaca y con borde naranja: resalta sobre los
-                            // instrumentos del fondo y el texto se lee bien.
-                            opacity: 0.6,
-                            borderRadius: 28,
-                            borderColor: AppColors.signalOrange,
-                            padding: const EdgeInsets.all(24),
-                            // Campos con contorno cian y etiqueta arriba.
-                            child: Theme(
-                              data: Theme.of(context).copyWith(
-                                inputDecorationTheme: camposLogin(context),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  const Center(child: LogoCircular()),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    _registering
-                                        ? 'Crea tu cuenta'
-                                        : 'Bienvenido',
-                                    textAlign: TextAlign.center,
-                                    style: text.headlineMedium?.copyWith(
-                                      fontWeight: FontWeight.w800,
+    // Botones y enlaces con los azules del logo (celeste en modo oscuro).
+    final tema = Theme.of(context);
+    return Theme(
+      data: tema.copyWith(
+        colorScheme: tema.colorScheme.copyWith(
+          primary: context.paleta.oscuro ? celesteLogin : azulLogin,
+        ),
+      ),
+      child: Scaffold(
+        body: ConCarga(
+          cargando: _busy,
+          texto: 'Iniciando sesión...',
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              const FondoLogin(),
+              SafeArea(
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            LiquidGlassCard(
+                              // Más opaca y con borde azul del logo: resalta
+                              // sobre el fondo y el texto se lee bien.
+                              opacity: 0.6,
+                              borderRadius: 28,
+                              borderColor: azulLogin,
+                              padding: const EdgeInsets.all(24),
+                              // Campos con contorno cian y etiqueta arriba.
+                              child: Theme(
+                                data: Theme.of(context).copyWith(
+                                  inputDecorationTheme: camposLogin(context),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    const Center(child: LogoCircular()),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      _registering
+                                          ? 'Crea tu cuenta'
+                                          : 'Bienvenido',
+                                      textAlign: TextAlign.center,
+                                      style: text.headlineMedium?.copyWith(
+                                        fontWeight: FontWeight.w800,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Pon a prueba tu oído y descubre la melodía',
-                                    textAlign: TextAlign.center,
-                                    style: text.bodyMedium?.copyWith(
-                                      color: context.paleta.tintaSuave,
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Pon a prueba tu oído y descubre la melodía',
+                                      textAlign: TextAlign.center,
+                                      style: text.bodyMedium?.copyWith(
+                                        color: context.paleta.tintaSuave,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 20),
-                                  if (_registering) ...[
+                                    const SizedBox(height: 20),
+                                    if (_registering) ...[
+                                      TextFormField(
+                                        controller: _name,
+                                        textInputAction: TextInputAction.next,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Nombre',
+                                          prefixIcon: Icon(
+                                            Icons.person_outline,
+                                          ),
+                                        ),
+                                        validator: (value) =>
+                                            value == null ||
+                                                value.trim().isEmpty
+                                            ? 'Escribe tu nombre'
+                                            : null,
+                                      ),
+                                      const SizedBox(height: 12),
+                                    ],
                                     TextFormField(
-                                      controller: _name,
+                                      controller: _email,
+                                      keyboardType: TextInputType.emailAddress,
                                       textInputAction: TextInputAction.next,
                                       decoration: const InputDecoration(
-                                        labelText: 'Nombre',
-                                        prefixIcon: Icon(Icons.person_outline),
+                                        labelText: 'Correo',
+                                        prefixIcon: Icon(Icons.mail_outline),
                                       ),
                                       validator: (value) =>
-                                          value == null || value.trim().isEmpty
-                                          ? 'Escribe tu nombre'
+                                          value == null || !value.contains('@')
+                                          ? 'Escribe un correo válido'
                                           : null,
                                     ),
                                     const SizedBox(height: 12),
-                                  ],
-                                  TextFormField(
-                                    controller: _email,
-                                    keyboardType: TextInputType.emailAddress,
-                                    textInputAction: TextInputAction.next,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Correo',
-                                      prefixIcon: Icon(Icons.mail_outline),
-                                    ),
-                                    validator: (value) =>
-                                        value == null || !value.contains('@')
-                                        ? 'Escribe un correo válido'
-                                        : null,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  TextFormField(
-                                    controller: _password,
-                                    obscureText: !_showPassword,
-                                    decoration: InputDecoration(
-                                      labelText: 'Contraseña',
-                                      prefixIcon: const Icon(
-                                        Icons.lock_outline,
-                                      ),
-                                      suffixIcon: IconButton(
-                                        tooltip: _showPassword
-                                            ? 'Ocultar contraseña'
-                                            : 'Mostrar contraseña',
-                                        onPressed: () => setState(
-                                          () => _showPassword = !_showPassword,
+                                    TextFormField(
+                                      controller: _password,
+                                      obscureText: !_showPassword,
+                                      decoration: InputDecoration(
+                                        labelText: 'Contraseña',
+                                        prefixIcon: const Icon(
+                                          Icons.lock_outline,
                                         ),
-                                        icon: Icon(
-                                          _showPassword
-                                              ? Icons.visibility_off_outlined
-                                              : Icons.visibility_outlined,
+                                        suffixIcon: IconButton(
+                                          tooltip: _showPassword
+                                              ? 'Ocultar contraseña'
+                                              : 'Mostrar contraseña',
+                                          onPressed: () => setState(
+                                            () =>
+                                                _showPassword = !_showPassword,
+                                          ),
+                                          icon: Icon(
+                                            _showPassword
+                                                ? Icons.visibility_off_outlined
+                                                : Icons.visibility_outlined,
+                                          ),
                                         ),
                                       ),
+                                      validator: (value) =>
+                                          value == null || value.length < 6
+                                          ? 'Usa al menos 6 caracteres'
+                                          : null,
                                     ),
-                                    validator: (value) =>
-                                        value == null || value.length < 6
-                                        ? 'Usa al menos 6 caracteres'
-                                        : null,
-                                  ),
-                                  if (_error != null) ...[
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      _error!,
-                                      style: TextStyle(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.error,
+                                    if (_error != null) ...[
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        _error!,
+                                        style: TextStyle(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.error,
+                                        ),
                                       ),
+                                    ],
+                                    const SizedBox(height: 20),
+                                    BotonDegradado(
+                                      onPressed: _busy ? null : _submit,
+                                      label: _registering
+                                          ? 'Crear cuenta'
+                                          : 'Iniciar sesión',
                                     ),
-                                  ],
-                                  const SizedBox(height: 20),
-                                  BotonDegradado(
-                                    onPressed: _busy ? null : _submit,
-                                    label: _registering
-                                        ? 'Crear cuenta'
-                                        : 'Iniciar sesión',
-                                  ),
-                                  // El invitado ya tiene "Jugar sin registrarme",
-                                  // que retoma la misma sesión anónima.
-                                  if (!_registering &&
-                                      widget.savedUser != null &&
-                                      !widget.savedUser!.isAnonymous) ...[
-                                    const SizedBox(height: 12),
-                                    OutlinedButton.icon(
-                                      onPressed: _busy
-                                          ? null
-                                          : widget.onSignedIn,
-                                      icon: const Icon(
-                                        Icons.play_circle_outline,
+                                    // El invitado ya tiene "Jugar sin registrarme",
+                                    // que retoma la misma sesión anónima.
+                                    if (!_registering &&
+                                        widget.savedUser != null &&
+                                        !widget.savedUser!.isAnonymous) ...[
+                                      const SizedBox(height: 12),
+                                      OutlinedButton.icon(
+                                        onPressed: _busy
+                                            ? null
+                                            : widget.onSignedIn,
+                                        icon: const Icon(
+                                          Icons.play_circle_outline,
+                                        ),
+                                        label: Text(
+                                          'Continuar como ${_nombreSesion(widget.savedUser!)}',
+                                        ),
                                       ),
-                                      label: Text(
-                                        'Continuar como ${_nombreSesion(widget.savedUser!)}',
+                                    ],
+                                    if (!_registering) ...[
+                                      const SizedBox(height: 16),
+                                      Row(
+                                        children: [
+                                          const Expanded(child: Divider()),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                            ),
+                                            child: Text(
+                                              'o',
+                                              style: text.bodySmall,
+                                            ),
+                                          ),
+                                          const Expanded(child: Divider()),
+                                        ],
                                       ),
-                                    ),
-                                  ],
-                                  if (!_registering) ...[
-                                    const SizedBox(height: 16),
-                                    Row(
-                                      children: [
-                                        const Expanded(child: Divider()),
-                                        Padding(
+                                      const SizedBox(height: 16),
+                                      OutlinedButton.icon(
+                                        onPressed: _busy
+                                            ? null
+                                            : _signInWithGoogle,
+                                        style: OutlinedButton.styleFrom(
                                           padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
+                                            vertical: 14,
                                           ),
-                                          child: Text(
-                                            'o',
-                                            style: text.bodySmall,
-                                          ),
-                                        ),
-                                        const Expanded(child: Divider()),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 16),
-                                    OutlinedButton.icon(
-                                      onPressed: _busy
-                                          ? null
-                                          : _signInWithGoogle,
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 14,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            16,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              16,
+                                            ),
                                           ),
                                         ),
+                                        icon: const _LogoGoogle(),
+                                        label: const Text(
+                                          'Continuar con Google',
+                                        ),
                                       ),
-                                      icon: const _LogoGoogle(),
-                                      label: const Text('Continuar con Google'),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    TextButton.icon(
-                                      onPressed: _busy
-                                          ? null
-                                          : _continueAsGuest,
-                                      icon: const Icon(
-                                        Icons.sports_esports_outlined,
+                                      const SizedBox(height: 8),
+                                      TextButton.icon(
+                                        onPressed: _busy
+                                            ? null
+                                            : _continueAsGuest,
+                                        icon: const Icon(
+                                          Icons.sports_esports_outlined,
+                                        ),
+                                        label: const Text(
+                                          'Jugar sin registrarme',
+                                        ),
                                       ),
-                                      label: const Text(
-                                        'Jugar sin registrarme',
-                                      ),
-                                    ),
+                                    ],
                                   ],
-                                ],
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 12),
-                          TextButton(
-                            onPressed: _busy
-                                ? null
-                                : () => setState(() {
-                                    _registering = !_registering;
-                                    _error = null;
-                                  }),
-                            child: Text(
-                              _registering
-                                  ? '¿Ya tienes cuenta? Inicia sesión'
-                                  : '¿No tienes cuenta? Crea una nueva',
+                            const SizedBox(height: 12),
+                            TextButton(
+                              onPressed: _busy
+                                  ? null
+                                  : () => setState(() {
+                                      _registering = !_registering;
+                                      _error = null;
+                                    }),
+                              child: Text(
+                                _registering
+                                    ? '¿Ya tienes cuenta? Inicia sesión'
+                                    : '¿No tienes cuenta? Crea una nueva',
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-            // Al final del Stack: encima del formulario, que ocupa toda la
-            // pantalla y si no se quedaría con los toques.
-            const SafeArea(
-              child: Align(
-                alignment: Alignment.topRight,
-                child: Padding(padding: EdgeInsets.all(8), child: BotonTema()),
+              // Al final del Stack: encima del formulario, que ocupa toda la
+              // pantalla y si no se quedaría con los toques.
+              const SafeArea(
+                child: Align(
+                  alignment: Alignment.topRight,
+                  child: Padding(
+                    padding: EdgeInsets.all(8),
+                    child: BotonTema(),
+                  ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

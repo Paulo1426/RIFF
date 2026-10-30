@@ -5,7 +5,6 @@ import 'package:path_provider/path_provider.dart';
 
 import '../models/genero.dart';
 
-import 'audio_service.dart';
 import 'firebase_game_repository.dart';
 import 'offline_game_store.dart';
 
@@ -139,23 +138,24 @@ class OfflineIntroSnapshot {
 }
 
 class OfflineIntroStore {
-  OfflineIntroStore(this._repository, this._audio);
+  OfflineIntroStore(this._repository);
 
   final FirebaseGameRepository _repository;
-  final AudioService _audio;
   // Una sola descarga a la vez por género aunque la pidan el inicio y la
   // pantalla.
   static final _enCurso = <Genero, Future<OfflineIntroSnapshot?>>{};
 
-  /// Borra la copia guardada de [uid] (al reiniciar el progreso).
+  /// Borra las copias de [uid] en todos los géneros (al reiniciar el progreso).
   Future<void> borrar(String uid) async {
-    final archivo = await _file(uid);
-    if (await archivo.exists()) await archivo.delete();
+    for (final genero in Genero.values) {
+      final archivo = await _file(uid, genero);
+      if (await archivo.exists()) await archivo.delete();
+    }
   }
 
-  Future<File> _file(String uid) async {
+  Future<File> _file(String uid, [Genero? genero]) async {
     // Una copia por género; se lee antes del await.
-    final prefijo = generoActivo.prefijo.replaceAll(':', '_');
+    final prefijo = (genero ?? generoActivo).prefijo.replaceAll(':', '_');
     final directory = await getApplicationSupportDirectory();
     final store = Directory('${directory.path}/offline_intros');
     await store.create(recursive: true);
@@ -186,8 +186,8 @@ class OfflineIntroStore {
     }
   }
 
-  /// Envía los aciertos pendientes y descarga intro, original y portada de
-  /// cada intro obtenida. Ya descargadas no se bajan otra vez (caché por id).
+  /// Envía los aciertos hechos sin conexión. Los audios no se bajan aquí: se
+  /// guardan en la caché al sonar (ver IntroGameScreen).
   Future<OfflineIntroSnapshot?> actualizar(String uid) {
     final genero = generoActivo;
     return _enCurso[genero] ??= _actualizar(
@@ -197,7 +197,7 @@ class OfflineIntroStore {
   }
 
   Future<OfflineIntroSnapshot?> _actualizar(String uid, Genero genero) async {
-    // Cada llamada al servidor, a la caché o al disco lee el género activo:
+    // Cada llamada al servidor o al disco lee el género activo:
     // si el jugador cambió de género, se para antes de mezclar los dos.
     void seguir() {
       if (generoActivo != genero) throw StateError('Cambió el género');
@@ -221,47 +221,6 @@ class OfflineIntroStore {
       seguir();
       await save(actual);
     }
-    seguir();
-    final paquete = await _repository.descargarPaqueteIntros();
-    final intros = <String, OfflineIntroData>{};
-    for (final raw in paquete['intros'] as List<dynamic>) {
-      final item = Map<String, dynamic>.from(raw as Map);
-      final id = item['id'] as String;
-      final urls = Map<String, dynamic>.from(item['urls'] as Map);
-      final full = urls['fullSong'] as String?;
-      final cover = urls['cover'] as String?;
-      seguir();
-      final (introFile, fullFile, coverFile) = await (
-        _audio.descargarYGuardar(urls['intro'] as String, 'intro:$id'),
-        full == null
-            ? Future<File?>.value()
-            : _audio.descargarYGuardar(full, 'intro:$id:full'),
-        cover == null
-            ? Future<File?>.value()
-            : _audio
-                  .descargarYGuardar(cover, 'intro:$id:cover')
-                  .then<File?>((file) => file, onError: (_) => null),
-      ).wait;
-      intros[id] = OfflineIntroData(
-        id: id,
-        titulo: item['titulo'] as String?,
-        artista: item['artista'] as String?,
-        respuestaHash:
-            item['respuestaHash'] as String? ??
-            OfflineGameStore.huella(id, item['respuesta'] as String),
-        introPath: introFile.path,
-        fullPath: fullFile?.path,
-        coverPath: coverFile?.path,
-      );
-    }
-    final snapshot = OfflineIntroSnapshot(
-      uid: uid,
-      estadoJson: Map<String, dynamic>.from(paquete['estado'] as Map),
-      intros: intros,
-      pendientes: const [],
-    );
-    seguir();
-    await save(snapshot);
-    return snapshot;
+    return actual;
   }
 }

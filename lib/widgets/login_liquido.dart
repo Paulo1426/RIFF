@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import 'liquid_glass/liquid_glass_card.dart';
 
-/// Colores del login: los de la app, verde de la marca y naranja de acción.
-const verdeLogin = AppColors.verde;
-const naranjaLogin = AppColors.signalOrange;
+/// Colores del login: los azules del logo (rey y celeste).
+const azulLogin = Color(0xFF1E5BC6);
+const celesteLogin = Color(0xFF6FB1F5);
 
 /// Fondo del login: liso, sin adornos que distraigan del formulario.
 class FondoLogin extends StatelessWidget {
@@ -34,9 +34,9 @@ class LogoCircular extends StatelessWidget {
     padding: const EdgeInsets.all(3),
     decoration: BoxDecoration(
       shape: BoxShape.circle,
-      gradient: const LinearGradient(colors: [verdeLogin, naranjaLogin]),
+      gradient: const LinearGradient(colors: [azulLogin, celesteLogin]),
       boxShadow: [
-        BoxShadow(color: verdeLogin.withValues(alpha: 0.5), blurRadius: 24),
+        BoxShadow(color: azulLogin.withValues(alpha: 0.5), blurRadius: 24),
       ],
     ),
     child: ClipOval(
@@ -69,9 +69,9 @@ class BotonDegradado extends StatelessWidget {
     child: DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        gradient: const LinearGradient(colors: [verdeLogin, naranjaLogin]),
+        gradient: const LinearGradient(colors: [azulLogin, celesteLogin]),
         boxShadow: [
-          BoxShadow(color: verdeLogin.withValues(alpha: 0.35), blurRadius: 18),
+          BoxShadow(color: azulLogin.withValues(alpha: 0.35), blurRadius: 18),
         ],
       ),
       child: Material(
@@ -107,15 +107,15 @@ InputDecorationTheme camposLogin(BuildContext context) {
   return InputDecorationTheme(
     filled: true,
     fillColor: context.paleta.superficie.withValues(alpha: 0.25),
-    border: borde(verdeLogin.withValues(alpha: 0.5), 1.2),
-    enabledBorder: borde(verdeLogin.withValues(alpha: 0.5), 1.2),
-    focusedBorder: borde(verdeLogin, 2),
+    border: borde(azulLogin.withValues(alpha: 0.5), 1.2),
+    enabledBorder: borde(azulLogin.withValues(alpha: 0.5), 1.2),
+    focusedBorder: borde(azulLogin, 2),
     errorBorder: borde(error, 1.2),
     focusedErrorBorder: borde(error, 2),
     floatingLabelStyle: TextStyle(
       color: context.paleta.oscuro
-          ? verdeLogin
-          : context.paleta.tonoTexto(verdeLogin),
+          ? azulLogin
+          : context.paleta.tonoTexto(azulLogin),
       fontWeight: FontWeight.w700,
     ),
   );
@@ -190,7 +190,7 @@ class _BienvenidaLoginState extends State<BienvenidaLogin>
                                     '¡Sesión iniciada!',
                                     textAlign: TextAlign.center,
                                     style: text.headlineSmall?.copyWith(
-                                      color: AppColors.verde,
+                                      color: azulLogin,
                                       fontWeight: FontWeight.w800,
                                     ),
                                   ),
@@ -222,7 +222,7 @@ class _BienvenidaLoginState extends State<BienvenidaLogin>
                                   height: 7,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: AppColors.verde.withValues(
+                                    color: azulLogin.withValues(
                                       alpha:
                                           0.3 +
                                           0.7 *
@@ -249,7 +249,7 @@ class _BienvenidaLoginState extends State<BienvenidaLogin>
   }
 }
 
-/// Círculo verde que se dibuja y, después, el check dentro.
+/// Círculo azul que se dibuja y, después, el check dentro.
 class _Check extends CustomPainter {
   _Check({required this.avance});
 
@@ -258,7 +258,7 @@ class _Check extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final pincel = Paint()
-      ..color = AppColors.verde
+      ..color = azulLogin
       ..style = PaintingStyle.stroke
       ..strokeWidth = 5
       ..strokeCap = StrokeCap.round;
@@ -268,7 +268,7 @@ class _Check extends CustomPainter {
       centro,
       radio,
       Paint()
-        ..color = AppColors.verde.withValues(alpha: 0.25 * avance)
+        ..color = azulLogin.withValues(alpha: 0.25 * avance)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
     );
     canvas.drawArc(
