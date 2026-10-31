@@ -143,6 +143,11 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
   int? _pestanaTocada;
   // Nivel e intros de cada género disponible (sin dato, sin línea).
   final _avance = <Genero, String>{};
+  // Lo mismo sin formato, para el progreso general.
+  final _datos = <Genero, ({EstadoJuegoRemoto estado, EstadoIntros? intros})>{};
+  // Las salas son de todos los géneros.
+  SaldoSalas _saldo = const SaldoSalas();
+  StreamSubscription<SaldoSalas>? _suscripcionSaldo;
 
   @override
   void initState() {
@@ -153,6 +158,22 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
     for (final genero in Genero.values.where((g) => g.disponible)) {
       unawaited(_cargarAvance(genero));
     }
+    if (!widget.user.isAnonymous) {
+      _suscripcionSaldo = ref
+          .read(firebaseGameRepositoryProvider)
+          .saldoSalas()
+          .listen(
+            (saldo) => setState(() => _saldo = saldo),
+            onError: (Object error) =>
+                debugPrint('No se pudo leer el saldo de salas: $error'),
+          );
+    }
+  }
+
+  @override
+  void dispose() {
+    _suscripcionSaldo?.cancel();
+    super.dispose();
   }
 
   Future<void> _cargarAvance(Genero genero) async {
@@ -172,6 +193,9 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
         if (hayNiveles) _textoNivel(estado),
         if (adivinadas != null) '🎧 $adivinadas intros descubiertas',
       ];
+      if (mounted) {
+        setState(() => _datos[genero] = (estado: estado, intros: intros));
+      }
       if (mounted && partes.isNotEmpty) {
         setState(() => _avance[genero] = partes.join('\n'));
       }
@@ -184,7 +208,8 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
   // Después de los géneros va "Aleatorio" y al final, las salas.
   static final _iAleatorio = Genero.values.length;
 
-  int get _total => Genero.values.length + 2;
+  int get _total => Genero.values.length + 3;
+  static final _iProgreso = Genero.values.length + 2;
 
   ({IconData icon, String label}) _pestanaDe(int index) =>
       index < Genero.values.length
@@ -200,12 +225,16 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
         )
       : index == _iAleatorio
       ? (icon: Icons.casino_rounded, label: 'Aleatorio')
+      : index == _iProgreso
+      ? (icon: Icons.insights_rounded, label: 'Progreso')
       : (icon: Icons.emoji_events_rounded, label: 'Salas');
 
   Color _color(int index) => index < Genero.values.length
       ? colorGenero(Genero.values[index])
       : index == _iAleatorio
       ? colorAleatorio
+      : index == _iProgreso
+      ? AppColors.oro
       : azulLogin;
 
   void _abrir(String titulo, Widget cuerpo, {Color? acento}) =>
@@ -263,6 +292,41 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
         animar: moverse,
         bloqueado: true,
         onTap: null,
+      );
+    }
+    if (index == _iProgreso) {
+      final niveles = _datos.values.fold(
+        0,
+        (s, d) =>
+            s + d.estado.dificultades.fold(0, (s, x) => s + x.completados),
+      );
+      final intros = _datos.values.fold(
+        0,
+        (s, d) =>
+            s +
+            (d.intros?.intros
+                    .where((i) => i.estado == EstadoIntro.completada)
+                    .length ??
+                0),
+      );
+      return _CuadroModo(
+        emoji: '📈',
+        animacion: _Animacion.saltar,
+        titulo: 'Progreso general',
+        detalle: 'Todos los géneros, salas e insignias generales.',
+        info: _datos.isEmpty ? null : '$niveles niveles · 🎧 $intros intros',
+        color: AppColors.oro,
+        alFrente: alFrente,
+        animar: moverse,
+        onTap: () => _abrir(
+          'Progreso general',
+          _ProgresoTodo(
+            datos: Map.of(_datos),
+            saldo: _saldo,
+            esInvitado: widget.user.isAnonymous,
+          ),
+          acento: AppColors.oro,
+        ),
       );
     }
     final invitado = widget.user.isAnonymous;
@@ -647,6 +711,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         for (final logro in logrosDe(
           _saldo,
           _avanceDe(estado.dificultades, _resumenIntros),
+          widget.genero,
         ))
           if (logro.logrado) logro.nombre: logro,
       };
@@ -1579,6 +1644,129 @@ AvanceJuego _avanceDe(
 
 /// Pestaña Progreso: avance de niveles e intros, estadísticas de salas e
 /// insignias.
+/// Progreso general (desde el selector de géneros): avance de cada género
+/// disponible, las salas (que son de todos los géneros) y las insignias
+/// generales. Mismo carrusel que la pestaña Progreso de cada género.
+class _ProgresoTodo extends StatelessWidget {
+  const _ProgresoTodo({
+    required this.datos,
+    required this.saldo,
+    required this.esInvitado,
+  });
+
+  final Map<Genero, ({EstadoJuegoRemoto estado, EstadoIntros? intros})> datos;
+  final SaldoSalas saldo;
+  final bool esInvitado;
+
+  static const _colores = [AppColors.oro, azulLogin, colorAleatorio];
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final avances = [
+      for (final d in datos.values) _avanceDe(d.estado.dificultades, d.intros),
+    ];
+    final logros = logrosGenerales(saldo, avances);
+    // Niveles cargados de verdad (un género en preparación suma 0) e intros.
+    var hechos = 0, total = 0;
+    final filas = <Widget>[];
+    for (final MapEntry(key: genero, value: d) in datos.entries) {
+      final niveles = d.estado.dificultades.fold(
+        0,
+        (s, x) => s + x.completados,
+      );
+      final totalNiveles = d.estado.dificultades.fold(0, (s, x) => s + x.total);
+      final intros = d.intros;
+      final adivinadas =
+          intros?.intros
+              .where((i) => i.estado == EstadoIntro.completada)
+              .length ??
+          0;
+      final totalIntros = intros == null
+          ? _ProgresoGeneral._totalIntros
+          : intros.intros.length + intros.restantes;
+      hechos += niveles + adivinadas;
+      total += totalNiveles + totalIntros;
+      filas.add(
+        _ProgresoGeneral._fila(
+          context,
+          nombre: genero.nombre,
+          hechos: niveles + adivinadas,
+          total: totalNiveles + totalIntros,
+          color: colorGenero(genero),
+          detalle: totalNiveles == 0
+              ? '$adivinadas de $totalIntros intros · niveles en preparación'
+              : '$niveles de $totalNiveles niveles · '
+                    '$adivinadas de $totalIntros intros',
+        ),
+      );
+    }
+    final porcentaje = total == 0 ? 0.0 : hechos / total;
+    Widget tarjeta(int index, bool alFrente) => switch (index) {
+      0 => _CuadroProgreso(
+        color: _colores[0],
+        alFrente: alFrente,
+        onTap: null,
+        children: [
+          _tituloTarjeta(context, '📈 Progreso general', _colores[0]),
+          const SizedBox(height: 8),
+          Text(
+            '${(porcentaje * 100).round()}%',
+            textAlign: TextAlign.center,
+            style: text.displaySmall?.copyWith(
+              color: context.paleta.tonoTexto(_colores[0]),
+            ),
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: porcentaje,
+              minHeight: 12,
+              color: _colores[0],
+            ),
+          ),
+          const SizedBox(height: 20),
+          if (filas.isEmpty)
+            const Center(child: CircularProgressIndicator())
+          else
+            ...filas,
+        ],
+      ),
+      1 => _ResumenSalas(
+        saldo: saldo,
+        esInvitado: esInvitado,
+        color: _colores[1],
+        alFrente: alFrente,
+      ),
+      _ => _ResumenInsignias(
+        logros: logros,
+        color: _colores[2],
+        alFrente: alFrente,
+        onTap: () => _PestanaProgreso._verDetalle(
+          context,
+          'Insignias generales',
+          () => _GrillaInsignias(logros: logros),
+        ),
+      ),
+    };
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: CarruselGiratorio(
+        itemCount: _colores.length,
+        compacto: true,
+        proporcion: 1.45,
+        colorDe: (index) => _colores[index],
+        itemBuilder: (context, index, alFrente) => ConReflejo(
+          color: _colores[index],
+          tarjeta: tarjeta(index, alFrente),
+          reflejo: tarjeta(index, false),
+        ),
+      ),
+    );
+  }
+}
+
 class _PestanaProgreso extends StatelessWidget {
   const _PestanaProgreso({
     super.key,
@@ -1607,7 +1795,11 @@ class _PestanaProgreso extends StatelessWidget {
       builder: (context, snapshot) {
         final estadoIntros = snapshot.data;
         final cargando = snapshot.connectionState != ConnectionState.done;
-        final logros = logrosDe(saldo, _avanceDe(dificultades, estadoIntros));
+        final logros = logrosDe(
+          saldo,
+          _avanceDe(dificultades, estadoIntros),
+          generoActivo,
+        );
         // Progreso y Salas muestran todo en la tarjeta; Insignias abre una
         // hoja con todas al tocarla.
         Widget tarjeta(int index, bool alFrente) => switch (index) {
@@ -1664,7 +1856,7 @@ class _PestanaProgreso extends StatelessWidget {
     );
   }
 
-  void _verDetalle(
+  static void _verDetalle(
     BuildContext context,
     String titulo,
     Widget Function() contenido,
@@ -2286,7 +2478,7 @@ class _ProgresoGeneral extends StatelessWidget {
     return total == 0 ? 0.0 : (niveles + adivinadas) / total;
   }
 
-  Widget _fila(
+  static Widget _fila(
     BuildContext context, {
     required String nombre,
     required int hechos,

@@ -35,6 +35,22 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('al regresar la que sale se hace polvo y termina limpia', (
+    tester,
+  ) async {
+    await tester.pumpWidget(pantalla(1, 1));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(pantalla(0, -1));
+    await tester.pump(const Duration(milliseconds: 300));
+    // A mitad siguen las dos: la que sale (polvo) y la que entra.
+    expect(find.text('Pestaña 1'), findsOneWidget);
+    expect(find.text('Pestaña 0'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.text('Pestaña 1'), findsNothing);
+    expect(find.text('Pestaña 0'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('con reducir animaciones no hay onda', (tester) async {
     await tester.pumpWidget(
       MediaQuery(

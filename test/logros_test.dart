@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:riff/models/genero.dart';
 import 'package:riff/models/logros.dart';
 import 'package:riff/models/sala.dart';
 
@@ -72,5 +73,44 @@ void main() {
     const saldo = SaldoSalas(ganadasCancion: 3, jugadas: 2);
     expect(saldo.porcentajeVictorias, 1);
     expect(saldo.derrotas, 0);
+  });
+
+  test('cada género tiene sus nombres con los mismos requisitos', () {
+    final avance = _avance(facil: 5, media: 5);
+    final salsa = logrosDe(const SaldoSalas(), avance, Genero.salsa);
+    expect(_tiene(salsa, 'Me gusta la salsa'), isTrue);
+    expect(_tiene(salsa, 'La salsa es para mí'), isFalse);
+    // Ningún nombre se repite entre géneros salvo los generales y los de salas.
+    final propios = [
+      for (final genero in Genero.values) ...[
+        insigniasDe(genero).facil,
+        insigniasDe(genero).oido,
+        insigniasDe(genero).media,
+        insigniasDe(genero).todo,
+        insigniasDe(genero).intros,
+        insigniasDe(genero).maestro,
+      ],
+    ];
+    expect(propios.toSet().length, propios.length);
+  });
+
+  test('20 insignias generales sin repetir nombres', () {
+    final avances = [
+      _avance(facil: 5, media: 5, avanzada: 5, intros: 45),
+      _avance(facil: 5),
+    ];
+    final generales = logrosGenerales(const SaldoSalas(jugadas: 10), avances);
+    expect(generales, hasLength(20));
+    final todos = {
+      for (final genero in Genero.values)
+        ...logrosDe(const SaldoSalas(), _avance(), genero).map((l) => l.nombre),
+    };
+    final nombres = generales.map((l) => l.nombre).toSet();
+    expect(nombres, hasLength(20));
+    expect(nombres.intersection(todos), isEmpty);
+    expect(_tiene(generales, 'Explorador musical'), isTrue);
+    expect(_tiene(generales, 'Cazador de intros'), isTrue);
+    expect(_tiene(generales, 'Buen anfitrión'), isTrue);
+    expect(_tiene(generales, 'Leyenda de RIFF'), isFalse);
   });
 }

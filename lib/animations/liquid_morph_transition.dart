@@ -2,15 +2,22 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 
+import 'desintegrar.dart';
+
 /// Transición líquida entre pantallas: la nueva aparece con fundido, crece
 /// de 0,94 a 1 y se enfoca (desenfoque de 8 a 0). La de atrás se desvanece
-/// un poco al quedar cubierta. Se registra en el tema
+/// un poco al quedar cubierta. Al cerrarse (botón atrás) se deshace en polvo
+/// como un chasquido (ver [Desintegrar]). Se registra en el tema
 /// (`pageTransitionsTheme`).
 class LiquidMorphPageTransitionsBuilder extends PageTransitionsBuilder {
   const LiquidMorphPageTransitionsBuilder();
 
   @override
   Duration get transitionDuration => const Duration(milliseconds: 380);
+
+  // Más larga al cerrar: el polvo necesita tiempo para verse volar.
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 800);
 
   @override
   Widget buildTransitions<T>(
@@ -45,26 +52,31 @@ class LiquidMorphTransition extends StatelessWidget {
       curve: Curves.easeOutCubic,
       reverseCurve: Curves.easeInCubic,
     );
-    return FadeTransition(
-      // La pantalla de atrás baja al 60 % mientras la cubren.
-      opacity: Tween(begin: 1.0, end: 0.6).animate(secondaryAnimation),
+    final quieto = MediaQuery.disableAnimationsOf(context);
+    return Desintegrar(
+      animacion: animation,
+      activo: !quieto,
       child: FadeTransition(
-        opacity: entrada,
-        child: ScaleTransition(
-          scale: Tween(begin: 0.94, end: 1.0).animate(entrada),
-          child: AnimatedBuilder(
-            animation: entrada,
-            child: child,
-            builder: (context, child) {
-              final sigma = 8 * (1 - entrada.value);
-              // Sin filtro en reposo: el desenfoque solo cuesta durante la
-              // transición.
-              if (sigma < 0.1) return child!;
-              return ImageFiltered(
-                imageFilter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-                child: child,
-              );
-            },
+        // La pantalla de atrás baja al 60 % mientras la cubren.
+        opacity: Tween(begin: 1.0, end: 0.6).animate(secondaryAnimation),
+        child: FadeTransition(
+          opacity: entrada,
+          child: ScaleTransition(
+            scale: Tween(begin: 0.94, end: 1.0).animate(entrada),
+            child: AnimatedBuilder(
+              animation: entrada,
+              child: child,
+              builder: (context, child) {
+                final sigma = 8 * (1 - entrada.value);
+                // Sin filtro en reposo: el desenfoque solo cuesta durante la
+                // transición.
+                if (sigma < 0.1) return child!;
+                return ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+                  child: child,
+                );
+              },
+            ),
           ),
         ),
       ),

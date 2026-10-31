@@ -1,3 +1,5 @@
+import 'genero.dart';
+
 enum TipoInstrumento { bateria, acordeon, bajo, guitarra }
 
 extension TipoInstrumentoExtension on TipoInstrumento {
@@ -8,13 +10,31 @@ extension TipoInstrumentoExtension on TipoInstrumento {
       case TipoInstrumento.bateria:
         return 'Batería';
       case TipoInstrumento.acordeon:
-        return 'Acordeón';
+        return _melodico.$2;
       case TipoInstrumento.bajo:
         return 'Bajo';
       case TipoInstrumento.guitarra:
         return 'Guitarra';
     }
   }
+
+  /// Emoji del instrumento en el juego.
+  String get emoji => switch (this) {
+    TipoInstrumento.bateria => '🥁',
+    TipoInstrumento.acordeon => _melodico.$1,
+    TipoInstrumento.guitarra => '🎸',
+    TipoInstrumento.bajo => '🎵',
+  };
+
+  // La pista "acordeon" lleva el instrumento melódico del género que se
+  // juega; batería, bajo y guitarra sirven para todos.
+  static (String, String) get _melodico => switch (generoActivo) {
+    Genero.vallenato => ('🪗', 'Acordeón'),
+    Genero.reggaeton => ('🎹', 'Sintetizador'),
+    Genero.rockPop => ('🎹', 'Teclado'),
+    Genero.salsa => ('🎺', 'Trompeta'),
+    Genero.popular => ('🎻', 'Violín'),
+  };
 
   static TipoInstrumento fromId(String value) {
     return TipoInstrumento.values.firstWhere(

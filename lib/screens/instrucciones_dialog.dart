@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../models/instrumento.dart';
 import '../theme.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
 import '../widgets/liquid_glass/liquid_glass_button.dart';
@@ -65,23 +66,26 @@ class InstruccionesDialog extends StatelessWidget {
                               ),
                             ],
                           ),
-                          const _Paso(
+                          _Paso(
                             numero: 2,
                             titulo: 'Los niveles',
                             icono: Icons.queue_music_rounded,
                             children: [
-                              Text(
+                              const Text(
                                 'Cada nivel tiene 4 instrumentos con fragmentos de 30 segundos:',
                               ),
-                              SizedBox(height: 10),
+                              const SizedBox(height: 10),
                               Wrap(
                                 spacing: 6,
                                 runSpacing: 6,
                                 children: [
-                                  _Etiqueta('🥁 Batería'),
-                                  _Etiqueta('🪗 Acordeón'),
-                                  _Etiqueta('🎸 Guitarra'),
-                                  _Etiqueta('🎵 Bajo'),
+                                  const _Etiqueta('🥁 Batería'),
+                                  _Etiqueta(
+                                    '${TipoInstrumento.acordeon.emoji} '
+                                    '${TipoInstrumento.acordeon.nombre}',
+                                  ),
+                                  const _Etiqueta('🎸 Guitarra'),
+                                  const _Etiqueta('🎵 Bajo'),
                                 ],
                               ),
                             ],

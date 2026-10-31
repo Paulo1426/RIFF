@@ -2,10 +2,14 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
-/// Cambio de pestaña "musical": la pantalla nueva entra deslizándose hacia el
-/// lado al que se va, con un pequeño rebote como un golpe de tambor, y una
-/// onda de ecualizador cruza la pantalla con el color de la pestaña. Con
-/// "reducir animaciones" del sistema queda solo el fundido.
+import 'desintegrar.dart';
+
+/// Cambio de pestaña "musical". Al avanzar, la pantalla nueva entra
+/// deslizándose, creciendo y apareciendo con un pequeño rebote como un golpe
+/// de tambor. Al regresar, la que sale se deshace en polvo (ver
+/// [Desintegrar]) y la nueva aparece encogiéndose a su tamaño. Una onda de
+/// ecualizador cruza la pantalla con el color de la pestaña. Con "reducir
+/// animaciones" del sistema queda solo el fundido.
 class TransicionMusical extends StatelessWidget {
   const TransicionMusical({
     super.key,
@@ -23,6 +27,8 @@ class TransicionMusical extends StatelessWidget {
   final Widget child;
 
   static const _duracion = Duration(milliseconds: 450);
+  // El polvo necesita algo más de tiempo para verse volar.
+  static const _duracionPolvo = Duration(milliseconds: 800);
 
   @override
   Widget build(BuildContext context) {
@@ -31,28 +37,45 @@ class TransicionMusical extends StatelessWidget {
       children: [
         AnimatedSwitcher(
           duration: _duracion,
+          reverseDuration: direccion < 0 && !quieto
+              ? _duracionPolvo
+              : _duracion,
           transitionBuilder: (hijo, animacion) {
             if (quieto) return FadeTransition(opacity: animacion, child: hijo);
-            // La que sale se va hacia el lado contrario (su animación corre
-            // de 1 a 0, así que termina en el desplazamiento inicial).
             final entra = hijo.key == child.key;
+            final atras = direccion < 0;
+            // La que sale al regresar se hace polvo: sin fundido ni movimiento.
+            final polvo = atras && !entra;
             final golpe = CurvedAnimation(
               parent: animacion,
               curve: Curves.easeOutBack,
             );
-            return FadeTransition(
-              opacity: CurvedAnimation(
-                parent: animacion,
-                curve: Curves.easeOut,
-              ),
-              child: SlideTransition(
-                position: Tween(
-                  begin: Offset((entra ? 0.08 : -0.08) * direccion, 0),
-                  end: Offset.zero,
-                ).animate(golpe),
-                child: ScaleTransition(
-                  scale: Tween(begin: 0.96, end: 1.0).animate(golpe),
-                  child: hijo,
+            // Misma estructura para la que entra y la que sale, así el
+            // contenido conserva su estado al pasar de una a otra.
+            return Desintegrar(
+              animacion: animacion,
+              activo: polvo,
+              child: FadeTransition(
+                opacity: polvo
+                    ? kAlwaysCompleteAnimation
+                    : CurvedAnimation(parent: animacion, curve: Curves.easeOut),
+                child: SlideTransition(
+                  // Al avanzar entra desde el lado al que se va y la otra
+                  // sale hacia el contrario (su animación corre de 1 a 0).
+                  position: Tween(
+                    begin: polvo || atras
+                        ? Offset.zero
+                        : Offset((entra ? 0.12 : -0.12) * direccion, 0),
+                    end: Offset.zero,
+                  ).animate(golpe),
+                  child: ScaleTransition(
+                    // Al avanzar crece; al regresar aparece encogiéndose.
+                    scale: Tween(
+                      begin: polvo ? 1.0 : (atras ? 1.06 : 0.92),
+                      end: 1.0,
+                    ).animate(golpe),
+                    child: hijo,
+                  ),
                 ),
               ),
             );

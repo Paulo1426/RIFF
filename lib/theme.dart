@@ -51,8 +51,8 @@ Color colorDificultad(Dificultad dificultad) => switch (dificultad) {
 Color colorGenero(Genero genero) => switch (genero) {
   Genero.vallenato => const Color(0xFFFF6B6B),
   Genero.reggaeton => const Color(0xFF2563EB),
-  Genero.rockPop => const Color(0xFF37474F),
-  Genero.salsa => const Color(0xFFFFB300),
+  Genero.rockPop => const Color(0xFF3FA7A0),
+  Genero.salsa => const Color(0xFFFF8C42),
   Genero.popular => const Color(0xFF8E24AA),
 };
 
@@ -60,8 +60,10 @@ Color colorGenero(Genero genero) => switch (genero) {
 /// manchas del fondo que no siguen al acento y la gota de la barra de abajo
 /// (en el menú y en las demás pestañas). Vallenato usa colores vivos y
 /// juguetones (coral, turquesa, azul cielo, amarillo sol y morado);
-/// reggaetón, azules de confianza (rey, cian, esmeralda y azul marino); el
-/// resto, los de la marca.
+/// reggaetón, azules de confianza (rey, cian, esmeralda y azul marino);
+/// rock / pop, tonos suaves y calmados (turquesa, salvia, celeste, durazno y
+/// lavanda); salsa, cálidos y juguetones (mandarina, miel, rosa, durazno y
+/// frambuesa); el resto, los de la marca.
 ({
   Color progreso,
   Color intro,
@@ -86,6 +88,22 @@ paletaGenero(Genero genero) => switch (genero) {
     mancha2: const Color(0xFF1E3A8A),
     barraMenu: const Color(0xFF7C3AED),
     barraSecciones: const Color(0xFF2563EB),
+  ),
+  Genero.rockPop => (
+    progreso: const Color(0xFF7FB38E),
+    intro: const Color(0xFF6BB8D6),
+    mancha1: const Color(0xFFF7B89A),
+    mancha2: const Color(0xFFB9A7E3),
+    barraMenu: const Color(0xFF3FA7A0),
+    barraSecciones: const Color(0xFFF29E7D),
+  ),
+  Genero.salsa => (
+    progreso: const Color(0xFFF9A826),
+    intro: const Color(0xFFFF6F91),
+    mancha1: const Color(0xFFFFD97D),
+    mancha2: const Color(0xFFFFAB91),
+    barraMenu: const Color(0xFFFF8C42),
+    barraSecciones: const Color(0xFFE0558A),
   ),
   _ => (
     progreso: AppColors.medio,

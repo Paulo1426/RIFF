@@ -5,7 +5,8 @@ import '../models/logros.dart';
 import '../theme.dart';
 import 'liquid_glass/liquid_glass_dialog.dart';
 
-/// Avisa que se consiguió [logro]. Vallenatólogo sale con una corona gigante.
+/// Avisa que se consiguió [logro]. La maestra del género (Vallenatólogo,
+/// Rey del perreo...) sale con una corona gigante.
 Future<void> mostrarInsignia(BuildContext context, Logro logro) {
   if (logro.dorada) {
     return showGeneralDialog<void>(
@@ -150,7 +151,7 @@ class _CoronaState extends State<_Corona> {
                       foregroundColor: AppColors.graphiteInk,
                     ),
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('¡Soy un Vallenatólogo!'),
+                    child: Text('¡Soy ${widget.logro.nombre}!'),
                   ),
                 ],
               ),

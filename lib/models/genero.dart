@@ -3,7 +3,7 @@
 enum Genero {
   vallenato('vallenato', 'Vallenato', '🥁🪗🎸', disponible: true),
   reggaeton('reggaeton', 'Reggaetón', '🎧🎤🔊', disponible: true),
-  rockPop('rock_pop', 'Rock / Pop', '🎸🥁🎤'),
+  rockPop('rock_pop', 'Rock / Pop', '🎸🥁🎤', disponible: true),
   salsa('salsa', 'Salsa', '🎺🪘🎹'),
   popular('popular', 'Popular', '🎸🎻🎺');
 

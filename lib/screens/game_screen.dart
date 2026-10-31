@@ -1317,12 +1317,7 @@ String formatearMiles(int valor) => valor.toString().replaceAllMapped(
   (_) => '.',
 );
 
-String _emojiDe(TipoInstrumento tipo) => switch (tipo) {
-  TipoInstrumento.bateria => '🥁',
-  TipoInstrumento.acordeon => '🪗',
-  TipoInstrumento.guitarra => '🎸',
-  TipoInstrumento.bajo => '🎵',
-};
+String _emojiDe(TipoInstrumento tipo) => tipo.emoji;
 
 /// Lo ganado al acertar, en la barra de arriba: aparece con un rebote junto a
 /// su nombre para que se entienda qué se ganó.
