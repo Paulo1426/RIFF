@@ -533,7 +533,11 @@ class _BandaMusicalState extends State<BandaMusical>
     duration: const Duration(milliseconds: 2400),
   )..repeat();
 
-  static const _instrumentos = ['🪗', '🥁', '🎸', '🎵'];
+  // Los instrumentos del género que se está jugando y una nota.
+  List<String> get _instrumentos => [
+    ...generoActivo.instrumentos.characters,
+    '🎵',
+  ];
 
   @override
   void dispose() {

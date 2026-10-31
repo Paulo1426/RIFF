@@ -138,6 +138,9 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
   // Tarjeta al frente: tiñe el fondo.
   int _frente = 0;
   final _carrusel = GlobalKey<CarruselGiratorioState>();
+  // Pestaña lateral tocada: la gota va hasta ella mientras gira el carrusel
+  // y vuelve al centro con el nombre nuevo.
+  int? _pestanaTocada;
   // Nivel e intros de cada género disponible (sin dato, sin línea).
   final _avance = <Genero, String>{};
 
@@ -203,7 +206,7 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
       ? colorGenero(Genero.values[index])
       : index == _iAleatorio
       ? colorAleatorio
-      : AppColors.medio;
+      : azulLogin;
 
   void _abrir(String titulo, Widget cuerpo, {Color? acento}) =>
       Navigator.of(context).push(
@@ -270,13 +273,13 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
       detalle: invitado
           ? 'Crea una cuenta para jugar en salas.'
           : 'Reta a hasta 5 amigos en el género que elijas. Con historial.',
-      color: AppColors.medio,
+      color: azulLogin,
       alFrente: alFrente,
       animar: moverse,
       bloqueado: invitado,
       onTap: invitado
           ? null
-          : () => _abrir('Salas', const SalasPanel(), acento: AppColors.medio),
+          : () => _abrir('Salas', const SalasPanel(), acento: azulLogin),
     );
   }
 
@@ -288,7 +291,7 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: LiquidGlassAppBar(
-          centerTitle: false,
+          centerTitle: true,
           title: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -320,9 +323,12 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
           colores: [
             for (final paso in [-1, 0, 1]) _color((_frente + paso) % _total),
           ],
-          currentIndex: 1,
+          currentIndex: _pestanaTocada ?? 1,
+          escalaInactivas: 0.8,
           onTap: (i) {
-            if (i != 1) _carrusel.currentState?.girar(i - 1);
+            if (i == 1) return;
+            setState(() => _pestanaTocada = i);
+            _carrusel.currentState?.girar(i - 1);
           },
         ),
         body: Column(
@@ -349,7 +355,10 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
                   anchoRelativo: 0.84,
                   proporcion: 1.3,
                   colorDe: _color,
-                  onCambio: (index) => setState(() => _frente = index),
+                  onCambio: (index) => setState(() {
+                    _frente = index;
+                    _pestanaTocada = null;
+                  }),
                   itemBuilder: (context, index, alFrente) => ConReflejo(
                     color: _color(index),
                     tarjeta: _cuadro(index, alFrente),
@@ -564,14 +573,15 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       clave: _claveMenu,
       titulo: '🎮 Menú principal',
       texto:
-          'Las tarjetas giran solas; también puedes deslizarlas. 🥁 Adivina '
+          'Las tarjetas giran solas; también puedes deslizarlas. '
+          '${widget.genero.instrumentos.characters.first} Adivina '
           'la canción: compra instrumentos con \$1.000.000 y adivina. '
           '🎧 Adivina la intro: se desbloquea al completar tu primer nivel. '
           'Las salas con amigos están en el menú de géneros.',
     ),
     PasoRecorrido(
       clave: _clavesPestanas[_pCancion],
-      titulo: '🥁 Canción',
+      titulo: '${widget.genero.instrumentos.characters.first} Canción',
       texto: 'Las dificultades y niveles de Adivina la canción.',
     ),
     PasoRecorrido(
@@ -1293,7 +1303,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           child: Scaffold(
             backgroundColor: Colors.transparent,
             appBar: LiquidGlassAppBar(
-              centerTitle: false,
+              // El logo RIFF del menú va centrado; los nombres de sección, a la izquierda.
+              centerTitle: _pestana == 0,
               // Ajustes no está en la barra de abajo: se vuelve con la flecha.
               leading: _pestana == _pAjustes
                   ? IconButton(

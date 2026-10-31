@@ -20,6 +20,7 @@ class LiquidGlassBottomNav extends StatefulWidget {
     this.colorMenu = AppColors.verde,
     this.colorSecciones = AppColors.signalOrange,
     this.colores,
+    this.escalaInactivas = 1,
   });
 
   final List<({IconData icon, String label})> items;
@@ -34,6 +35,9 @@ class LiquidGlassBottomNav extends StatefulWidget {
   // Un color por pestaña (gota e ícono); si está, manda sobre los dos de
   // arriba.
   final List<Color>? colores;
+  // Tamaño de las pestañas no activas (p. ej. 0.8 para que la del centro
+  // destaque).
+  final double escalaInactivas;
 
   @override
   State<LiquidGlassBottomNav> createState() => _LiquidGlassBottomNavState();
@@ -163,10 +167,12 @@ class _LiquidGlassBottomNavState extends State<LiquidGlassBottomNav> {
   );
 
   Widget _pestana(BuildContext context, TextTheme text, int i, bool activa) {
-    // Sobre la gota de color, ícono y texto en blanco; fuera, el tono de la
-    // pestaña si tiene color propio.
+    // Sobre la gota: blanco, u oscuro si la gota es clara (amarillos,
+    // celestes), para que se lea. Fuera, el tono de la pestaña si tiene color
+    // propio.
+    final gotaClara = _colorDe(i).computeLuminance() > 0.45;
     final color = activa
-        ? AppColors.paperWhite
+        ? (gotaClara ? AppColors.graphiteInk : AppColors.paperWhite)
         : widget.colores == null
         ? context.paleta.tintaSuave
         : context.paleta.tonoTexto(widget.colores![i]);
@@ -176,23 +182,30 @@ class _LiquidGlassBottomNavState extends State<LiquidGlassBottomNav> {
       child: InkWell(
         borderRadius: BorderRadius.circular(22),
         onTap: () => widget.onTap(i),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedScale(
-                duration: const Duration(milliseconds: 300),
-                scale: activa ? 1.12 : 1,
-                child: Icon(widget.items[i].icon, color: color),
-              ),
-              Text(
-                widget.items[i].label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: text.labelSmall?.copyWith(color: color),
-              ),
-            ],
+        child: AnimatedScale(
+          duration: const Duration(milliseconds: 300),
+          scale: activa ? 1 : widget.escalaInactivas,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedScale(
+                  duration: const Duration(milliseconds: 300),
+                  scale: activa ? 1.12 : 1,
+                  child: Icon(widget.items[i].icon, color: color),
+                ),
+                Text(
+                  widget.items[i].label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.labelSmall?.copyWith(
+                    color: color,
+                    fontWeight: activa ? FontWeight.w800 : null,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

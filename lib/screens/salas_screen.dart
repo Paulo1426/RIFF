@@ -15,6 +15,7 @@ import '../services/firebase_game_repository.dart';
 import '../theme.dart';
 import '../theme/liquid_glass_theme.dart';
 import '../widgets/con_reflejo.dart';
+import '../widgets/login_liquido.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
 import '../widgets/liquid_glass/liquid_glass_appbar.dart';
 import '../widgets/liquid_glass/liquid_glass_button.dart';
@@ -25,7 +26,10 @@ import 'carrusel_dificultades.dart';
 import 'game_screen.dart';
 import 'intros_screen.dart';
 
-const _colorSalas = AppColors.medio;
+// Azules del login: rey para el historial, intermedio para Adivina la
+// canción y celeste para las intros.
+const _colorSalas = azulLogin;
+const _colorCancion = Color(0xFF3B8BEB);
 
 String _nombreModo(ModoSala modo) => switch (modo) {
   ModoSala.contrarreloj => '⏱️ Contrarreloj · 10 min',
@@ -37,7 +41,7 @@ String _qrDeSala(String codigo) => 'riff:sala:$codigo';
 final _patronQr = RegExp(r'^riff:sala:([A-Z0-9]{6})$');
 
 Color _colorDe(Sala sala) =>
-    sala.tipo == TipoSala.intros ? AppColors.signalOrange : AppColors.verde;
+    sala.tipo == TipoSala.intros ? celesteLogin : _colorCancion;
 
 String _descripcion(Sala sala) =>
     '${sala.genero.nombre} · '
@@ -362,7 +366,7 @@ class _SobreFondo extends StatelessWidget {
 }
 
 Color _colorTipo(TipoSala tipo) =>
-    tipo == TipoSala.intros ? AppColors.signalOrange : AppColors.verde;
+    tipo == TipoSala.intros ? celesteLogin : _colorCancion;
 
 /// Tarjeta de un tipo de sala dentro del carrusel de la pestaña Salas:
 /// título, premios o precios y los botones para crear o unirse.
@@ -885,7 +889,7 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
     final text = Theme.of(context).textTheme;
     final intros = widget.tipo == TipoSala.intros;
     final sinFichas = intros && widget.fichas < precioCrearSalaIntros;
-    final acento = intros ? AppColors.signalOrange : AppColors.verde;
+    final acento = intros ? celesteLogin : _colorCancion;
     Widget titulo(String texto) => Padding(
       padding: const EdgeInsets.only(top: 16, bottom: 8),
       child: Text(texto, style: text.titleMedium),
