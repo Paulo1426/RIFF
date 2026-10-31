@@ -241,10 +241,12 @@ class FirebaseGameRepository {
     required ModoSala modo,
     required bool publica,
     required Genero genero,
+    bool aleatoria = false,
   }) async {
     final response = await _post({
       'action': 'crearSala',
       'genero': genero.id,
+      'aleatoria': aleatoria,
       'tipo': tipo.name,
       'modo': modo.name,
       'publica': publica,

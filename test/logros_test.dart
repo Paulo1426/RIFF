@@ -113,4 +113,22 @@ void main() {
     expect(_tiene(generales, 'Buen anfitrión'), isTrue);
     expect(_tiene(generales, 'Leyenda de RIFF'), isFalse);
   });
+
+  test('cada género lee sus propias estadísticas de salas', () {
+    final saldo = SaldoSalas.fromMap({
+      'fichas': 12,
+      'jugadas': 5,
+      'porGenero': {
+        'vallenato': {'jugadas': 3, 'ganadasCancion': 1},
+        'reggaeton': {'jugadas': 1},
+      },
+    });
+    expect(saldo.jugadas, 5);
+    expect(saldo.deGenero(Genero.vallenato).jugadas, 3);
+    expect(saldo.deGenero(Genero.vallenato).ganadas, 1);
+    expect(saldo.deGenero(Genero.reggaeton).jugadas, 1);
+    expect(saldo.deGenero(Genero.rockPop).jugadas, 0);
+    // Las fichas para gastar no son de ningún género.
+    expect(saldo.deGenero(Genero.vallenato).fichas, 0);
+  });
 }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../animations/liquid_shimmer.dart';
 import '../animations/refresco.dart';
+import '../models/genero.dart';
 import '../theme.dart';
 import 'liquid_glass/liquid_glass_card.dart';
 
@@ -112,7 +113,14 @@ class ReproductorCancion extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  // Tipografía del género que se juega (abre como pantalla aparte y no
+  // hereda el tema de su menú).
+  Widget build(BuildContext context) => Theme(
+    data: temaGenero(context, generoActivo),
+    child: Builder(builder: _reproductor),
+  );
+
+  Widget _reproductor(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return LayoutBuilder(
       builder: (context, espacio) {

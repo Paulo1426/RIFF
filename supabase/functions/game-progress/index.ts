@@ -1737,18 +1737,28 @@ function walletWrite(
   };
 }
 
-/// Varios incrementos en el saldo de un jugador en una sola escritura.
+/// Varios incrementos en el saldo de un jugador en una sola escritura. Las
+/// estadísticas suman al total y, si la sala es de un [genero] (no
+/// aleatoria), también a porGenero.{genero}; las fichas para gastar son un
+/// solo saldo.
 function walletStatsWrite(
   uid: string,
   incrementos: Record<string, number>,
+  genero: string | null,
 ): JsonObject {
+  const suma = (fieldPath: string, n: number) => ({
+    fieldPath,
+    increment: { integerValue: String(n) },
+  });
   return {
     update: { name: documentName(walletPath(uid)), fields: {} },
     updateMask: { fieldPaths: [] },
-    updateTransforms: Object.entries(incrementos).map(([campo, n]) => ({
-      fieldPath: campo,
-      increment: { integerValue: String(n) },
-    })),
+    updateTransforms: Object.entries(incrementos).flatMap(([campo, n]) => [
+      suma(campo, n),
+      ...(genero && campo !== "fichas"
+        ? [suma(`porGenero.${genero}.${campo}`, n)]
+        : []),
+    ]),
   };
 }
 
@@ -1858,6 +1868,7 @@ async function updateRoom<T>(
               tipo: final.tipo ?? "instrumentos",
               modo: final.modo ?? null,
               genero: final.genero ?? "vallenato",
+              aleatoria: final.aleatoria === true,
               ganadorNombre: ganador?.nombre ?? null,
               ganaste: jugador.uid === ganadorUid,
               puesto: puesto + 1,
@@ -1877,6 +1888,10 @@ async function updateRoom<T>(
               final.tipo === "intros",
               premios[jugador.uid] ?? 0,
             ),
+            // Una sala aleatoria solo cuenta en el progreso general.
+            final.aleatoria === true
+              ? null
+              : String(final.genero ?? "vallenato"),
           ),
         );
       }
@@ -1937,6 +1952,8 @@ async function createRoom(
           creadorUid: uid,
           // Quien se une juega las canciones de este género.
           genero: generoActual(),
+          // Elegida al azar: sus estadísticas solo suman al progreso general.
+          aleatoria: body.aleatoria === true,
           publica: body.publica,
           tipo,
           modo: body.modo,

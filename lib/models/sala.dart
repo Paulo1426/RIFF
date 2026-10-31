@@ -26,6 +26,7 @@ class SaldoSalas {
     this.fichasGanadas = 0,
     this.noRendirse = 0,
     this.podios = 0,
+    this.porGenero = const {},
   });
 
   final int fichas;
@@ -38,6 +39,14 @@ class SaldoSalas {
   final int noRendirse;
   // Veces que terminó entre los 3 primeros.
   final int podios;
+  // Las mismas estadísticas de las salas de cada género (id del servidor);
+  // las aleatorias solo cuentan en el total.
+  final Map<String, SaldoSalas> porGenero;
+
+  /// Estadísticas de las salas de [genero]; las fichas para gastar no son
+  /// de ningún género.
+  SaldoSalas deGenero(Genero genero) =>
+      porGenero[genero.id] ?? const SaldoSalas();
 
   int get ganadas => ganadasCancion + ganadasIntros;
   // Las victorias anteriores a contar partidas pueden superar a las jugadas.
@@ -55,6 +64,12 @@ class SaldoSalas {
       fichasGanadas: campo('fichasGanadas'),
       noRendirse: campo('noRendirse'),
       podios: campo('podios'),
+      porGenero: {
+        for (final MapEntry(:key, :value)
+            in (map?['porGenero'] as Map? ?? const {}).entries)
+          if (value is Map)
+            key as String: SaldoSalas.fromMap(Map<String, dynamic>.from(value)),
+      },
     );
   }
 }
@@ -108,6 +123,7 @@ class Sala {
     required this.ronda,
     required this.acertaronRonda,
     this.genero = Genero.vallenato,
+    this.aleatoria = false,
     this.finEn,
     this.ganadorUid,
     this.premios = const {},
@@ -120,6 +136,8 @@ class Sala {
   final ModoSala modo;
   // Las canciones de la sala salen de este género.
   final Genero genero;
+  // Creada como "Aleatorio": solo suma al progreso general.
+  final bool aleatoria;
   final int maxJugadores;
   final EstadoSala estado;
   // En orden de llegada.
@@ -168,6 +186,7 @@ class Sala {
       tipo: TipoSala.values.byName(map['tipo'] as String? ?? 'instrumentos'),
       modo: ModoSala.values.byName(map['modo'] as String),
       genero: Genero.deId(map['genero']),
+      aleatoria: map['aleatoria'] as bool? ?? false,
       maxJugadores: (map['maxJugadores'] as num?)?.toInt() ?? 5,
       estado: EstadoSala.values.byName(map['estado'] as String),
       jugadores: [
@@ -201,6 +220,7 @@ class HistorialSala {
     required this.jugadores,
     required this.terminadaEn,
     this.genero = Genero.vallenato,
+    this.aleatoria = false,
   });
 
   final String codigo;
@@ -208,6 +228,7 @@ class HistorialSala {
   final TipoSala tipo;
   final ModoSala? modo;
   final Genero genero;
+  final bool aleatoria;
   // null si nadie ganó (todos abandonaron o nadie acertó).
   final String? ganadorNombre;
   final bool ganaste;
@@ -221,6 +242,7 @@ class HistorialSala {
     tipo: TipoSala.values.asNameMap()[map['tipo']] ?? TipoSala.instrumentos,
     modo: ModoSala.values.asNameMap()[map['modo']],
     genero: Genero.deId(map['genero']),
+    aleatoria: map['aleatoria'] as bool? ?? false,
     ganadorNombre: map['ganadorNombre'] as String?,
     ganaste: map['ganaste'] as bool? ?? false,
     puesto: (map['puesto'] as num?)?.toInt() ?? 0,

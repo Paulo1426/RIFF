@@ -46,7 +46,7 @@ Color _colorDe(Sala sala) =>
     sala.tipo == TipoSala.intros ? celesteLogin : _colorCancion;
 
 String _descripcion(Sala sala) =>
-    '${sala.genero.nombre} · '
+    '${sala.aleatoria ? '🎲 ' : ''}${sala.genero.nombre} · '
     '${sala.tipo == TipoSala.intros ? '🎧 Intros' : '🥁 Adivina la canción'}'
     ' · ${_nombreModo(sala.modo)}';
 
@@ -153,18 +153,19 @@ class _SalasPanelState extends ConsumerState<SalasPanel> {
   }
 
   Future<void> _crear(TipoSala tipo) async {
-    final opciones = await showDialog<(ModoSala, bool, Genero)>(
+    final opciones = await showDialog<(ModoSala, bool, Genero, bool)>(
       context: context,
       builder: (_) => _DialogoCrearSala(tipo: tipo, fichas: _fichas),
     );
     if (opciones == null) return;
-    final (modo, publica, genero) = opciones;
+    final (modo, publica, genero, aleatoria) = opciones;
     await _ejecutar(
       () => _repo.crearSala(
         tipo: tipo,
         modo: modo,
         publica: publica,
         genero: genero,
+        aleatoria: aleatoria,
       ),
     );
   }
@@ -626,7 +627,7 @@ class _FilaHistorial extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${sala.genero.nombre} · '
+                  '${sala.aleatoria ? '🎲 ' : ''}${sala.genero.nombre} · '
                   '${sala.tipo == TipoSala.intros ? '🎧 Adivina la intro' : '🥁 Adivina la canción'}'
                   '${sala.modo == null ? '' : ' · ${_nombreModo(sala.modo!)}'}',
                   style: suave,
@@ -1022,9 +1023,12 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
                 color: azulLogin,
                 onPressed: sinFichas
                     ? null
-                    : () => Navigator.of(
-                        context,
-                      ).pop((_modo, _publica, _genero ?? _generoAlAzar())),
+                    : () => Navigator.of(context).pop((
+                        _modo,
+                        _publica,
+                        _genero ?? _generoAlAzar(),
+                        _genero == null,
+                      )),
                 icon: Icons.add_rounded,
                 label: 'Crear sala',
                 precio: intros ? '🎟️ $precioCrearSalaIntros' : null,

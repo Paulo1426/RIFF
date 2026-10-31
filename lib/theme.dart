@@ -50,20 +50,22 @@ Color colorDificultad(Dificultad dificultad) => switch (dificultad) {
 /// Color de cada género en el selector y en su menú.
 Color colorGenero(Genero genero) => switch (genero) {
   Genero.vallenato => const Color(0xFFFF6B6B),
-  Genero.reggaeton => const Color(0xFF2563EB),
-  Genero.rockPop => const Color(0xFF3FA7A0),
-  Genero.salsa => const Color(0xFFFF8C42),
-  Genero.popular => const Color(0xFF8E24AA),
+  Genero.reggaeton => const Color(0xFF00827C),
+  Genero.rockPop => const Color(0xFF007FFF),
+  Genero.salsa => const Color(0xFFF0E226),
+  Genero.popular => const Color(0xFF00B259),
 };
 
 /// Colores del menú de cada género: tarjetas de Progreso e Intro, las dos
 /// manchas del fondo que no siguen al acento y la gota de la barra de abajo
 /// (en el menú y en las demás pestañas). Vallenato usa colores vivos y
 /// juguetones (coral, turquesa, azul cielo, amarillo sol y morado);
-/// reggaetón, azules de confianza (rey, cian, esmeralda y azul marino);
-/// rock / pop, tonos suaves y calmados (turquesa, salvia, celeste, durazno y
-/// lavanda); salsa, cálidos y juguetones (mandarina, miel, rosa, durazno y
-/// frambuesa); el resto, los de la marca.
+/// reggaetón, abisal y bioluminiscente (verde azulado, alga profunda, aguamarina
+/// y lavanda);
+/// rock / pop, de cuento ilustrado (azul globo, rojo tejado, amarillo sol y
+/// tinta carbón); salsa, casete de neón (amarillo alta visibilidad sobre
+/// negro tinta y arena); popular, verde señal con azul medianoche y gris
+/// niebla. Cada género tiene la suya.
 ({
   Color progreso,
   Color intro,
@@ -82,38 +84,63 @@ paletaGenero(Genero genero) => switch (genero) {
     barraSecciones: const Color(0xFF845EF7),
   ),
   Genero.reggaeton => (
-    progreso: const Color(0xFF06B6D4),
-    intro: const Color(0xFF10B981),
-    mancha1: const Color(0xFF67E8F9),
-    mancha2: const Color(0xFF1E3A8A),
-    barraMenu: const Color(0xFF7C3AED),
-    barraSecciones: const Color(0xFF2563EB),
+    progreso: const Color(0xFF003734),
+    intro: const Color(0xFF4FB3AC),
+    mancha1: const Color(0xFFCBFFFC),
+    mancha2: const Color(0xFFFAD1FF),
+    barraMenu: const Color(0xFF00827C),
+    barraSecciones: const Color(0xFF003734),
   ),
   Genero.rockPop => (
-    progreso: const Color(0xFF7FB38E),
-    intro: const Color(0xFF6BB8D6),
-    mancha1: const Color(0xFFF7B89A),
-    mancha2: const Color(0xFFB9A7E3),
-    barraMenu: const Color(0xFF3FA7A0),
-    barraSecciones: const Color(0xFFF29E7D),
+    progreso: const Color(0xFF333333),
+    intro: const Color(0xFFEF3B2C),
+    mancha1: const Color(0xFFFFE600),
+    mancha2: const Color(0xFF007FFF),
+    barraMenu: const Color(0xFF007FFF),
+    barraSecciones: const Color(0xFFEF3B2C),
   ),
   Genero.salsa => (
-    progreso: const Color(0xFFF9A826),
-    intro: const Color(0xFFFF6F91),
-    mancha1: const Color(0xFFFFD97D),
-    mancha2: const Color(0xFFFFAB91),
-    barraMenu: const Color(0xFFFF8C42),
-    barraSecciones: const Color(0xFFE0558A),
+    progreso: const Color(0xFFD9D7CE),
+    intro: const Color(0xFF19181A),
+    mancha1: const Color(0xFFF0E226),
+    mancha2: const Color(0xFF19181A),
+    barraMenu: const Color(0xFFF0E226),
+    barraSecciones: const Color(0xFF19181A),
   ),
-  _ => (
-    progreso: AppColors.medio,
-    intro: AppColors.signalOrange,
-    mancha1: const Color(0xFFB8F2D0),
-    mancha2: AppColors.verde,
-    barraMenu: AppColors.verde,
-    barraSecciones: AppColors.signalOrange,
+  Genero.popular => (
+    progreso: const Color(0xFF162136),
+    intro: const Color(0xFF0073D3),
+    mancha1: const Color(0xFF00E05C),
+    mancha2: const Color(0xFFBFC7D9),
+    barraMenu: const Color(0xFF00B259),
+    barraSecciones: const Color(0xFF162136),
   ),
 };
+
+/// Títulos (barra, tarjetas, encabezados) con el color de [genero]; en modo
+/// claro, su tono legible. El texto corrido no cambia. Lo usan el menú del
+/// género y los reproductores.
+ThemeData temaGenero(BuildContext context, Genero genero) {
+  final tema = Theme.of(context);
+  final color = context.paleta.tonoTexto(colorGenero(genero));
+  final t = tema.textTheme;
+  TextStyle? tenir(TextStyle? estilo) => estilo?.copyWith(color: color);
+  return tema.copyWith(
+    textTheme: t.copyWith(
+      displayLarge: tenir(t.displayLarge),
+      displayMedium: tenir(t.displayMedium),
+      displaySmall: tenir(t.displaySmall),
+      headlineLarge: tenir(t.headlineLarge),
+      headlineMedium: tenir(t.headlineMedium),
+      headlineSmall: tenir(t.headlineSmall),
+      titleLarge: tenir(t.titleLarge),
+      titleMedium: tenir(t.titleMedium),
+    ),
+    appBarTheme: tema.appBarTheme.copyWith(
+      titleTextStyle: tenir(tema.appBarTheme.titleTextStyle),
+    ),
+  );
+}
 
 /// Tarjeta "Aleatorio" del selector de géneros.
 const colorAleatorio = Color(0xFF00BFA5);
@@ -239,7 +266,10 @@ ThemeData buildAppTheme({bool oscuro = false}) {
       s?.copyWith(letterSpacing: (s.letterSpacing ?? 0) + 0.4);
   TextStyle? peso(TextStyle? s, FontWeight w) =>
       aire(s)?.copyWith(fontWeight: w);
-  final textTheme = base
+  // Azul de la app (el del logo y el login): marino en claro, celeste en
+  // oscuro para que se lea sobre el fondo.
+  final titulos = oscuro ? const Color(0xFF9CC8F7) : const Color(0xFF123A7A);
+  final conTitulos = base
       .copyWith(
         displayLarge: pixel(base.displayLarge, 96),
         displayMedium: pixel(base.displayMedium, 72),
@@ -257,7 +287,12 @@ ThemeData buildAppTheme({bool oscuro = false}) {
         labelMedium: aire(base.labelMedium),
         labelSmall: aire(base.labelSmall),
       )
-      .apply(bodyColor: p.tinta, displayColor: p.tinta);
+      .apply(bodyColor: p.tinta, displayColor: titulos);
+  // Los títulos medianos también van en azul; cada género los tiñe con el suyo.
+  final textTheme = conTitulos.copyWith(
+    titleLarge: conTitulos.titleLarge?.copyWith(color: titulos),
+    titleMedium: conTitulos.titleMedium?.copyWith(color: titulos),
+  );
 
   // Controles con esquinas de 6px; tarjetas de 16px.
   final control = RoundedRectangleBorder(
@@ -293,7 +328,7 @@ ThemeData buildAppTheme({bool oscuro = false}) {
       centerTitle: true,
       elevation: 0,
       scrolledUnderElevation: 0,
-      titleTextStyle: pixel(base.titleLarge, 36),
+      titleTextStyle: pixel(base.titleLarge, 36).copyWith(color: titulos),
     ),
     cardTheme: CardThemeData(
       color: p.superficie.withValues(alpha: 0.82),

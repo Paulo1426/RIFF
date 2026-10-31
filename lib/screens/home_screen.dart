@@ -237,19 +237,23 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
       ? AppColors.oro
       : azulLogin;
 
-  void _abrir(String titulo, Widget cuerpo, {Color? acento}) =>
-      Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => LiquidBackground(
-            acento: acento,
-            child: Scaffold(
-              backgroundColor: Colors.transparent,
-              appBar: LiquidGlassAppBar(title: Text(titulo)),
-              body: cuerpo,
-            ),
-          ),
+  void _abrir(
+    String titulo,
+    Widget cuerpo, {
+    Color? acento,
+    List<Widget>? acciones,
+  }) => Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => LiquidBackground(
+        acento: acento,
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: LiquidGlassAppBar(title: Text(titulo), actions: acciones),
+          body: cuerpo,
         ),
-      );
+      ),
+    ),
+  );
 
   void _abrirAjustes() => _abrir(
     'Ajustes',
@@ -343,7 +347,21 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
       bloqueado: invitado,
       onTap: invitado
           ? null
-          : () => _abrir('Salas', const SalasPanel(), acento: azulLogin),
+          : () => _abrir(
+              'Salas',
+              const SalasPanel(),
+              acento: azulLogin,
+              // Fichas para crear y entrar a salas, al día.
+              acciones: [
+                StreamBuilder<SaldoSalas>(
+                  stream: ref.read(firebaseGameRepositoryProvider).saldoSalas(),
+                  initialData: _saldo,
+                  builder: (context, saldo) =>
+                      _Saldo('🎟️', saldo.data?.fichas ?? 0, 'fichas'),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
     );
   }
 
@@ -544,7 +562,7 @@ Future<void> _avisoAuriculares(BuildContext context) async {
   await showDialog<void>(
     context: context,
     builder: (context) => LiquidGlassDialog(
-      icon: const Icon(Icons.headphones_rounded, size: 64),
+      icon: const Icon(Icons.headphones_rounded, size: 64, color: azulLogin),
       title: const Text('Usa auriculares', textAlign: TextAlign.center),
       content: const Text(
         'Se recomienda usar cascos (audífonos o auriculares) para '
@@ -553,6 +571,10 @@ Future<void> _avisoAuriculares(BuildContext context) async {
       ),
       actions: [
         FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: azulLogin,
+            foregroundColor: AppColors.paperWhite,
+          ),
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Entendido'),
         ),
@@ -706,7 +728,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     try {
       final logrados = {
         for (final logro in logrosDe(
-          _saldo,
+          _saldo.deGenero(widget.genero),
           _avanceDe(estado.dificultades, _resumenIntros),
           widget.genero,
         ))
@@ -1329,7 +1351,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     final estado = _estado;
     // El fondo cubre también la barra para que el vidrio tenga qué mostrar.
     return Theme(
-      data: _temaGenero(),
+      data: temaGenero(context, widget.genero),
       child: LiquidBackground(
         acento: switch (_pestana) {
           _pCancion when estado != null => colorDificultad(
@@ -1402,7 +1424,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
                   key: const ValueKey('progreso'),
                   dificultades: estado?.dificultades ?? const [],
                   intros: _introsFuturo,
-                  saldo: _saldo,
+                  saldo: _saldo.deGenero(widget.genero),
                   esInvitado: widget.user.isAnonymous,
                 ),
                 _pAjustes => _PestanaConfiguracion(
@@ -1418,30 +1440,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  /// Títulos del menú (barra, tarjetas, encabezados) con el color del
-  /// género; en modo claro, su tono legible. El texto corrido no cambia.
-  ThemeData _temaGenero() {
-    final tema = Theme.of(context);
-    final color = context.paleta.tonoTexto(colorGenero(widget.genero));
-    final t = tema.textTheme;
-    TextStyle? tenir(TextStyle? estilo) => estilo?.copyWith(color: color);
-    return tema.copyWith(
-      textTheme: t.copyWith(
-        displayLarge: tenir(t.displayLarge),
-        displayMedium: tenir(t.displayMedium),
-        displaySmall: tenir(t.displaySmall),
-        headlineLarge: tenir(t.headlineLarge),
-        headlineMedium: tenir(t.headlineMedium),
-        headlineSmall: tenir(t.headlineSmall),
-        titleLarge: tenir(t.titleLarge),
-        titleMedium: tenir(t.titleMedium),
-      ),
-      appBarTheme: tema.appBarTheme.copyWith(
-        titleTextStyle: tenir(tema.appBarTheme.titleTextStyle),
       ),
     );
   }
@@ -1472,8 +1470,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       ),
     if ((_pestana == _pIntro || _pestana == _pProgreso) && _monedas != null)
       _Saldo('🪙', _monedas!, 'monedas'),
-    if (_pestana == _pProgreso && !widget.user.isAnonymous)
-      _Saldo('🎟️', _saldo.fichas, 'fichas'),
   ];
 
   void _cambiarPestana(int pestana) {
@@ -3628,7 +3624,19 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                                   crossAxisAlignment:
                                       CrossAxisAlignment.stretch,
                                   children: [
-                                    const Center(child: LogoCircular()),
+                                    const Stack(
+                                      clipBehavior: Clip.none,
+                                      children: [
+                                        Center(child: LogoCircular()),
+                                        // Dentro de la tarjeta: arriba no
+                                        // tapa su borde.
+                                        Positioned(
+                                          top: -12,
+                                          right: -12,
+                                          child: BotonTema(),
+                                        ),
+                                      ],
+                                    ),
                                     const SizedBox(height: 16),
                                     Text(
                                       _registering
@@ -3816,17 +3824,6 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                         ),
                       ),
                     ),
-                  ),
-                ),
-              ),
-              // Al final del Stack: encima del formulario, que ocupa toda la
-              // pantalla y si no se quedaría con los toques.
-              const SafeArea(
-                child: Align(
-                  alignment: Alignment.topRight,
-                  child: Padding(
-                    padding: EdgeInsets.all(8),
-                    child: BotonTema(),
                   ),
                 ),
               ),
