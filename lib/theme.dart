@@ -476,7 +476,8 @@ class _DiscoPainter extends CustomPainter {
   bool shouldRepaint(_DiscoPainter oldDelegate) => false;
 }
 
-/// Pantalla de carga con el disco girando.
+/// Pantalla de carga: los instrumentos del género que se juega saltan en ola
+/// sobre un ecualizador de su color.
 class Cargando extends StatelessWidget {
   const Cargando({super.key, this.texto = 'Cargando...'});
 
@@ -487,7 +488,7 @@ class Cargando extends StatelessWidget {
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const DiscoGirando(size: 72),
+        const _BandaCargando(),
         const SizedBox(height: 16),
         Text(
           texto,
@@ -500,7 +501,99 @@ class Cargando extends StatelessWidget {
   );
 }
 
-/// Cubre la pantalla con el disco girando mientras [cargando] es true.
+class _BandaCargando extends StatefulWidget {
+  const _BandaCargando();
+
+  @override
+  State<_BandaCargando> createState() => _BandaCargandoState();
+}
+
+class _BandaCargandoState extends State<_BandaCargando>
+    with SingleTickerProviderStateMixin {
+  late final _ciclo = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1200),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Quieta con "reducir animaciones".
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _ciclo.stop();
+    } else if (!_ciclo.isAnimating) {
+      _ciclo.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ciclo.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final instrumentos = generoActivo.instrumentos.characters.toList();
+    final color = colorGenero(generoActivo);
+    return ExcludeSemantics(
+      child: AnimatedBuilder(
+        animation: _ciclo,
+        builder: (context, _) {
+          final t = _ciclo.value;
+          // Salto de cada uno en su turno: 0 en reposo, 1 arriba.
+          double salto(int i) => max(0.0, sin(2 * pi * (t - i * 0.18)));
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final (i, emoji) in instrumentos.indexed)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: Transform.translate(
+                        offset: Offset(0, -14 * salto(i)),
+                        child: Transform.scale(
+                          scale: 1 + 0.15 * salto(i),
+                          child: Text(
+                            emoji,
+                            style: const TextStyle(fontSize: 40),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 28,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    for (var i = 0; i < 9; i++)
+                      Container(
+                        width: 6,
+                        height: 6 + 22 * sin(2 * pi * t + i * 0.9).abs(),
+                        margin: const EdgeInsets.symmetric(horizontal: 2),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.8),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Cubre la pantalla con la carga mientras [cargando] es true.
 class ConCarga extends StatelessWidget {
   const ConCarga({
     super.key,

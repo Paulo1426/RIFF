@@ -81,9 +81,8 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
       clave: _claveColeccion,
       titulo: '🎧 Tu colección',
       texto:
-          'Toca una carta, escucha la intro y escribe el nombre de la '
-          'canción. Si aciertas, suena la original. Tras 3 fallos seguidos '
-          'hay que esperar 30 segundos.',
+          'Toca una carta, escucha la intro y escribe la canción. Si '
+          'aciertas, suena la original.',
     ),
   ];
 
@@ -292,110 +291,41 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
     );
   }
 
-  /// Colección agrupada: una tarjeta por artista con cuántas canciones suyas
-  /// adivinaste, y "Por descubrir" (primera) con las que faltan: su artista
-  /// no se muestra para no delatar la respuesta.
-  Widget _grillaArtistas(EstadoIntros estado) {
-    final porArtista = <String, List<IntroAsignada>>{};
-    final pendientes = <IntroAsignada>[];
-    for (final intro in estado.intros) {
-      final artista = intro.artista;
-      if (intro.estado == EstadoIntro.completada && artista != null) {
-        // Colaboraciones y variantes del nombre van con su artista.
-        porArtista
-            .putIfAbsent(artistaConocido(artista) ?? artista, () => [])
-            .add(intro);
-      } else {
-        pendientes.add(intro);
-      }
-    }
-    final artistas = porArtista.keys.toList()
-      ..sort((a, b) => _claveOrden(a).compareTo(_claveOrden(b)));
-    final grupos = [
-      if (pendientes.isNotEmpty) (artista: null, intros: pendientes),
-      for (final artista in artistas)
-        (artista: artista, intros: porArtista[artista]!),
+  /// Colección: las cartas por adivinar primero (en el orden en que
+  /// salieron) y después las descubiertas en orden alfabético por título.
+  Widget _grillaCartas(EstadoIntros estado) {
+    final pendientes = [
+      for (final intro in estado.intros)
+        if (intro.estado != EstadoIntro.completada || intro.titulo == null)
+          intro,
     ];
+    final descubiertas = [
+      for (final intro in estado.intros)
+        if (intro.estado == EstadoIntro.completada && intro.titulo != null)
+          intro,
+    ]..sort((a, b) => _claveOrden(a.titulo!).compareTo(_claveOrden(b.titulo!)));
+    final cartas = [...pendientes, ...descubiertas];
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
       sliver: SliverGrid.builder(
         gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 180,
-          childAspectRatio: 0.95,
+          maxCrossAxisExtent: 140,
+          childAspectRatio: 0.62,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
         ),
-        itemCount: grupos.length,
-        itemBuilder: (context, index) => _TarjetaArtista(
-          artista: grupos[index].artista,
-          cantidad: grupos[index].intros.length,
-          onTap: () => _verGrupo(grupos[index].artista, grupos[index].intros),
-        ),
+        itemCount: cartas.length,
+        itemBuilder: (context, index) {
+          final intro = cartas[index];
+          final portada = _portadas[intro.id];
+          return _TarjetaIntro(
+            intro: intro,
+            portada: portada == null ? null : FileImage(portada),
+            onTap: () => _abrir(intro),
+          );
+        },
       ),
     );
-  }
-
-  /// Ventana con las cartas (y portadas) de un artista o de las pendientes.
-  Future<void> _verGrupo(String? artista, List<IntroAsignada> intros) async {
-    final elegida = await showModalBottomSheet<IntroAsignada>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * 0.8,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-          child: LiquidGlassCard(
-            opacity: 0.85,
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  artista ?? 'Por descubrir',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                Text(
-                  _cantidadTexto(artista, intros.length),
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: context.paleta.tintaSuave,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Flexible(
-                  child: GridView.builder(
-                    shrinkWrap: true,
-                    gridDelegate:
-                        const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 140,
-                          childAspectRatio: 0.62,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                    itemCount: intros.length,
-                    itemBuilder: (context, index) {
-                      final intro = intros[index];
-                      final portada = _portadas[intro.id];
-                      return _TarjetaIntro(
-                        intro: intro,
-                        portada: portada == null ? null : FileImage(portada),
-                        onTap: () => Navigator.of(context).pop(intro),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-    if (elegida != null && mounted) await _abrir(elegida);
   }
 
   Widget _cuerpo(EstadoIntros? estado) => _error != null
@@ -441,7 +371,7 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
                         ),
                       )
                     else
-                      _grillaArtistas(estado),
+                      _grillaCartas(estado),
                   ],
                 ),
               ),
@@ -476,10 +406,6 @@ Color colorArtista(String? artista) {
   return HSLColor.fromAHSL(1, (hash % 360).toDouble(), 0.55, 0.82).toColor();
 }
 
-String _cantidadTexto(String? artista, int cantidad) => artista == null
-    ? '$cantidad por adivinar'
-    : '$cantidad ${cantidad == 1 ? 'canción' : 'canciones'}';
-
 /// Orden alfabético sin distinguir mayúsculas ni tildes (la ñ tras la n).
 String _claveOrden(String texto) => texto
     .toLowerCase()
@@ -489,83 +415,6 @@ String _claveOrden(String texto) => texto
     .replaceAll(RegExp('[óòö]'), 'o')
     .replaceAll(RegExp('[úùü]'), 'u')
     .replaceAll('ñ', 'n~');
-
-/// Tarjeta de un artista en la colección (o de las intros por descubrir).
-class _TarjetaArtista extends StatelessWidget {
-  const _TarjetaArtista({
-    required this.artista,
-    required this.cantidad,
-    required this.onTap,
-  });
-
-  // null: intros que aún no adivinas.
-  final String? artista;
-  final int cantidad;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    final artista = this.artista;
-    // Mismo color por artista que sus cartas; texto oscuro porque es claro.
-    final fondo = artista == null ? _colorIntros : colorArtista(artista);
-    final tinta = artista == null
-        ? AppColors.paperWhite
-        : AppColors.graphiteInk;
-    return Semantics(
-      button: true,
-      label:
-          '${artista ?? 'Por descubrir'}, ${_cantidadTexto(artista, cantidad)}',
-      excludeSemantics: true,
-      child: Material(
-        color: fondo,
-        borderRadius: BorderRadius.circular(20),
-        clipBehavior: Clip.antiAlias,
-        elevation: 2,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            // Con letra grande o tarjeta chica, el contenido se achica en vez
-            // de desbordarse.
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 156),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      artista == null
-                          ? Icons.help_outline_rounded
-                          : Icons.mic_external_on_rounded,
-                      size: 36,
-                      color: tinta,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      artista ?? 'Por descubrir',
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: text.titleSmall?.copyWith(color: tinta),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _cantidadTexto(artista, cantidad),
-                      textAlign: TextAlign.center,
-                      style: text.bodySmall?.copyWith(color: tinta),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _TarjetaIntro extends StatelessWidget {
   const _TarjetaIntro({

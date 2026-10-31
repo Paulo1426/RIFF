@@ -154,7 +154,15 @@ class _RecorridoState extends State<_Recorrido> {
                   width: ancho,
                   top: abajo ? zona.bottom + 12 : null,
                   bottom: abajo ? null : pantalla.height - zona.top + 12,
-                  child: burbuja,
+                  child: ConstrainedBox(
+                    // Nunca más alta que el espacio que le queda en pantalla.
+                    constraints: BoxConstraints(
+                      maxHeight: abajo
+                          ? pantalla.height - margenes.bottom - zona.bottom - 20
+                          : zona.top - margenes.top - 20,
+                    ),
+                    child: burbuja,
+                  ),
                 )
               else
                 Positioned.fromRect(
@@ -248,7 +256,12 @@ class _Burbuja extends StatelessWidget {
             children: [
               Text(titulo, style: text.titleMedium),
               const SizedBox(height: 6),
-              Text(texto, style: text.bodyMedium),
+              // Con letra grande el texto se desplaza en vez de salirse.
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Text(texto, style: text.bodyMedium),
+                ),
+              ),
               const SizedBox(height: 8),
               Text(
                 '$numero de $total',

@@ -79,4 +79,42 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Primero'), findsNothing);
   });
+
+  testWidgets('un texto largo en teléfono chico no se sale de la pantalla', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final arriba = GlobalKey();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => Column(
+              children: [
+                SizedBox(key: arriba, height: 60, width: 60),
+                TextButton(
+                  onPressed: () => mostrarRecorrido(context, [
+                    PasoRecorrido(
+                      clave: arriba,
+                      titulo: 'Largo',
+                      texto: 'Muchas palabras para llenar la burbuja. ' * 20,
+                    ),
+                  ]),
+                  child: const Text('Abrir'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Abrir'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    // El botón sigue a la vista dentro de la pantalla.
+    final boton = tester.getRect(find.text('¡Listo!'));
+    expect(boton.bottom, lessThanOrEqualTo(568));
+  });
 }

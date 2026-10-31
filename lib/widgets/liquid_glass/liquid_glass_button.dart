@@ -13,6 +13,7 @@ enum LiquidGlassButtonVariant { primary, secondary }
 ///
 /// - [LiquidGlassButtonVariant.primary]: naranja.
 /// - [LiquidGlassButtonVariant.secondary]: verde.
+/// - [color]: otro color de fondo (p. ej. los azules del login en Salas).
 class LiquidGlassButton extends StatefulWidget {
   const LiquidGlassButton({
     super.key,
@@ -21,6 +22,7 @@ class LiquidGlassButton extends StatefulWidget {
     this.icon,
     this.variant = LiquidGlassButtonVariant.primary,
     this.precio,
+    this.color,
   });
 
   // null deshabilita el botón.
@@ -30,6 +32,8 @@ class LiquidGlassButton extends StatefulWidget {
   // Costo resaltado en una píldora al final del botón (p. ej. "🎟️ 10").
   final String? precio;
   final LiquidGlassButtonVariant variant;
+  // Si está, reemplaza el color de la variante.
+  final Color? color;
 
   @override
   State<LiquidGlassButton> createState() => _LiquidGlassButtonState();
@@ -44,14 +48,21 @@ class _LiquidGlassButtonState extends State<LiquidGlassButton> {
   Widget build(BuildContext context) {
     final activo = widget.onPressed != null;
     final primario = widget.variant == LiquidGlassButtonVariant.primary;
+    final propio = widget.color;
     final color = !activo
         ? context.paleta.borde
-        : primario
-        ? LiquidGlass.naranjaGlass
-        : AppColors.verde.withValues(alpha: 0.9);
-    // Texto oscuro sobre verde: el blanco no da contraste suficiente.
+        : propio ??
+              (primario
+                  ? LiquidGlass.naranjaGlass
+                  : AppColors.verde.withValues(alpha: 0.9));
+    // Texto oscuro sobre verde o sobre un color propio claro: el blanco no da
+    // contraste suficiente.
     final colorTexto = !activo
         ? context.paleta.tintaSuave
+        : propio != null
+        ? (propio.computeLuminance() > 0.45
+              ? AppColors.graphiteInk
+              : AppColors.paperWhite)
         : primario
         ? AppColors.paperWhite
         : AppColors.graphiteInk;

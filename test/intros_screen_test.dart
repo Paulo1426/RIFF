@@ -36,6 +36,13 @@ class _RepositorioFalso extends FirebaseGameRepository {
         'artista': 'Artista',
       },
       {'id': 'cancion-03', 'numero': 2, 'estado': 'desbloqueada'},
+      {
+        'id': 'cancion-05',
+        'numero': 3,
+        'estado': 'completada',
+        'titulo': 'Abre la puerta',
+        'artista': 'Otro',
+      },
     ],
   });
 }
@@ -80,21 +87,17 @@ void main() {
       await tester.pump();
       expect(tester.takeException(), isNull);
       expect(find.text('7'), findsOneWidget);
-      // La colección agrupa por artista; las sin adivinar van aparte.
-      expect(find.text('Por descubrir'), findsOneWidget);
-      expect(find.text('1 por adivinar'), findsOneWidget);
-      expect(find.text('Artista'), findsOneWidget);
-      expect(find.text('1 canción'), findsOneWidget);
+      // Las cartas salen directo: la descubierta con su título.
       expect(find.textContaining('Quedan 43'), findsOneWidget);
       expect(find.text('Sacar carta · 🪙 1'), findsOneWidget);
-
-      // Al tocar el artista se ven sus cartas, sin desbordes.
-      await tester.tap(find.text('Artista'));
-      // El fondo líquido se anima sin fin; pumpAndSettle nunca terminaría.
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump(const Duration(milliseconds: 400));
-      expect(tester.takeException(), isNull);
       expect(find.textContaining('Una canción'), findsOneWidget);
+      // Descubiertas en orden alfabético, aunque "Una" salió primero.
+      final abre = tester.getTopLeft(find.text('Abre la puerta'));
+      final una = tester.getTopLeft(find.textContaining('Una canción'));
+      expect(
+        abre.dy < una.dy || (abre.dy == una.dy && abre.dx < una.dx),
+        isTrue,
+      );
     });
   }
 }

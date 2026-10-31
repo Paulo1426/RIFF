@@ -30,6 +30,8 @@ import 'intros_screen.dart';
 // canción y celeste para las intros.
 const _colorSalas = azulLogin;
 const _colorCancion = Color(0xFF3B8BEB);
+// Botones: crear en azul del login, unirse en gris claro.
+const _colorUnirse = Color(0xFFE3E7EC);
 
 String _nombreModo(ModoSala modo) => switch (modo) {
   ModoSala.contrarreloj => '⏱️ Contrarreloj · 10 min',
@@ -114,12 +116,8 @@ class _SalasPanelState extends ConsumerState<SalasPanel> {
             clave: _claveCarrusel,
             titulo: '🏆 Salas',
             texto:
-                'Desliza entre 🥁 Adivina la canción (gratis; los 3 primeros '
-                'ganan fichas 10/7/3) y 🎧 Adivina la intro (crearla cuesta '
-                '$precioCrearSalaIntros fichas y entrar '
-                '$precioEntrarSalaIntros). En cada una puedes crear una sala, '
-                'unirte con código o QR o entrar a una pública. Empieza cuando '
-                'todos marcan "Listo".',
+                'Elige 🥁 Canción (gratis) o 🎧 Intro (con fichas 🎟️). Crea '
+                'una sala, únete con código o QR, o entra a una pública.',
           ),
         ],
       ),
@@ -421,6 +419,7 @@ class _TarjetaTipoSala extends StatelessWidget {
                   ],
                   const SizedBox(height: 16),
                   LiquidGlassButton(
+                    color: azulLogin,
                     onPressed: onCrear,
                     icon: Icons.add_rounded,
                     label: 'Crear sala',
@@ -428,7 +427,7 @@ class _TarjetaTipoSala extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   LiquidGlassButton(
-                    variant: LiquidGlassButtonVariant.secondary,
+                    color: _colorUnirse,
                     onPressed: onUnirseConCodigo,
                     icon: Icons.qr_code_rounded,
                     label: 'Unirse con código o QR',
@@ -773,7 +772,14 @@ class _DialogoCodigoState extends State<_DialogoCodigo> {
         onPressed: () => Navigator.of(context).pop(),
         child: const Text('Cancelar'),
       ),
-      FilledButton(onPressed: _unirse, child: const Text('Unirse')),
+      FilledButton(
+        style: FilledButton.styleFrom(
+          backgroundColor: _colorUnirse,
+          foregroundColor: AppColors.graphiteInk,
+        ),
+        onPressed: _unirse,
+        child: const Text('Unirse'),
+      ),
     ],
   );
 }
@@ -1013,6 +1019,7 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
               ),
               const SizedBox(height: 24),
               LiquidGlassButton(
+                color: azulLogin,
                 onPressed: sinFichas
                     ? null
                     : () => Navigator.of(

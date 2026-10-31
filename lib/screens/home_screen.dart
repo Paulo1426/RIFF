@@ -598,6 +598,9 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   // Pestaña Canción: false muestra el carrusel de dificultades; true, la
   // tarjeta con todos los niveles de la seleccionada.
   bool _nivelesAbiertos = false;
+  // Sentido de la transición entre dificultades y niveles: 1 al abrir, -1 al
+  // volver, 0 sin animación (al entrar a la pestaña).
+  int _direccionNiveles = 0;
   // Barra inferior: 0 menú, 1 Adivina la canción, 2 Adivina la intro,
   // 3 progreso, 4 configuración. Las salas están en el selector de géneros.
   int _pestana = 0;
@@ -631,12 +634,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       clave: _claveMenu,
       titulo: '🎮 Menú principal',
       texto:
-          'Las tarjetas giran solas; también puedes deslizarlas. '
-          '${widget.genero.instrumentos.characters.first} Adivina '
-          'la canción: compra instrumentos con \$1.000.000 y adivina. '
-          '🎧 Adivina la intro: se desbloquea al completar tu primer nivel. '
-          'Con el botón de arriba a la derecha vuelves a elegir género; '
-          'ahí también están las salas con amigos.',
+          'Desliza las tarjetas para elegir modo. Con el botón de arriba a '
+          'la derecha vuelves a los géneros y a las salas.',
     ),
     PasoRecorrido(
       clave: _clavesPestanas[_pCancion],
@@ -681,10 +680,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           clave: _claveDificultades,
           titulo: '🎚️ Dificultades y niveles',
           texto:
-              'Desliza para ver Fácil, Media y Avanzada. Completa sus 5 '
-              'niveles para desbloquear la siguiente. Cada nivel que ganas '
-              'por primera vez te da monedas 🪙 para Adivina la intro: '
-              'Fácil 2, Media 3 y Avanzada 4.',
+              'Desliza entre Fácil, Media y Avanzada. Completa sus 5 niveles '
+              'para abrir la siguiente y gana monedas 🪙 para las intros.',
         ),
       ],
     );
@@ -1355,7 +1352,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
               widget.onCambiarGenero();
               // Desde los niveles se vuelve primero a las dificultades.
             } else if (_pestana == _pCancion && _nivelesAbiertos) {
-              setState(() => _nivelesAbiertos = false);
+              _cerrarNiveles();
             } else {
               _cambiarPestana(0);
             }
@@ -1368,7 +1365,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
                   ? IconButton(
                       tooltip: 'Volver a las dificultades',
                       icon: const Icon(Icons.arrow_back_rounded),
-                      onPressed: () => setState(() => _nivelesAbiertos = false),
+                      onPressed: _cerrarNiveles,
                     )
                   : null,
               title: _tituloBarra(estado),
@@ -1485,6 +1482,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       _direccion = pestana == _pestana ? 0 : (pestana > _pestana ? 1 : -1);
       _pestana = pestana;
       _nivelesAbiertos = false;
+      _direccionNiveles = 0;
       // Progreso se vuelve a pedir al abrir la pestaña, para que esté al día.
       if (pestana == _pProgreso) {
         _introsFuturo = _estadoIntros()
@@ -1590,6 +1588,11 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     ),
   );
 
+  void _cerrarNiveles() => setState(() {
+    _nivelesAbiertos = false;
+    _direccionNiveles = -1;
+  });
+
   Widget _pestanaCancion(EstadoJuegoRemoto? estado) {
     if (_esperandoProgreso() case final espera?) return espera;
     return _PanelDificultades(
@@ -1601,9 +1604,11 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       nivelesDe: _nivelesDe,
       abierta: _nivelesAbiertos,
       onCambio: (dificultad) => setState(() => _seleccionada = dificultad),
+      direccion: _direccionNiveles,
       onAbrir: (dificultad) => setState(() {
         _seleccionada = dificultad;
         _nivelesAbiertos = true;
+        _direccionNiveles = 1;
       }),
       onJugar: _jugar,
       onRefresh: _cargar,
@@ -2923,6 +2928,7 @@ class _PanelDificultades extends StatelessWidget {
     required this.esInvitado,
     required this.offlineMode,
     required this.abierta,
+    required this.direccion,
     required this.onCambio,
     required this.onAbrir,
     required this.onJugar,
@@ -2931,6 +2937,8 @@ class _PanelDificultades extends StatelessWidget {
 
   final EstadoJuegoRemoto estado;
   final bool abierta;
+  // 1 al abrir los niveles, -1 al volver, 0 sin animación.
+  final int direccion;
   final ValueChanged<Dificultad> onAbrir;
   final Dificultad seleccionada;
   final List<NivelAsignado> Function(Dificultad) nivelesDe;
@@ -2967,7 +2975,17 @@ class _PanelDificultades extends StatelessWidget {
             bottom: !esInvitado,
             child: Padding(
               padding: const EdgeInsets.only(top: 12),
-              child: abierta ? _niveles() : _carrusel(dificultades),
+              // Como al cambiar de pestaña: los niveles entran deslizándose y
+              // creciendo; al volver se deshacen en polvo.
+              child: TransicionMusical(
+                pestana: abierta ? 1 : 0,
+                direccion: direccion,
+                color: colorDificultad(seleccionada),
+                child: KeyedSubtree(
+                  key: ValueKey(abierta),
+                  child: abierta ? _niveles() : _carrusel(dificultades),
+                ),
+              ),
             ),
           ),
         ),
