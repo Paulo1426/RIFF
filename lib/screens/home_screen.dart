@@ -291,18 +291,12 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: LiquidGlassAppBar(
-          centerTitle: true,
-          title: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Image.asset(
-                'lib/assets/images/logo/riff_logo.png',
-                height: 48,
-                excludeFromSemantics: true,
-              ),
-              const SizedBox(width: 10),
-              const Text('RIFF'),
-            ],
+          centerTitle: false,
+          title: // Solo el logo, a la izquierda; ya dice RIFF.
+          Image.asset(
+            'lib/assets/images/logo/riff_logo.png',
+            height: 56,
+            semanticLabel: 'RIFF',
           ),
           actions: [
             IconButton(
@@ -577,7 +571,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           '${widget.genero.instrumentos.characters.first} Adivina '
           'la canción: compra instrumentos con \$1.000.000 y adivina. '
           '🎧 Adivina la intro: se desbloquea al completar tu primer nivel. '
-          'Las salas con amigos están en el menú de géneros.',
+          'Con el botón de arriba a la derecha vuelves a elegir género; '
+          'ahí también están las salas con amigos.',
     ),
     PasoRecorrido(
       clave: _clavesPestanas[_pCancion],
@@ -600,7 +595,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       clave: _clavesPestanas[_pAjustes],
       titulo: '⚙️ Ajustes',
       texto:
-          'Desde este botón: instrucciones, música del menú, modo oscuro, '
+          'Instrucciones, música del menú, modo oscuro, '
           'reiniciar el progreso y cerrar sesión.',
     ),
   ];
@@ -1303,26 +1298,12 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           child: Scaffold(
             backgroundColor: Colors.transparent,
             appBar: LiquidGlassAppBar(
-              // El logo RIFF del menú va centrado; los nombres de sección, a la izquierda.
-              centerTitle: _pestana == 0,
-              // Ajustes no está en la barra de abajo: se vuelve con la flecha.
-              leading: _pestana == _pAjustes
-                  ? IconButton(
-                      tooltip: 'Volver al menú',
-                      icon: const Icon(Icons.arrow_back_rounded),
-                      onPressed: () => _cambiarPestana(0),
-                    )
-                  : _pestana == _pCancion && _nivelesAbiertos
+              centerTitle: false,
+              leading: _pestana == _pCancion && _nivelesAbiertos
                   ? IconButton(
                       tooltip: 'Volver a las dificultades',
                       icon: const Icon(Icons.arrow_back_rounded),
                       onPressed: () => setState(() => _nivelesAbiertos = false),
-                    )
-                  : _pestana == 0
-                  ? IconButton(
-                      tooltip: 'Cambiar de género',
-                      icon: const Icon(Icons.arrow_back_rounded),
-                      onPressed: widget.onCambiarGenero,
                     )
                   : null,
               title: _tituloBarra(estado),
@@ -1339,6 +1320,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
                 (icon: Icons.music_note_rounded, label: 'Canción'),
                 (icon: Icons.headphones_rounded, label: 'Intro'),
                 (icon: Icons.insights_rounded, label: 'Progreso'),
+                (icon: Icons.settings_rounded, label: 'Ajustes'),
               ],
             ),
             body: TransicionMusical(
@@ -1409,30 +1391,22 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     _pIntro => const Text('Adivina la intro'),
     _pProgreso => const Text('Progreso'),
     _pAjustes => const Text('Ajustes'),
-    _ => Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Image.asset(
-          'lib/assets/images/logo/riff_logo.png',
-          height: 48,
-          // El nombre ya va escrito al lado.
-          excludeFromSemantics: true,
-        ),
-        const SizedBox(width: 10),
-        const Text('RIFF'),
-      ],
+    _ => // Solo el logo, a la izquierda; ya dice RIFF.
+    Image.asset(
+      'lib/assets/images/logo/riff_logo.png',
+      height: 56,
+      semanticLabel: 'RIFF',
     ),
   };
 
   /// Monedas 🪙 en Intro y Progreso; fichas 🎟️ en Salas y Progreso.
   List<Widget> _accionesBarra() => [
-    // Ajustes solo se abre desde la barra de arriba del menú principal.
+    // Desde el menú se vuelve a la selección de género (Ajustes está abajo).
     if (_pestana == 0)
       IconButton(
-        key: _clavesPestanas[_pAjustes],
-        tooltip: 'Ajustes',
-        icon: const Icon(Icons.settings_rounded),
-        onPressed: () => _cambiarPestana(_pAjustes),
+        tooltip: 'Elegir género',
+        icon: const Icon(Icons.apps_rounded),
+        onPressed: widget.onCambiarGenero,
       ),
     if ((_pestana == _pIntro || _pestana == _pProgreso) && _monedas != null)
       _Saldo('🪙', _monedas!, 'monedas'),
