@@ -137,7 +137,8 @@ class _BienvenidaLoginState extends State<BienvenidaLogin>
     with SingleTickerProviderStateMixin {
   late final _anim = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1600),
+    // Más larga: es la única señal de que la sesión se inició.
+    duration: const Duration(milliseconds: 2800),
   )..forward().whenComplete(() => widget.onFin());
 
   @override

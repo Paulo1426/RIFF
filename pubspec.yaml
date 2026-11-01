@@ -79,6 +79,9 @@ flutter:
   assets:
     - lib/assets/images/logo/
     - lib/assets/audio/menu/
+    # Manrope y Jersey 10 dentro de la app: google_fonts las toma de aquí y no
+    # las descarga al abrir.
+    - lib/assets/fonts/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

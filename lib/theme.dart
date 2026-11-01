@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'animations/ciclo_lento.dart';
 import 'models/genero.dart';
 import 'models/logros.dart';
 import 'models/nivel.dart';
@@ -553,22 +554,17 @@ class _BandaCargando extends StatefulWidget {
   State<_BandaCargando> createState() => _BandaCargandoState();
 }
 
-class _BandaCargandoState extends State<_BandaCargando>
-    with SingleTickerProviderStateMixin {
-  late final _ciclo = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 1200),
-  );
+class _BandaCargandoState extends State<_BandaCargando> {
+  // Reloj compartido de 30 cuadros: se ve igual y dibuja la mitad o menos.
+  final _ciclo = CicloLento(periodo: const Duration(milliseconds: 1200));
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Quieta con "reducir animaciones".
-    if (MediaQuery.disableAnimationsOf(context)) {
-      _ciclo.stop();
-    } else if (!_ciclo.isAnimating) {
-      _ciclo.repeat();
-    }
+    // Quieta con "reducir animaciones" o con la pantalla tapada por otra.
+    _ciclo.activo =
+        !MediaQuery.disableAnimationsOf(context) &&
+        TickerMode.valuesOf(context).enabled;
   }
 
   @override
@@ -682,12 +678,18 @@ class BandaMusical extends StatefulWidget {
   State<BandaMusical> createState() => _BandaMusicalState();
 }
 
-class _BandaMusicalState extends State<BandaMusical>
-    with SingleTickerProviderStateMixin {
-  late final _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 2400),
-  )..repeat();
+class _BandaMusicalState extends State<BandaMusical> {
+  // Reloj compartido de 30 cuadros: se ve igual y dibuja la mitad o menos.
+  final _controller = CicloLento(periodo: const Duration(milliseconds: 2400));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Quieta con "reducir animaciones" o con la pantalla tapada por otra.
+    _controller.activo =
+        !MediaQuery.disableAnimationsOf(context) &&
+        TickerMode.valuesOf(context).enabled;
+  }
 
   // Los instrumentos del género que se está jugando y una nota.
   List<String> get _instrumentos => [

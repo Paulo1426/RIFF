@@ -1,7 +1,9 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
 import 'providers/providers.dart';
 import 'screens/home_screen.dart';
@@ -10,6 +12,19 @@ import 'services/supabase_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Las fuentes van en lib/assets/fonts: sin descargas ni salto de letras al
+  // abrir, y también sin conexión.
+  GoogleFonts.config.allowRuntimeFetching = false;
+  LicenseRegistry.addLicense(() async* {
+    for (final (fuente, archivo) in [
+      ('Manrope', 'OFL-Manrope.txt'),
+      ('Jersey 10', 'OFL-Jersey10.txt'),
+    ]) {
+      yield LicenseEntryWithLineBreaks([
+        fuente,
+      ], await rootBundle.loadString('lib/assets/fonts/$archivo'));
+    }
+  });
   final firebaseSupported =
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
