@@ -1,5 +1,8 @@
 import {
   coleccion,
+  enCatalogo,
+  idMezclado,
+  vecino,
   coleccionJugador,
   conGenero,
   esGenero,
@@ -52,4 +55,28 @@ Deno.test("cada petición usa su propio género", async () => {
   assertEquals(conGenero("hackeo", generoActual), "vallenato");
   assertEquals(esGenero("hackeo"), false);
   assertEquals(generoActual(), "vallenato");
+});
+
+Deno.test("Popurrí mezcla los cinco catálogos con el género en el id", () => {
+  conGenero("aleatorio", () => {
+    assertEquals(idMezclado("salsa", "facil-03"), "salsa--facil-03");
+    assertEquals(enCatalogo("levels", "salsa--facil-03"), "salsa_levels/facil-03");
+    assertEquals(
+      enCatalogo("intros", "rock_pop--cancion-07"),
+      "rock_pop_intros/cancion-07",
+    );
+    // La canción de un nivel vive en el catálogo de ese nivel.
+    assertEquals(vecino("popular--medio-02", "cancion-008"), "popular--cancion-008");
+    assertEquals(coleccionJugador("progress"), "aleatorio_progress");
+    let fallo = false;
+    try {
+      enCatalogo("levels", "facil-03");
+    } catch {
+      fallo = true;
+    }
+    assertEquals(fallo, true);
+  });
+  // Fuera de Popurrí los ids no cambian.
+  assertEquals(enCatalogo("levels", "facil-03"), "vallenato_levels/facil-03");
+  assertEquals(vecino("facil-03", "cancion-001"), "cancion-001");
 });

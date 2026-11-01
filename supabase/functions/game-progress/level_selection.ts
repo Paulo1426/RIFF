@@ -18,9 +18,12 @@ export function canonicalDifficulty(value: string): string {
   return normalized;
 }
 
+/// Hasta [limite] niveles de [difficulty]: los primeros por número. Popurrí
+/// pasa Infinity y sortea los suyos al armar el orden del jugador.
 export function selectDifficultyLevels(
   levels: PublishedLevel[],
   difficulty: string,
+  limite = levelsPerDifficulty,
 ): PublishedLevel[] {
   return levels
     .filter((level) =>
@@ -31,5 +34,5 @@ export function selectDifficultyLevels(
     .sort((first, second) =>
       first.numero - second.numero || first.id.localeCompare(second.id)
     )
-    .slice(0, levelsPerDifficulty);
+    .slice(0, limite);
 }

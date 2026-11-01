@@ -132,6 +132,17 @@ InsigniasGenero insigniasDe(Genero genero) => switch (genero) {
     intros: 'Sírvame la otra',
     maestro: 'Rey del despecho',
   ),
+  Genero.aleatorio => (
+    emojiFacil: '🎲',
+    facil: 'Dados en el aire',
+    oido: 'Oído ecléctico',
+    emojiMedia: '🔀',
+    media: 'Me gusta de todo',
+    emojiTodo: '🌈',
+    todo: 'Arcoíris musical',
+    intros: 'Ruleta de intros',
+    maestro: 'Rey del popurrí',
+  ),
 };
 
 /// Insignias con el avance de [genero]; las de salas son de todos los géneros.

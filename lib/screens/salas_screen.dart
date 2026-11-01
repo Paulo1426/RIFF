@@ -924,7 +924,7 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
                 style: text.headlineMedium,
               ),
               Text(
-                'Hasta 5 jugadores · canciones de todas las dificultades',
+                'Hasta 10 jugadores · canciones de todas las dificultades',
                 textAlign: TextAlign.center,
                 style: text.bodySmall?.copyWith(
                   color: context.paleta.tintaSuave,
@@ -936,7 +936,7 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
                 runSpacing: 8,
                 alignment: WrapAlignment.center,
                 children: [
-                  for (final genero in Genero.values.where((g) => g.disponible))
+                  for (final genero in Genero.reales.where((g) => g.disponible))
                     ChoiceChip(
                       label: Text(genero.nombre),
                       selected: _genero == genero,
@@ -1026,7 +1026,8 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
                     : () => Navigator.of(context).pop((
                         _modo,
                         _publica,
-                        _genero ?? _generoAlAzar(),
+                        // Aleatorio: canciones al azar de los cinco géneros.
+                        _genero ?? Genero.aleatorio,
                         _genero == null,
                       )),
                 icon: Icons.add_rounded,
@@ -1043,12 +1044,6 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
       ),
     );
   }
-}
-
-/// Un género disponible al azar para las salas "Aleatorio".
-Genero _generoAlAzar() {
-  final disponibles = Genero.values.where((g) => g.disponible).toList();
-  return disponibles[Random().nextInt(disponibles.length)];
 }
 
 /// Tarjeta seleccionable del diálogo de nueva sala; la elegida se tiñe y

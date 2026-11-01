@@ -406,8 +406,18 @@ async function handleRequest(request: Request): Promise<Response> {
 
     // Género de la partida (las viejas, sin campo, son de vallenato): el
     // audio sale siempre del catálogo con el que se jugó.
-    const genero = esGenero(game.genero) ? game.genero : "vallenato";
-    const levelId = stringField(game, "levelId");
+    // En Popurrí el nivel dice su género real ("salsa--facil-03").
+    const guardado = stringField(game, "levelId");
+    const mezclado = game.genero === "aleatorio" && guardado?.includes("--");
+    const genero = mezclado
+      ? guardado!.split("--")[0]
+      : esGenero(game.genero) && game.genero !== "aleatorio"
+      ? game.genero
+      : "vallenato";
+    if (!esGenero(genero) || genero === "aleatorio") {
+      throw new HttpError(404, "La partida no tiene un género válido");
+    }
+    const levelId = mezclado ? guardado!.split("--").slice(1).join("--") : guardado;
     if (!levelId || !validId(levelId)) {
       throw new HttpError(404, "La partida no tiene un nivel válido");
     }

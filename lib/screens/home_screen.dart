@@ -18,7 +18,6 @@ import '../animations/ciclo_lento.dart';
 import '../animations/transicion_musical.dart';
 import '../animations/liquid_ripple_effect.dart';
 import '../widgets/aviso_insignia.dart';
-import '../widgets/boton_tema.dart';
 import '../widgets/con_reflejo.dart';
 import '../widgets/dialogo_contrasena.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
@@ -211,7 +210,11 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
         if (adivinadas != null) '🎧 $adivinadas intros descubiertas',
       ];
       if (mounted) {
-        setState(() => _datos[genero] = (estado: estado, intros: intros));
+        setState(() {
+          if (!genero.esPopurri) {
+            _datos[genero] = (estado: estado, intros: intros);
+          }
+        });
       }
       if (mounted && partes.isNotEmpty) {
         setState(() => _avance[genero] = partes.join('\n'));
@@ -222,11 +225,10 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
     }
   }
 
-  // Después de los géneros va "Aleatorio" y al final, las salas.
-  static final _iAleatorio = Genero.values.length;
-
-  int get _total => Genero.values.length + 3;
-  static final _iProgreso = Genero.values.length + 2;
+  // Después de los géneros (Popurrí incluido) van las salas y el progreso
+  // general.
+  int get _total => Genero.values.length + 2;
+  static final _iProgreso = Genero.values.length + 1;
 
   ({IconData icon, String label}) _pestanaDe(int index) =>
       index < Genero.values.length
@@ -237,19 +239,16 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
             Genero.rockPop => Icons.electric_bolt_rounded,
             Genero.salsa => Icons.nightlife_rounded,
             Genero.popular => Icons.mic_external_on_rounded,
+            Genero.aleatorio => Icons.shuffle_rounded,
           },
           label: Genero.values[index].nombre,
         )
-      : index == _iAleatorio
-      ? (icon: Icons.casino_rounded, label: 'Aleatorio')
       : index == _iProgreso
       ? (icon: Icons.insights_rounded, label: 'Progreso')
       : (icon: Icons.emoji_events_rounded, label: 'Salas');
 
   Color _color(int index) => index < Genero.values.length
       ? colorGenero(Genero.values[index])
-      : index == _iAleatorio
-      ? colorAleatorio
       : index == _iProgreso
       ? AppColors.oro
       : azulLogin;
@@ -302,19 +301,6 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
         onTap: genero.disponible ? () => widget.onElegir(genero) : null,
       );
     }
-    if (index == _iAleatorio) {
-      return _CuadroModo(
-        emoji: '🎲',
-        animacion: _Animacion.saltar,
-        titulo: 'Aleatorio',
-        detalle: 'Próximamente',
-        color: colorAleatorio,
-        alFrente: alFrente,
-        animar: moverse,
-        bloqueado: true,
-        onTap: null,
-      );
-    }
     if (index == _iProgreso) {
       final niveles = _datos.values.fold(
         0,
@@ -357,7 +343,7 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
       titulo: 'Salas',
       detalle: invitado
           ? 'Crea una cuenta para jugar en salas.'
-          : 'Reta a hasta 5 amigos en el género que elijas. Con historial.',
+          : 'Reta a hasta 10 amigos en el género que elijas. Con historial.',
       color: azulLogin,
       alFrente: alFrente,
       animar: moverse,
@@ -746,7 +732,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       final logrados = {
         for (final logro in logrosDe(
           _saldo.deGenero(widget.genero),
-          _avanceDe(estado.dificultades, _resumenIntros),
+          _avanceDe(estado.dificultades, _resumenIntros, widget.genero),
           widget.genero,
         ))
           if (logro.logrado) logro.nombre: logro,
@@ -1633,6 +1619,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
 AvanceJuego _avanceDe(
   List<ProgresoDificultadRemoto> dificultades,
   EstadoIntros? intros,
+  Genero genero,
 ) {
   int completados(Dificultad dificultad) =>
       dificultades
@@ -1644,14 +1631,14 @@ AvanceJuego _avanceDe(
     facil: completados(Dificultad.facil),
     media: completados(Dificultad.medio),
     avanzada: completados(Dificultad.avanzado),
-    nivelesPorDificultad: _ProgresoGeneral._nivelesPorDificultad,
+    nivelesPorDificultad: genero.nivelesPorDificultad,
     introsAdivinadas:
         intros?.intros
             .where((item) => item.estado == EstadoIntro.completada)
             .length ??
         0,
     totalIntros: intros == null
-        ? _ProgresoGeneral._totalIntros
+        ? genero.totalIntros
         : intros.intros.length + intros.restantes,
     unInstrumento: dificultades.fold(
       0,
@@ -1682,7 +1669,8 @@ class _ProgresoTodo extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final avances = [
-      for (final d in datos.values) _avanceDe(d.estado.dificultades, d.intros),
+      for (final MapEntry(key: genero, value: d) in datos.entries)
+        _avanceDe(d.estado.dificultades, d.intros, genero),
     ];
     final logros = logrosGenerales(saldo, avances);
     // Niveles cargados de verdad (un género en preparación suma 0) e intros.
@@ -1701,7 +1689,7 @@ class _ProgresoTodo extends StatelessWidget {
               .length ??
           0;
       final totalIntros = intros == null
-          ? _ProgresoGeneral._totalIntros
+          ? genero.totalIntros
           : intros.intros.length + intros.restantes;
       hechos += niveles + adivinadas;
       total += totalNiveles + totalIntros;
@@ -1815,7 +1803,7 @@ class _PestanaProgreso extends StatelessWidget {
         final cargando = snapshot.connectionState != ConnectionState.done;
         final logros = logrosDe(
           saldo,
-          _avanceDe(dificultades, estadoIntros),
+          _avanceDe(dificultades, estadoIntros, generoActivo),
           generoActivo,
         );
         // Progreso y Salas muestran todo en la tarjeta; Insignias abre una
@@ -2465,10 +2453,11 @@ class _ProgresoGeneral extends StatelessWidget {
     required this.cargandoIntros,
   });
 
-  // Niveles por dificultad y total de intros publicadas. shortcut: si cambian
-  // en el servidor hay que actualizarlos aquí; las bloqueadas llegan con 0.
-  static const _nivelesPorDificultad = 5;
-  static const _totalIntros = 45;
+  // Niveles por dificultad y total de intros del género que se juega (Popurrí
+  // 15 y 100). shortcut: si cambian en el servidor hay que actualizarlos en
+  // Genero; las dificultades bloqueadas llegan con 0.
+  static int get _nivelesPorDificultad => generoActivo.nivelesPorDificultad;
+  static int get _totalIntros => generoActivo.totalIntros;
 
   final List<ProgresoDificultadRemoto> dificultades;
   final EstadoIntros? intros;
@@ -3650,7 +3639,7 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                                         Positioned(
                                           top: -12,
                                           right: -12,
-                                          child: BotonTema(),
+                                          child: _AjustesLogin(),
                                         ),
                                       ],
                                     ),
@@ -3848,6 +3837,73 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Ajustes del login: modo claro u oscuro, música del menú e instrucciones.
+class _AjustesLogin extends ConsumerStatefulWidget {
+  const _AjustesLogin();
+
+  @override
+  ConsumerState<_AjustesLogin> createState() => _AjustesLoginState();
+}
+
+class _AjustesLoginState extends ConsumerState<_AjustesLogin> {
+  @override
+  Widget build(BuildContext context) {
+    final oscuro = context.paleta.oscuro;
+    final musica = ref.read(musicaMenuProvider);
+    return PopupMenuButton<String>(
+      tooltip: 'Ajustes',
+      icon: const Icon(Icons.settings_rounded),
+      style: IconButton.styleFrom(
+        backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+      ),
+      onSelected: (opcion) async {
+        switch (opcion) {
+          case 'tema':
+            await ref
+                .read(modoTemaProvider.notifier)
+                .cambiar(oscuro ? ThemeMode.light : ThemeMode.dark);
+          case 'musica':
+            await musica.alternarSilencio();
+            if (mounted) setState(() {});
+          case 'instrucciones':
+            if (context.mounted) await mostrarInstrucciones(context);
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'tema',
+          child: ListTile(
+            leading: Icon(
+              oscuro ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+            ),
+            title: Text(oscuro ? 'Modo claro' : 'Modo oscuro'),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'musica',
+          child: ListTile(
+            leading: Icon(
+              musica.silenciada
+                  ? Icons.music_note_rounded
+                  : Icons.music_off_rounded,
+            ),
+            title: Text(
+              musica.silenciada ? 'Activar música' : 'Silenciar música',
+            ),
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'instrucciones',
+          child: ListTile(
+            leading: Icon(Icons.menu_book_rounded),
+            title: Text('Instrucciones'),
+          ),
+        ),
+      ],
     );
   }
 }

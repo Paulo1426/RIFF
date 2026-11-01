@@ -50,7 +50,13 @@ import {
   conGenero,
   esGenero,
   generoActual,
+  enCatalogo,
+  generoDe,
   generos,
+  generosReales,
+  idMezclado,
+  idReal,
+  vecino,
   type TipoAudio,
   ubicacion,
 } from "../_shared/genero.ts";
@@ -519,8 +525,33 @@ function userPath(
   return `${root}/${coleccionJugador(collection)}/${difficulty}`;
 }
 
+/// Documentos de [nombre] del catálogo. En Popurrí, los de los cinco géneros
+/// con el género delante del id ("salsa--facil-03").
+async function listarCatalogo(
+  token: string,
+  nombre: "levels" | "intros",
+): Promise<FirestoreDocument[]> {
+  if (generoActual() !== "aleatorio") {
+    return await listCollection(token, coleccion(nombre));
+  }
+  const listas = await Promise.all(generosReales.map(async (genero) =>
+    (await listCollection(token, coleccion(nombre, genero))).map((doc) => {
+      const partes = doc.name?.split("/") ?? [];
+      const id = partes.pop() ?? "";
+      return { ...doc, name: [...partes, idMezclado(genero, id)].join("/") };
+    })
+  ));
+  return listas.flat();
+}
+
+// Popurrí: 15 niveles por dificultad (sorteados por jugador entre los cinco
+// géneros) y hasta 100 intros; los demás, 5 y todas las del género.
+const esPopurri = () => generoActual() === "aleatorio";
+const nivelesPorDificultad = () => esPopurri() ? 15 : levelsPerDifficulty;
+const introsPopurri = 100;
+
 async function publishedLevels(token: string): Promise<PublishedLevel[]> {
-  const documents = await listCollection(token, coleccion("levels"));
+  const documents = await listarCatalogo(token, "levels");
   return documents.map((document) => {
     const fields = fromFields(document.fields ?? {});
     return {
@@ -540,9 +571,11 @@ async function ensureOrder(
 ): Promise<string[]> {
   const path = userPath(uid, "difficultyOrders", difficulty, guest);
   const existing = await getDocument(token, path);
+  const cupo = nivelesPorDificultad();
   const levels = selectDifficultyLevels(
     await publishedLevels(token),
     difficulty,
+    esPopurri() ? Infinity : levelsPerDifficulty,
   ).map((level) => level.id);
   if (existing) {
     const rawOrder = existing.fields.levelIds;
@@ -558,7 +591,7 @@ async function ensureOrder(
     );
     const additions = shuffled(
       levels.filter((id) => !currentOrder.includes(id)),
-    );
+    ).slice(0, Math.max(0, cupo - currentOrder.length));
     if (
       additions.length === 0 &&
       currentOrder.length === rawOrder.length
@@ -596,7 +629,7 @@ async function ensureOrder(
     return [];
   }
 
-  const levelIds = shuffled(levels);
+  const levelIds = shuffled(levels).slice(0, cupo);
   try {
     await commitWrites(token, [
       createWrite(path, {
@@ -624,7 +657,7 @@ async function buildLevelEntry(
   completed: Set<string>,
   canStart: boolean,
 ): Promise<JsonObject> {
-  const document = await getDocument(token, `${coleccion("levels")}/${id}`);
+  const document = await getDocument(token, enCatalogo("levels", id));
   if (!document || document.fields.published !== true) {
     throw new HttpError(
       409,
@@ -760,7 +793,8 @@ async function getProgress(
         ? ids.filter((id): id is string => typeof id === "string")
         : [],
     );
-    const done = order.length === levelsPerDifficulty &&
+    // Popurrí sale de lo que haya publicado; los géneros piden sus 5.
+    const done = (esPopurri() ? order.length > 0 : order.length === levelsPerDifficulty) &&
       order.every((levelId) => completed.has(levelId));
     const unInstrumento = new Set(
       stringList(progressDoc?.fields.unInstrumentoIds),
@@ -842,10 +876,12 @@ async function getProgress(
 async function createOfflineAudioUrl(
   tipo: TipoAudio,
   path: string,
+  // Género del archivo; en Popurrí, el de la canción (no "aleatorio").
+  genero = generoDe(""),
 ): Promise<string> {
   const supabaseUrl = requiredEnv("SUPABASE_URL").replace(/\/+$/, "");
   const serviceRoleKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
-  const { bucket, ruta } = ubicacion(tipo, path);
+  const { bucket, ruta } = ubicacion(tipo, path, genero);
   const objectPath = ruta.split("/").map(encodeURIComponent).join("/");
   const result = await fetch(
     `${supabaseUrl}/storage/v1/object/sign/${
@@ -914,8 +950,8 @@ async function createOfflineBundle(
     const nivel = entry.nivel as JsonObject;
     const levelId = nivel.id as string;
     const [level, answer] = await Promise.all([
-      getDocument(token, `${coleccion("levels")}/${levelId}`),
-      getDocument(token, `${coleccion("privateLevelAnswers")}/${levelId}`),
+      getDocument(token, enCatalogo("levels", levelId)),
+      getDocument(token, enCatalogo("privateLevelAnswers", levelId)),
     ]);
     if (!level || !answer || answer.fields.respuestaCancionNormalizada === undefined) {
       throw new HttpError(404, `Faltan datos offline para ${levelId}`);
@@ -928,7 +964,10 @@ async function createOfflineBundle(
     if (typeof songId !== "string" || !validId(songId)) {
       throw new HttpError(500, `El nivel ${levelId} no tiene una canción válida`);
     }
-    const song = await getDocument(token, `${coleccion("songs")}/${songId}`);
+    const song = await getDocument(
+      token,
+      enCatalogo("songs", vecino(levelId, songId)),
+    );
     const instrumentalPath = song?.fields.instrumentalAudioPath;
     if (
       !song ||
@@ -941,7 +980,7 @@ async function createOfflineBundle(
     const audioUrls: JsonObject = {};
     const audioVersions: JsonObject = {};
     const versionOf = (tipo: TipoAudio, path: string) => {
-      const { bucket, ruta } = ubicacion(tipo, path);
+      const { bucket, ruta } = ubicacion(tipo, path, generoDe(levelId));
       return objectVersion(
         requiredEnv("SUPABASE_URL").replace(/\/+$/, ""),
         requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
@@ -960,6 +999,7 @@ async function createOfflineBundle(
       audioUrls[instrument] = await createOfflineAudioUrl(
         "instrumentos",
         storagePath,
+        generoDe(levelId),
       );
       audioVersions[instrument] = await versionOf("instrumentos", storagePath);
     }
@@ -978,6 +1018,7 @@ async function createOfflineBundle(
       instrumentalAudioUrl: await createOfflineAudioUrl(
         "canciones-instrumentales",
         instrumentalPath,
+        generoDe(levelId),
       ),
     };
   }));
@@ -1007,7 +1048,7 @@ async function purchaseInstrument(
   if (typeof levelId !== "string" || !validId(levelId)) {
     throw new HttpError(500, "La partida no tiene un nivel válido");
   }
-  const level = await getDocument(token, `${coleccion("levels")}/${levelId}`);
+  const level = await getDocument(token, enCatalogo("levels", levelId));
   if (!level || level.fields.published !== true) {
     throw new HttpError(404, "El nivel no está disponible");
   }
@@ -1223,10 +1264,11 @@ function newGame(
 async function revealedSong(
   token: string,
   level: { fields: JsonObject },
+  levelId: string,
 ): Promise<JsonObject> {
   const songId = level.fields.cancionId;
   const song = typeof songId === "string" && validId(songId)
-    ? await getDocument(token, `${coleccion("songs")}/${songId}`)
+    ? await getDocument(token, enCatalogo("songs", vecino(levelId, songId)))
     : null;
   return {
     titulo: typeof song?.fields.titulo === "string" ? song.fields.titulo : null,
@@ -1272,8 +1314,8 @@ async function submitAnswer(
   const salaId = game.fields.salaId;
   const enSala = typeof salaId === "string";
   const [level, answerDoc, order, progress] = await Promise.all([
-    getDocument(token, `${coleccion("levels")}/${levelId}`),
-    getDocument(token, `${coleccion("privateLevelAnswers")}/${levelId}`),
+    getDocument(token, enCatalogo("levels", levelId)),
+    getDocument(token, enCatalogo("privateLevelAnswers", levelId)),
     enSala
       ? [] as string[]
       : ensureOrder(token, uid, difficulty as Difficulty, guest),
@@ -1312,7 +1354,14 @@ async function submitAnswer(
     return { correct: false };
   }
   if (enSala) {
-    return await answerRoomGame(token, uid, gameId, salaId as string, level);
+    return await answerRoomGame(
+      token,
+      uid,
+      gameId,
+      salaId as string,
+      level,
+      levelId,
+    );
   }
 
   const currentOrder = order;
@@ -1391,7 +1440,7 @@ async function submitAnswer(
       : introCoinRewards[difficulty as Difficulty],
     completedDifficulty: currentOrder.every((id) => completedIds.has(id)),
     // Al acertar ya se puede revelar la canción para el reproductor.
-    ...await revealedSong(token, level),
+    ...await revealedSong(token, level, levelId),
   };
 }
 
@@ -1426,14 +1475,17 @@ async function handleRequestHint(
   if (typeof levelId !== "string" || !validId(levelId)) {
     throw new HttpError(500, "La partida no tiene un nivel válido");
   }
-  const level = await getDocument(token, `${coleccion("levels")}/${levelId}`);
+  const level = await getDocument(token, enCatalogo("levels", levelId));
   if (!level) throw new HttpError(404, "No se encontró el nivel");
 
   const songId = level.fields.cancionId;
   if (typeof songId !== "string" || !validId(songId)) {
     throw new HttpError(500, "El nivel no tiene una canción válida");
   }
-  const song = await getDocument(token, `${coleccion("songs")}/${songId}`);
+  const song = await getDocument(
+    token,
+    enCatalogo("songs", vecino(levelId, songId)),
+  );
   if (!song) throw new HttpError(404, "No se encontró la canción");
 
   const pistasUsadas = stringList(game.fields.pistasUsadas);
@@ -1711,6 +1763,36 @@ function finishTimedRoom(sala: JsonObject): JsonObject {
     estado: "terminada",
     ganadorUid: roomRanking(sala)[0]?.uid ?? null,
   };
+}
+
+/// Fichas con las que empieza cada cuenta registrada, para crear o entrar a
+/// salas.
+const fichasIniciales = 20;
+
+/// Da las fichas de bienvenida una sola vez (también a cuentas que ya
+/// existían): marca el saldo con "bienvenida" en la misma escritura.
+async function darFichasIniciales(token: string, uid: string): Promise<void> {
+  const saldo = await getDocument(token, walletPath(uid));
+  if (saldo?.fields.bienvenida === true) return;
+  try {
+    await commitWrites(token, [{
+      update: {
+        name: documentName(walletPath(uid)),
+        fields: toFields({ bienvenida: true }),
+      },
+      updateMask: { fieldPaths: ["bienvenida"] },
+      updateTransforms: [{
+        fieldPath: "fichas",
+        increment: { integerValue: String(fichasIniciales) },
+      }],
+      // Si otra petición la dio a la vez, esta falla y no se suman dos veces.
+      currentDocument: saldo?.updateTime
+        ? { updateTime: saldo.updateTime }
+        : { exists: false },
+    }]);
+  } catch (error) {
+    if (!(error instanceof HttpError) || error.status !== 409) throw error;
+  }
 }
 
 function walletPath(uid: string): string {
@@ -2081,7 +2163,7 @@ function leaveRoom(
 /// todas las intros) mezcladas y, en contrarreloj, el reloj desde ahora.
 async function roomStart(token: string, sala: JsonObject): Promise<JsonObject> {
   const levelIds = sala.tipo === "intros"
-    ? (await listCollection(token, coleccion("intros")))
+    ? (await listarCatalogo(token, "intros"))
       .filter((document) => fromFields(document.fields ?? {}).published === true)
       .map((document) => document.name?.split("/").at(-1) ?? "")
       .filter(validId)
@@ -2289,6 +2371,7 @@ async function answerRoomGame(
   gameId: string,
   codigo: string,
   level: { fields: JsonObject },
+  levelId: string,
 ): Promise<JsonObject> {
   const gamePath = `games/${gameId}`;
   const puntos = await updateRoom<number | null>(token, codigo, async (sala) => {
@@ -2349,7 +2432,7 @@ async function answerRoomGame(
     monedas: 0,
     completedDifficulty: false,
     puntos,
-    ...await revealedSong(token, level),
+    ...await revealedSong(token, level, levelId),
   };
 }
 
@@ -2380,7 +2463,7 @@ async function roomIntroAudio(
   if (type === "intro" ? !actual && !acertada : !acertada) {
     throw new HttpError(403, "Esa canción no está disponible para ti");
   }
-  const intro = await getDocument(token, `${coleccion("intros")}/${introId}`);
+  const intro = await getDocument(token, enCatalogo("intros", introId));
   if (!intro || intro.fields.published !== true) {
     throw new HttpError(404, "Esa intro no está disponible");
   }
@@ -2437,7 +2520,7 @@ async function answerRoomIntro(
         sala.levelIds as string[],
         roomSongIndex(sala, jugador),
       );
-      const intro = await getDocument(token, `${coleccion("intros")}/${introId}`);
+      const intro = await getDocument(token, enCatalogo("intros", introId));
       const expected = intro?.fields.respuestaCancionNormalizada ??
         intro?.fields.titulo;
       if (typeof expected !== "string") {
@@ -2528,7 +2611,7 @@ function stringList(value: unknown): string[] {
 async function loadIntroState(token: string, uid: string, guest: boolean) {
   const path = introStatePath(uid, guest);
   const [documents, state, ...progress] = await Promise.all([
-    listCollection(token, coleccion("intros")),
+    listarCatalogo(token, "intros"),
     getDocument(token, path),
     ...difficulties.map((difficulty) =>
       getDocument(token, userPath(uid, "progress", difficulty, guest))
@@ -2575,8 +2658,10 @@ function introSummary(
       state.hintCoinsSpent,
     ),
     monedas_ganadas: state.earned,
-    restantes: [...state.intros.keys()].filter((id) => !unlocked.has(id))
-      .length,
+    restantes: Math.min(
+      [...state.intros.keys()].filter((id) => !unlocked.has(id)).length,
+      esPopurri() ? introsPopurri - unlocked.size : Infinity,
+    ),
     intros: state.unlocked
       .filter((id) => state.intros.has(id))
       .map((id, index) => {
@@ -2608,7 +2693,10 @@ async function drawIntro(
   const locked = [...state.intros.keys()].filter((id) =>
     !state.unlocked.includes(id)
   );
-  if (locked.length === 0) {
+  if (
+    locked.length === 0 ||
+    (esPopurri() && state.unlocked.length >= introsPopurri)
+  ) {
     throw new HttpError(409, "Ya descubriste todas las intros");
   }
   if (
@@ -2657,7 +2745,9 @@ async function introOfflineBundle(
       const pathOf = (type: keyof typeof introAudioTypes) => {
         const { field, file } = introAudioTypes[type];
         const custom = fields[field];
-        return typeof custom === "string" && custom ? custom : `${id}/${file}`;
+        return typeof custom === "string" && custom
+          ? custom
+          : `${idReal(id)}/${file}`;
       };
       const expected = fields.respuestaCancionNormalizada ?? fields.titulo;
       if (typeof expected !== "string") {
@@ -2665,11 +2755,14 @@ async function introOfflineBundle(
       }
       const done = state.completed.has(id);
       const [intro, fullSong, cover] = await Promise.all([
-        createOfflineAudioUrl("intro", pathOf("intro")),
-        done ? createOfflineAudioUrl("intro", pathOf("fullSong")) : null,
+        createOfflineAudioUrl("intro", pathOf("intro"), generoDe(id)),
+        done
+          ? createOfflineAudioUrl("intro", pathOf("fullSong"), generoDe(id))
+          : null,
         // Sin portada subida se juega igual: el reproductor muestra el disco.
         done
-          ? createOfflineAudioUrl("intro", pathOf("cover")).catch(() => null)
+          ? createOfflineAudioUrl("intro", pathOf("cover"), generoDe(id))
+            .catch(() => null)
           : null,
       ]);
       return {
@@ -2694,7 +2787,7 @@ async function loadIntroAccess(
 ) {
   const [state, intro] = await Promise.all([
     getDocument(token, introStatePath(uid, guest)),
-    getDocument(token, `${coleccion("intros")}/${introId}`),
+    getDocument(token, enCatalogo("intros", introId)),
   ]);
   if (!intro || intro.fields.published !== true) {
     throw new HttpError(404, "Esa intro no está disponible");
@@ -2732,14 +2825,15 @@ async function signedIntroUrl(
 ): Promise<string> {
   const { field, file } = introAudioTypes[type];
   const custom = intro[field];
-  const path = typeof custom === "string" && custom ? custom : `${introId}/${file}`;
+  const real = idReal(introId);
+  const path = typeof custom === "string" && custom ? custom : `${real}/${file}`;
   if (
-    !path.startsWith(`${introId}/`) ||
+    !path.startsWith(`${real}/`) ||
     path.split("/").some((part) => !part || part === "." || part === "..")
   ) {
     throw new HttpError(500, `La ruta ${field} de ${introId} no es válida`);
   }
-  return await createOfflineAudioUrl("intro", path);
+  return await createOfflineAudioUrl("intro", path, generoDe(introId));
 }
 
 async function submitIntroAnswer(
@@ -2874,6 +2968,8 @@ async function handle(request: Request): Promise<Response> {
       return response(200, { started: true });
     }
     if (action === "progress") {
+      // Al abrir el juego: las fichas de bienvenida para las salas.
+      if (!guest) await darFichasIniciales(token, uid);
       return response(200, { estado: await getProgress(token, uid, guest) });
     }
     if (action === "offlineBundle") {

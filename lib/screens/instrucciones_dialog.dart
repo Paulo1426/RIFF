@@ -187,7 +187,7 @@ class InstruccionesDialog extends StatelessWidget {
                             icono: Icons.groups_rounded,
                             children: [
                               Text(
-                                'Juega en una sala de hasta 5 personas. Necesitas una cuenta registrada.',
+                                'Juega en una sala de hasta 10 personas. Necesitas una cuenta registrada.',
                               ),
                               SizedBox(height: 10),
                               Wrap(

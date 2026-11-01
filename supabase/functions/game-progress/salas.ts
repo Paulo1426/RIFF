@@ -31,7 +31,7 @@ export function premiosSala(
 }
 
 // Se guarda en cada sala (maxJugadores) para poder ampliarlo sin migrar.
-export const maxJugadoresSala = 5;
+export const maxJugadoresSala = 10;
 export const duracionContrarrelojMs = 10 * 60_000;
 
 // Sin 0/O ni 1/I/L para que el código se pueda dictar sin confusiones.

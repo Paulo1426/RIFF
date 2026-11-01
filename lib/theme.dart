@@ -54,6 +54,7 @@ Color colorGenero(Genero genero) => switch (genero) {
   Genero.rockPop => const Color(0xFF007FFF),
   Genero.salsa => const Color(0xFFF0E226),
   Genero.popular => const Color(0xFF00B259),
+  Genero.aleatorio => colorAleatorio,
 };
 
 /// Colores del menú de cada género: tarjetas de Progreso e Intro, las dos
@@ -65,7 +66,8 @@ Color colorGenero(Genero genero) => switch (genero) {
 /// rock / pop, de cuento ilustrado (azul globo, rojo tejado, amarillo sol y
 /// tinta carbón); salsa, casete de neón (amarillo alta visibilidad sobre
 /// negro tinta y arena); popular, verde señal con azul medianoche y gris
-/// niebla. Cada género tiene la suya.
+/// niebla; Popurrí, turquesa con violeta, rosa y amarillo. Cada uno tiene la
+/// suya.
 ({
   Color progreso,
   Color intro,
@@ -114,6 +116,14 @@ paletaGenero(Genero genero) => switch (genero) {
     mancha2: const Color(0xFFBFC7D9),
     barraMenu: const Color(0xFF00B259),
     barraSecciones: const Color(0xFF162136),
+  ),
+  Genero.aleatorio => (
+    progreso: const Color(0xFF7C4DFF),
+    intro: const Color(0xFFFF4081),
+    mancha1: const Color(0xFFFFD740),
+    mancha2: const Color(0xFF7C4DFF),
+    barraMenu: colorAleatorio,
+    barraSecciones: const Color(0xFF7C4DFF),
   ),
 };
 
@@ -588,12 +598,12 @@ class _BandaCargandoState extends State<_BandaCargando>
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 6),
                       child: Transform.translate(
-                        offset: Offset(0, -14 * salto(i)),
+                        offset: Offset(0, -22 * salto(i)),
                         child: Transform.scale(
                           scale: 1 + 0.15 * salto(i),
                           child: Text(
                             emoji,
-                            style: const TextStyle(fontSize: 40),
+                            style: const TextStyle(fontSize: 64),
                           ),
                         ),
                       ),
@@ -602,15 +612,15 @@ class _BandaCargandoState extends State<_BandaCargando>
               ),
               const SizedBox(height: 10),
               SizedBox(
-                height: 28,
+                height: 40,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     for (var i = 0; i < 9; i++)
                       Container(
-                        width: 6,
-                        height: 6 + 22 * sin(2 * pi * t + i * 0.9).abs(),
+                        width: 8,
+                        height: 8 + 32 * sin(2 * pi * t + i * 0.9).abs(),
                         margin: const EdgeInsets.symmetric(horizontal: 2),
                         decoration: BoxDecoration(
                           color: color.withValues(alpha: 0.8),

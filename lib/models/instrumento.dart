@@ -34,6 +34,8 @@ extension TipoInstrumentoExtension on TipoInstrumento {
     Genero.rockPop => ('🎹', 'Teclado'),
     Genero.salsa => ('🎺', 'Trompeta'),
     Genero.popular => ('🎻', 'Violín'),
+    // Cada nivel es de un género distinto: la pista melódica sin nombre fijo.
+    Genero.aleatorio => ('🎼', 'Melodía'),
   };
 
   static TipoInstrumento fromId(String value) {
