@@ -141,7 +141,7 @@ InsigniasGenero insigniasDe(Genero genero) => switch (genero) {
     emojiTodo: '🌈',
     todo: 'Arcoíris musical',
     intros: 'Ruleta de intros',
-    maestro: 'Rey del popurrí',
+    maestro: 'Rey del medley',
   ),
 };
 

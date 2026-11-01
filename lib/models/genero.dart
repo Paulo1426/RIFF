@@ -7,7 +7,7 @@ enum Genero {
   salsa('salsa', 'Salsa', '🎺🪘🎹', disponible: true),
   popular('popular', 'Popular', '🎸🎻🎺', disponible: true),
   // Mezcla los cinco: niveles e intros al azar de todos los géneros.
-  aleatorio('aleatorio', 'Popurrí', '🎲🎶🔀', disponible: true);
+  aleatorio('aleatorio', 'Medley', '🎲🎶🔀', disponible: true);
 
   const Genero(
     this.id,
@@ -30,11 +30,11 @@ enum Genero {
 
   bool get esPopurri => this == aleatorio;
 
-  /// Los cinco géneros con catálogo propio (sin Popurrí).
+  /// Los cinco géneros con catálogo propio (sin Medley).
   static List<Genero> get reales =>
       values.where((genero) => !genero.esPopurri).toList();
 
-  /// Popurrí sortea 15 niveles por dificultad y hasta 100 intros entre los
+  /// Medley sortea 15 niveles por dificultad y hasta 100 intros entre los
   /// cinco géneros; cada género tiene 5 y 45.
   int get nivelesPorDificultad => esPopurri ? 15 : 5;
   int get totalIntros => esPopurri ? 100 : 45;

@@ -17,8 +17,6 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>La cámara se usa para escanear el código QR de una sala.</string>
-	<key>CADisableMinimumFrameDurationOnPhone</key>
-	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

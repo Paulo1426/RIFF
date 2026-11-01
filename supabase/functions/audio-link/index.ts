@@ -406,7 +406,7 @@ async function handleRequest(request: Request): Promise<Response> {
 
     // Género de la partida (las viejas, sin campo, son de vallenato): el
     // audio sale siempre del catálogo con el que se jugó.
-    // En Popurrí el nivel dice su género real ("salsa--facil-03").
+    // En Medley el nivel dice su género real ("salsa--facil-03").
     const guardado = stringField(game, "levelId");
     const mezclado = game.genero === "aleatorio" && guardado?.includes("--");
     const genero = mezclado

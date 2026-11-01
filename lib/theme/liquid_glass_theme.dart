@@ -8,7 +8,8 @@ import '../theme.dart';
 /// aquí para que el efecto sea igual en toda la app.
 abstract final class LiquidGlass {
   // Desenfoque (sigma del BackdropFilter) y opacidad del relleno blanco.
-  static const glassBlur = 20.0;
+  // Bajado de 20: menos costo por cuadro y el vidrio se sigue notando.
+  static const glassBlur = 10.0;
   static const glassOpacity = 0.45;
 
   // Borde de luz.

@@ -57,7 +57,7 @@ Deno.test("cada petición usa su propio género", async () => {
   assertEquals(generoActual(), "vallenato");
 });
 
-Deno.test("Popurrí mezcla los cinco catálogos con el género en el id", () => {
+Deno.test("Medley mezcla los cinco catálogos con el género en el id", () => {
   conGenero("aleatorio", () => {
     assertEquals(idMezclado("salsa", "facil-03"), "salsa--facil-03");
     assertEquals(enCatalogo("levels", "salsa--facil-03"), "salsa_levels/facil-03");
@@ -76,7 +76,7 @@ Deno.test("Popurrí mezcla los cinco catálogos con el género en el id", () => 
     }
     assertEquals(fallo, true);
   });
-  // Fuera de Popurrí los ids no cambian.
+  // Fuera de Medley los ids no cambian.
   assertEquals(enCatalogo("levels", "facil-03"), "vallenato_levels/facil-03");
   assertEquals(vecino("facil-03", "cancion-001"), "cancion-001");
 });

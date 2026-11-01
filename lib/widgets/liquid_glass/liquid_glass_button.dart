@@ -67,7 +67,7 @@ class _LiquidGlassButtonState extends State<LiquidGlassButton> {
         ? AppColors.paperWhite
         : AppColors.graphiteInk;
     final forma = BorderRadius.circular(_radio);
-    final blur = _presionado ? 16.0 : 8.0;
+    final blur = _presionado ? 8.0 : 4.0;
 
     return AnimatedScale(
       scale: _presionado ? 0.96 : 1,

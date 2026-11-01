@@ -67,7 +67,7 @@ Color colorGenero(Genero genero) => switch (genero) {
 /// rock / pop, de cuento ilustrado (azul globo, rojo tejado, amarillo sol y
 /// tinta carbón); salsa, casete de neón (amarillo alta visibilidad sobre
 /// negro tinta y arena); popular, verde señal con azul medianoche y gris
-/// niebla; Popurrí, turquesa con violeta, rosa y amarillo. Cada uno tiene la
+/// niebla; Medley, turquesa con violeta, rosa y amarillo. Cada uno tiene la
 /// suya.
 ({
   Color progreso,

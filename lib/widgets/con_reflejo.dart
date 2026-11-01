@@ -1,25 +1,18 @@
 import 'package:flutter/material.dart';
 
-/// Tarjeta con su reflejo debajo, como sobre un piso de vidrio: una copia
-/// volteada que se desvanece hacia abajo y una sombra suave de su color.
+/// Tarjeta con una sombra suave de su color debajo. Antes llevaba además su
+/// reflejo (una copia volteada); se quitó porque dibujaba cada tarjeta dos
+/// veces.
 class ConReflejo extends StatelessWidget {
-  const ConReflejo({
-    super.key,
-    required this.color,
-    required this.tarjeta,
-    required this.reflejo,
-  });
+  const ConReflejo({super.key, required this.color, required this.tarjeta});
 
   final Color color;
   final Widget tarjeta;
-  final Widget reflejo;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, espacio) {
       final alto = espacio.maxHeight;
-      // Fracción de la tarjeta que se ve reflejada.
-      const parte = 0.22;
       return Stack(
         clipBehavior: Clip.none,
         children: [
@@ -41,37 +34,6 @@ class ConReflejo extends StatelessWidget {
             ),
           ),
           Positioned.fill(child: tarjeta),
-          Positioned(
-            left: 0,
-            right: 0,
-            top: alto + 6,
-            height: alto * parte,
-            child: IgnorePointer(
-              child: ExcludeSemantics(
-                child: ShaderMask(
-                  blendMode: BlendMode.dstIn,
-                  shaderCallback: (rect) => LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.white.withValues(alpha: 0.35),
-                      Colors.white.withValues(alpha: 0),
-                    ],
-                  ).createShader(rect),
-                  child: ClipRect(
-                    child: OverflowBox(
-                      alignment: Alignment.topCenter,
-                      minHeight: alto,
-                      maxHeight: alto,
-                      // Volteada: lo más cercano a la tarjeta es su borde
-                      // inferior, como en un espejo.
-                      child: Transform.flip(flipY: true, child: reflejo),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
         ],
       );
     },

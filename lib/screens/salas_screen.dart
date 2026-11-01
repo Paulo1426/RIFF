@@ -203,7 +203,7 @@ class _SalasPanelState extends ConsumerState<SalasPanel> {
                 // Los dos tipos de sala y el historial: con tres, detrás
                 // asoma una a cada lado, como en el menú.
                 itemCount: TipoSala.values.length + 1,
-                // Como el menú principal: compactas, con reflejo y las
+                // Como el menú principal: compactas y con las
                 // otras asomando detrás.
                 compacto: true,
                 proporcion: 1.2,
@@ -225,7 +225,6 @@ class _SalasPanelState extends ConsumerState<SalasPanel> {
                     return ConReflejo(
                       color: _colorSalas,
                       tarjeta: _SobreFondo(child: tarjeta(alFrente)),
-                      reflejo: tarjeta(false),
                     );
                   }
                   final tipo = TipoSala.values[index];
@@ -238,8 +237,6 @@ class _SalasPanelState extends ConsumerState<SalasPanel> {
                   return ConReflejo(
                     color: _colorTipo(tipo),
                     tarjeta: _SobreFondo(child: tarjeta(alFrente)),
-                    // La copia del reflejo va sin desenfoque.
-                    reflejo: tarjeta(false),
                   );
                 },
               ),

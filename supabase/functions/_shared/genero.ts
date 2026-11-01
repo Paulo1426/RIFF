@@ -11,7 +11,7 @@ export const generosReales = [
   "popular",
 ] as const;
 export type GeneroReal = typeof generosReales[number];
-// "aleatorio" (Popurrí) no tiene catálogo propio: mezcla los cinco y sus ids
+// "aleatorio" (Medley) no tiene catálogo propio: mezcla los cinco y sus ids
 // llevan el género delante ("salsa--facil-03"). Su progreso sí es propio.
 export const generos = [...generosReales, "aleatorio"] as const;
 export type Genero = typeof generos[number];
@@ -44,7 +44,7 @@ export function partirId(id: string): { genero: GeneroReal; id: string } {
   const corte = id.indexOf(separador);
   const prefijo = id.slice(0, corte);
   if (corte <= 0 || !generosReales.includes(prefijo as GeneroReal)) {
-    throw new Error(`Id sin género en Popurrí: ${id}`);
+    throw new Error(`Id sin género en Medley: ${id}`);
   }
   return { genero: prefijo as GeneroReal, id: id.slice(corte + separador.length) };
 }

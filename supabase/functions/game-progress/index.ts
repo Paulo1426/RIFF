@@ -525,7 +525,7 @@ function userPath(
   return `${root}/${coleccionJugador(collection)}/${difficulty}`;
 }
 
-/// Documentos de [nombre] del catálogo. En Popurrí, los de los cinco géneros
+/// Documentos de [nombre] del catálogo. En Medley, los de los cinco géneros
 /// con el género delante del id ("salsa--facil-03").
 async function listarCatalogo(
   token: string,
@@ -544,7 +544,7 @@ async function listarCatalogo(
   return listas.flat();
 }
 
-// Popurrí: 15 niveles por dificultad (sorteados por jugador entre los cinco
+// Medley: 15 niveles por dificultad (sorteados por jugador entre los cinco
 // géneros) y hasta 100 intros; los demás, 5 y todas las del género.
 const esPopurri = () => generoActual() === "aleatorio";
 const nivelesPorDificultad = () => esPopurri() ? 15 : levelsPerDifficulty;
@@ -793,7 +793,7 @@ async function getProgress(
         ? ids.filter((id): id is string => typeof id === "string")
         : [],
     );
-    // Popurrí sale de lo que haya publicado; los géneros piden sus 5.
+    // Medley sale de lo que haya publicado; los géneros piden sus 5.
     const done = (esPopurri() ? order.length > 0 : order.length === levelsPerDifficulty) &&
       order.every((levelId) => completed.has(levelId));
     const unInstrumento = new Set(
@@ -876,7 +876,7 @@ async function getProgress(
 async function createOfflineAudioUrl(
   tipo: TipoAudio,
   path: string,
-  // Género del archivo; en Popurrí, el de la canción (no "aleatorio").
+  // Género del archivo; en Medley, el de la canción (no "aleatorio").
   genero = generoDe(""),
 ): Promise<string> {
   const supabaseUrl = requiredEnv("SUPABASE_URL").replace(/\/+$/, "");

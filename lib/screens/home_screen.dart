@@ -55,9 +55,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _desdeLogin = false;
   // Género elegido en el selector; null muestra el selector.
   Genero? _genero;
-  // Sentido del cambio entre el selector y el menú del género: 1 al entrar,
-  // -1 al volver (se hace polvo), 0 sin animación (tras el login).
-  int _direccionGenero = 0;
   late final Stream<User?> _authStateChanges =
       widget.authStateChanges ?? FirebaseAuth.instance.authStateChanges();
 
@@ -88,7 +85,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           _desdeLogin = true;
           // Al volver a entrar se elige género otra vez.
           _genero = null;
-          _direccionGenero = 0;
           return FirebaseAuthScreen(
             savedUser: user,
             onSignedIn: () => setState(() => _entered = true),
@@ -103,12 +99,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           );
         }
         final genero = _genero;
-        // Como entre pestañas: al entrar a un género el menú llega
-        // deslizándose; al volver a los géneros se hace polvo.
+        // El mismo fundido cruzado que entre pestañas.
         return TransicionMusical(
-          direccion: _direccionGenero,
-          // Al volver a los géneros, el menú se hace polvo.
-          polvo: true,
           child: KeyedSubtree(
             key: ValueKey(genero),
             child: genero == null
@@ -117,17 +109,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     onElegir: (genero) => setState(() {
                       generoActivo = genero;
                       _genero = genero;
-                      _direccionGenero = 1;
                     }),
                   )
                 : _AuthenticatedHome(
                     key: ValueKey(user.uid),
                     user: user,
                     genero: genero,
-                    onCambiarGenero: () => setState(() {
-                      _genero = null;
-                      _direccionGenero = -1;
-                    }),
+                    onCambiarGenero: () => setState(() => _genero = null),
                   ),
           ),
         );
@@ -228,7 +216,7 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
     }
   }
 
-  // Después de los géneros (Popurrí incluido) van las salas y el progreso
+  // Después de los géneros (Medley incluido) van las salas y el progreso
   // general.
   int get _total => Genero.values.length + 2;
   static final _iProgreso = Genero.values.length + 1;
@@ -287,7 +275,7 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
   );
 
   Widget _cuadro(int index, bool alFrente, {bool animar = true}) {
-    // Solo la del frente se mueve; laterales y reflejo, quietas.
+    // Solo la del frente se mueve; las laterales, quietas.
     final moverse = animar && alFrente;
     if (index < Genero.values.length) {
       final genero = Genero.values[index];
@@ -444,8 +432,6 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
                   itemBuilder: (context, index, alFrente) => ConReflejo(
                     color: _color(index),
                     tarjeta: _cuadro(index, alFrente),
-                    // La copia del reflejo va sin desenfoque.
-                    reflejo: _cuadro(index, false, animar: false),
                   ),
                 ),
               ),
@@ -626,14 +612,9 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   // Pestaña Canción: false muestra el carrusel de dificultades; true, la
   // tarjeta con todos los niveles de la seleccionada.
   bool _nivelesAbiertos = false;
-  // Sentido de la transición entre dificultades y niveles: 1 al abrir, -1 al
-  // volver, 0 sin animación (al entrar a la pestaña).
-  int _direccionNiveles = 0;
   // Barra inferior: 0 menú, 1 Adivina la canción, 2 Adivina la intro,
   // 3 progreso, 4 configuración. Las salas están en el selector de géneros.
   int _pestana = 0;
-  // Sentido del último cambio de pestaña (0 al abrir: sin onda).
-  int _direccion = 0;
   static const _pCancion = 1, _pIntro = 2, _pProgreso = 3;
   static const _pAjustes = 4;
   Future<EstadoIntros?>? _introsFuturo;
@@ -1414,7 +1395,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
               ],
             ),
             body: TransicionMusical(
-              direccion: _direccion,
               child: switch (_pestana) {
                 _pCancion => _pestanaCancion(estado),
                 _pIntro => _pestanaIntro(),
@@ -1486,10 +1466,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   void _cambiarPestana(int pestana) {
     setState(() {
       // Sentido de la onda de la transición: hacia la pestaña nueva.
-      _direccion = pestana == _pestana ? 0 : (pestana > _pestana ? 1 : -1);
       _pestana = pestana;
       _nivelesAbiertos = false;
-      _direccionNiveles = 0;
       // Progreso se vuelve a pedir al abrir la pestaña, para que esté al día.
       if (pestana == _pProgreso) {
         _introsFuturo = _estadoIntros()
@@ -1595,10 +1573,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     ),
   );
 
-  void _cerrarNiveles() => setState(() {
-    _nivelesAbiertos = false;
-    _direccionNiveles = -1;
-  });
+  void _cerrarNiveles() => setState(() => _nivelesAbiertos = false);
 
   Widget _pestanaCancion(EstadoJuegoRemoto? estado) {
     if (_esperandoProgreso() case final espera?) return espera;
@@ -1611,11 +1586,9 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       nivelesDe: _nivelesDe,
       abierta: _nivelesAbiertos,
       onCambio: (dificultad) => setState(() => _seleccionada = dificultad),
-      direccion: _direccionNiveles,
       onAbrir: (dificultad) => setState(() {
         _seleccionada = dificultad;
         _nivelesAbiertos = true;
-        _direccionNiveles = 1;
       }),
       onJugar: _jugar,
       onRefresh: _cargar,
@@ -1775,7 +1748,6 @@ class _ProgresoTodo extends StatelessWidget {
         itemBuilder: (context, index, alFrente) => ConReflejo(
           color: _colores[index],
           tarjeta: tarjeta(index, alFrente),
-          reflejo: tarjeta(index, false),
         ),
       ),
     );
@@ -1853,7 +1825,7 @@ class _PestanaProgreso extends StatelessWidget {
           padding: const EdgeInsets.only(top: 12),
           child: CarruselGiratorio(
             itemCount: _colores.length,
-            // Como el menú principal: más pequeñas, con reflejo y las otras
+            // Como el menú principal: más pequeñas y con las otras
             // asomando detrás.
             compacto: true,
             // Algo más altas que las del menú: Progreso y Salas traen todo.
@@ -1863,8 +1835,6 @@ class _PestanaProgreso extends StatelessWidget {
             itemBuilder: (context, index, alFrente) => ConReflejo(
               color: _colores[index],
               tarjeta: tarjeta(index, alFrente),
-              // La copia del reflejo va sin desenfoque.
-              reflejo: tarjeta(index, false),
             ),
           ),
         );
@@ -2463,7 +2433,7 @@ class _ProgresoGeneral extends StatelessWidget {
     required this.cargandoIntros,
   });
 
-  // Niveles por dificultad y total de intros del género que se juega (Popurrí
+  // Niveles por dificultad y total de intros del género que se juega (Medley
   // 15 y 100). shortcut: si cambian en el servidor hay que actualizarlos en
   // Genero; las dificultades bloqueadas llegan con 0.
   static int get _nivelesPorDificultad => generoActivo.nivelesPorDificultad;
@@ -2659,8 +2629,6 @@ class _MenuPrincipal extends StatelessWidget {
         itemBuilder: (context, index, alFrente) => ConReflejo(
           color: _colores[index],
           tarjeta: _cuadro(index, alFrente),
-          // La copia del reflejo va sin desenfoque: es lo más caro de pintar.
-          reflejo: _cuadro(index, false, animar: false),
         ),
       ),
     );
@@ -2677,7 +2645,7 @@ class _MenuPrincipal extends StatelessWidget {
         info: infoCancion,
         color: colorGenero(genero),
         alFrente: alFrente,
-        // Solo la del frente se mueve; laterales y reflejo, quietas.
+        // Solo la del frente se mueve; las laterales, quietas.
         animar: animar && alFrente,
         onTap: onInstrumentos,
       ),
@@ -2693,7 +2661,7 @@ class _MenuPrincipal extends StatelessWidget {
         info: introsBloqueadas ? null : infoIntros,
         color: paletaGenero(genero).intro,
         alFrente: alFrente,
-        // Solo la del frente se mueve; laterales y reflejo, quietas.
+        // Solo la del frente se mueve; las laterales, quietas.
         animar: animar && alFrente,
         bloqueado: introsBloqueadas,
         onTap: introsBloqueadas ? null : onIntros,
@@ -2706,7 +2674,7 @@ class _MenuPrincipal extends StatelessWidget {
         info: infoProgreso,
         color: paletaGenero(genero).progreso,
         alFrente: alFrente,
-        // Solo la del frente se mueve; laterales y reflejo, quietas.
+        // Solo la del frente se mueve; las laterales, quietas.
         animar: animar && alFrente,
         onTap: onProgreso,
       ),
@@ -2952,7 +2920,6 @@ class _PanelDificultades extends StatelessWidget {
     required this.esInvitado,
     required this.offlineMode,
     required this.abierta,
-    required this.direccion,
     required this.onCambio,
     required this.onAbrir,
     required this.onJugar,
@@ -2961,8 +2928,6 @@ class _PanelDificultades extends StatelessWidget {
 
   final EstadoJuegoRemoto estado;
   final bool abierta;
-  // 1 al abrir los niveles, -1 al volver, 0 sin animación.
-  final int direccion;
   final ValueChanged<Dificultad> onAbrir;
   final Dificultad seleccionada;
   final List<NivelAsignado> Function(Dificultad) nivelesDe;
@@ -2999,10 +2964,8 @@ class _PanelDificultades extends StatelessWidget {
             bottom: !esInvitado,
             child: Padding(
               padding: const EdgeInsets.only(top: 12),
-              // Como al cambiar de pestaña: los niveles entran deslizándose y
-              // creciendo; al volver se deshacen en polvo.
+              // El mismo fundido cruzado que al cambiar de pestaña.
               child: TransicionMusical(
-                direccion: direccion,
                 child: KeyedSubtree(
                   key: ValueKey(abierta),
                   child: abierta ? _niveles() : _carrusel(dificultades),
@@ -3033,7 +2996,7 @@ class _PanelDificultades extends StatelessWidget {
 }
 
 extension on _PanelDificultades {
-  /// Carrusel de dificultades como el del menú: compactas y con reflejo.
+  /// Carrusel de dificultades como el del menú: compactas.
   Widget _carrusel(List<ProgresoDificultadRemoto> dificultades) =>
       CarruselGiratorio(
         itemCount: dificultades.length,
@@ -3057,8 +3020,6 @@ extension on _PanelDificultades {
           return ConReflejo(
             color: colorDificultad(progreso.dificultad),
             tarjeta: tarjeta(alFrente),
-            // La copia del reflejo va sin desenfoque.
-            reflejo: tarjeta(false),
           );
         },
       );
