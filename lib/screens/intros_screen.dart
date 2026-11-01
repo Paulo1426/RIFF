@@ -860,9 +860,10 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       _message = null;
     });
     try {
-      // Mismas claves que la descarga offline: si ya está, no hace falta red.
+      // Si ya está guardada, no hace falta red. shortcut: el servidor no manda
+      // versión de la intro; al volver a cortarlas en Storage, subir la "v".
       final clave = tipo == 'intro'
-          ? 'intro:${widget.intro.id}'
+          ? 'intro:v3:${widget.intro.id}'
           : 'intro:${widget.intro.id}:full';
       // Las salas pueden ser de otro género: su audio no pasa por la caché,
       // que se guarda por el género del menú.

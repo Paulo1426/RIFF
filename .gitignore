@@ -70,3 +70,6 @@ ESTUDIO_DEL_PROYECTO.md
 # Documentación solo local: en el repositorio solo va el README.
 *.md
 !README.md
+
+# Canciones y respuestas de todos los géneros (solo local).
+RESPUESTAS.md

@@ -52,14 +52,54 @@ const bitrates = {
 };
 const sampleRates = { 3: [44100, 48000, 32000], 2: [22050, 24000, 16000], 0: [11025, 12000, 8000] };
 
-// Primeros [segundos] de un mp3 (Layer III), cortado en límite de frame. Quita
-// la etiqueta ID3 y el frame Xing/Info para que el reproductor no lea la
-// duración de la canción completa.
+// Suma de big_values del frame (valores cuantizados no nulos): ~0 en
+// silencio, decenas o cientos con sonido.
+function sonidoDe(frame, version, mono) {
+  let bit = (((frame.readUInt32BE(0) >>> 16) & 1) === 0 ? 6 : 4) * 8;
+  const leer = (n) => {
+    let x = 0;
+    for (let i = 0; i < n; i++, bit++) {
+      x = (x << 1) | ((frame[bit >> 3] >> (7 - (bit & 7))) & 1);
+    }
+    return x;
+  };
+  const canales = mono ? 1 : 2;
+  let grandes = 0;
+  if (version === 3) {
+    leer(9 + (mono ? 5 : 3) + 4 * canales);
+    for (let i = 0; i < 2 * canales; i++) {
+      leer(12);
+      grandes += leer(9);
+      leer(38);
+    }
+  } else {
+    leer(8 + (mono ? 1 : 2));
+    for (let i = 0; i < canales; i++) {
+      leer(12);
+      grandes += leer(9);
+      leer(42);
+    }
+  }
+  return grandes;
+}
+
+// Por debajo de esto un frame es silencio (medido: 0–3 en silencio, 30+ con
+// música desde el primer golpe).
+const umbralSonido = 20;
+// Frames de silencio que se dejan antes del sonido: el frame donde empieza
+// puede usar datos de los anteriores (reservorio de bits del mp3).
+const framesPrevios = 2;
+
+// [segundos] de un mp3 (Layer III) desde que empieza a sonar: salta el
+// silencio inicial, corta en límite de frame y quita la etiqueta ID3 y el
+// frame Xing/Info para que el reproductor no lea la duración de la canción
+// completa.
 export function recortar(buf, segundos) {
   let o = finId3(buf);
-  let tiempo = 0;
   const frames = [];
-  while (o + 4 <= buf.length && tiempo < segundos) {
+  let inicio = -1;
+  let tiempo = 0;
+  while (o + 4 <= buf.length && (inicio < 0 || tiempo < segundos)) {
     const h = buf.readUInt32BE(o);
     const version = (h >>> 19) & 3;
     const rate = sampleRates[version]?.[(h >>> 10) & 3];
@@ -71,15 +111,23 @@ export function recortar(buf, segundos) {
     const muestras = version === 3 ? 1152 : 576;
     const len = Math.floor((muestras / 8) * kbps * 1000 / rate) + ((h >>> 9) & 1);
     const frame = buf.subarray(o, o + len);
-    const cabecera = frame.subarray(0, 64).toString("latin1");
-    if (frames.length || !/Xing|Info/.test(cabecera)) {
-      frames.push(frame);
-      tiempo += muestras / rate;
-    }
     o += len;
+    const cabecera = frame.subarray(0, 64).toString("latin1");
+    if (!frames.length && /Xing|Info/.test(cabecera)) continue;
+    const duracion = muestras / rate;
+    frames.push({ frame, duracion });
+    if (inicio < 0) {
+      if (sonidoDe(frame, version, ((h >>> 6) & 3) === 3) < umbralSonido) continue;
+      inicio = Math.max(0, frames.length - 1 - framesPrevios);
+      tiempo = frames.slice(inicio).reduce((t, f) => t + f.duracion, 0);
+    } else {
+      tiempo += duracion;
+    }
   }
-  if (tiempo < segundos) throw new Error("El mp3 dura menos que la intro.");
-  return Buffer.concat(frames);
+  if (inicio < 0 || tiempo < segundos) {
+    throw new Error("El mp3 dura menos que la intro.");
+  }
+  return Buffer.concat(frames.slice(inicio).map((f) => f.frame));
 }
 
 async function subir(key, ruta, cuerpo, tipo) {

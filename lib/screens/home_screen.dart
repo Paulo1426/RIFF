@@ -56,6 +56,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _desdeLogin = false;
   // Género elegido en el selector; null muestra el selector.
   Genero? _genero;
+  // Sentido del cambio entre el selector y el menú del género: 1 al entrar,
+  // -1 al volver (se hace polvo), 0 sin animación (tras el login).
+  int _direccionGenero = 0;
   late final Stream<User?> _authStateChanges =
       widget.authStateChanges ?? FirebaseAuth.instance.authStateChanges();
 
@@ -86,6 +89,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           _desdeLogin = true;
           // Al volver a entrar se elige género otra vez.
           _genero = null;
+          _direccionGenero = 0;
           return FirebaseAuthScreen(
             savedUser: user,
             onSignedIn: () => setState(() => _entered = true),
@@ -100,20 +104,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           );
         }
         final genero = _genero;
-        if (genero == null) {
-          return _SelectorGenero(
-            user: user,
-            onElegir: (genero) => setState(() {
-              generoActivo = genero;
-              _genero = genero;
-            }),
-          );
-        }
-        return _AuthenticatedHome(
-          key: ValueKey(user.uid),
-          user: user,
-          genero: genero,
-          onCambiarGenero: () => setState(() => _genero = null),
+        // Como entre pestañas: al entrar a un género el menú llega
+        // deslizándose; al volver a los géneros se hace polvo.
+        return TransicionMusical(
+          pestana: genero?.index ?? -1,
+          direccion: _direccionGenero,
+          color: genero == null ? azulLogin : colorGenero(genero),
+          child: KeyedSubtree(
+            key: ValueKey(genero),
+            child: genero == null
+                ? _SelectorGenero(
+                    user: user,
+                    onElegir: (genero) => setState(() {
+                      generoActivo = genero;
+                      _genero = genero;
+                      _direccionGenero = 1;
+                    }),
+                  )
+                : _AuthenticatedHome(
+                    key: ValueKey(user.uid),
+                    user: user,
+                    genero: genero,
+                    onCambiarGenero: () => setState(() {
+                      _genero = null;
+                      _direccionGenero = -1;
+                    }),
+                  ),
+          ),
         );
       },
     );
