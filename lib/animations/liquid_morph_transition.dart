@@ -1,21 +1,17 @@
 import 'package:flutter/material.dart';
 
-import 'desintegrar.dart';
-
-/// Transición líquida entre pantallas: la nueva aparece con fundido y crece
-/// de 0,94 a 1. La de atrás se desvanece
-/// un poco al quedar cubierta. Al cerrarse (botón atrás) se deshace en polvo
-/// como un chasquido (ver [Desintegrar]). Se registra en el tema
-/// (`pageTransitionsTheme`).
+/// Transición entre pantallas: el mismo fundido cruzado que las pestañas (ver
+/// TransicionMusical). La nueva aparece con fundido subiendo unos píxeles y,
+/// al cerrarse, se desvanece; la de atrás no se toca. Solo opacidad y
+/// posición: sin tirones. Se registra en el tema (`pageTransitionsTheme`).
 class LiquidMorphPageTransitionsBuilder extends PageTransitionsBuilder {
   const LiquidMorphPageTransitionsBuilder();
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 380);
+  Duration get transitionDuration => const Duration(milliseconds: 250);
 
-  // Más larga al cerrar: el polvo necesita tiempo para verse volar.
   @override
-  Duration get reverseTransitionDuration => const Duration(milliseconds: 800);
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 250);
 
   @override
   Widget buildTransitions<T>(
@@ -24,48 +20,33 @@ class LiquidMorphPageTransitionsBuilder extends PageTransitionsBuilder {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
     Widget child,
-  ) => LiquidMorphTransition(
-    animation: animation,
-    secondaryAnimation: secondaryAnimation,
-    child: child,
-  );
+  ) => LiquidMorphTransition(animation: animation, child: child);
 }
 
 class LiquidMorphTransition extends StatelessWidget {
   const LiquidMorphTransition({
     super.key,
     required this.animation,
-    required this.secondaryAnimation,
     required this.child,
   });
 
   final Animation<double> animation;
-  final Animation<double> secondaryAnimation;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
     final entrada = CurvedAnimation(
       parent: animation,
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeInCubic,
+      curve: const Interval(0.35, 1, curve: Curves.easeOutCubic),
     );
-    final quieto = MediaQuery.disableAnimationsOf(context);
-    return Desintegrar(
-      animacion: animation,
-      activo: !quieto,
-      child: FadeTransition(
-        // La pantalla de atrás baja al 60 % mientras la cubren.
-        opacity: Tween(begin: 1.0, end: 0.6).animate(secondaryAnimation),
-        child: FadeTransition(
-          opacity: entrada,
-          child: ScaleTransition(
-            scale: Tween(begin: 0.94, end: 1.0).animate(entrada),
-            // Sin desenfoque: en pantalla completa era lo más caro de cada
-            // cuadro de la transición.
-            child: child,
-          ),
-        ),
+    return FadeTransition(
+      opacity: entrada,
+      child: SlideTransition(
+        position: Tween(
+          begin: const Offset(0, 0.012),
+          end: Offset.zero,
+        ).animate(entrada),
+        child: child,
       ),
     );
   }

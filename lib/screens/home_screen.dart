@@ -106,9 +106,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         // Como entre pestañas: al entrar a un género el menú llega
         // deslizándose; al volver a los géneros se hace polvo.
         return TransicionMusical(
-          pestana: genero?.index ?? -1,
           direccion: _direccionGenero,
-          color: genero == null ? azulLogin : colorGenero(genero),
+          // Al volver a los géneros, el menú se hace polvo.
+          polvo: true,
           child: KeyedSubtree(
             key: ValueKey(genero),
             child: genero == null
@@ -344,9 +344,9 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
       emoji: '🏆',
       animacion: _Animacion.saltar,
       titulo: 'Salas',
-      detalle: invitado
-          ? 'Crea una cuenta para jugar en salas.'
-          : 'Reta a hasta 10 amigos en el género que elijas. Con historial.',
+      // Sin texto: el ícono y el nombre lo dicen; solo se explica el bloqueo.
+      detalle: invitado ? 'Crea una cuenta para jugar en salas.' : '',
+      grande: true,
       color: azulLogin,
       alFrente: alFrente,
       animar: moverse,
@@ -1414,15 +1414,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
               ],
             ),
             body: TransicionMusical(
-              pestana: _pestana,
               direccion: _direccion,
-              color: switch (_pestana) {
-                0 => colorGenero(widget.genero),
-                _pCancion when estado != null => colorDificultad(
-                  _seleccionada ?? estado.dificultadActiva,
-                ),
-                _ => paletaGenero(widget.genero).intro,
-              },
               child: switch (_pestana) {
                 _pCancion => _pestanaCancion(estado),
                 _pIntro => _pestanaIntro(),
@@ -1457,11 +1449,24 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     _pIntro => const Text('Adivina la intro'),
     _pProgreso => const Text('Progreso'),
     _pAjustes => const Text('Ajustes'),
-    _ => // Solo el logo, a la izquierda; ya dice RIFF.
-    Image.asset(
-      'lib/assets/images/logo/riff_logo.png',
-      height: 56,
-      semanticLabel: 'RIFF',
+    // El logo (ya dice RIFF) y el género, para saber dónde se está.
+    _ => Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Image.asset(
+          'lib/assets/images/logo/riff_logo.png',
+          height: 56,
+          semanticLabel: 'RIFF',
+        ),
+        const SizedBox(width: 10),
+        // Nombres largos ("Rock / Pop") se achican en vez de cortarse.
+        Flexible(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(widget.genero.nombre),
+          ),
+        ),
+      ],
     ),
   };
 
@@ -1764,6 +1769,7 @@ class _ProgresoTodo extends StatelessWidget {
       child: CarruselGiratorio(
         itemCount: _colores.length,
         compacto: true,
+        anchoRelativo: 0.84,
         proporcion: 1.45,
         colorDe: (index) => _colores[index],
         itemBuilder: (context, index, alFrente) => ConReflejo(
@@ -1851,6 +1857,7 @@ class _PestanaProgreso extends StatelessWidget {
             // asomando detrás.
             compacto: true,
             // Algo más altas que las del menú: Progreso y Salas traen todo.
+            anchoRelativo: 0.84,
             proporcion: 1.45,
             colorDe: (index) => _colores[index],
             itemBuilder: (context, index, alFrente) => ConReflejo(
@@ -2643,9 +2650,11 @@ class _MenuPrincipal extends StatelessWidget {
         key: claveCarrusel,
         itemCount: _colores.length,
         autoGiro: const Duration(seconds: 5),
-        // Más pequeñas y con las otras dos asomando detrás.
+        // Del mismo tamaño que las del selector de géneros, con las otras dos
+        // asomando detrás.
         compacto: true,
-        proporcion: 1.25,
+        anchoRelativo: 0.84,
+        proporcion: 1.3,
         colorDe: (index) => _colores[index],
         itemBuilder: (context, index, alFrente) => ConReflejo(
           color: _colores[index],
@@ -2717,12 +2726,16 @@ class _CuadroModo extends StatelessWidget {
     this.alFrente = true,
     this.bloqueado = false,
     this.animar = true,
+    this.grande = false,
   });
 
   final String emoji;
   final _Animacion animacion;
   final String titulo;
+  // Vacío: no se muestra la línea de detalle.
   final String detalle;
+  // Ícono y título más grandes (p. ej. la tarjeta de Salas, sin detalle).
+  final bool grande;
   final Color color;
   final VoidCallback? onTap;
   // Dato del jugador (nivel, intros, salas ganadas) bajo la descripción.
@@ -2758,6 +2771,7 @@ class _CuadroModo extends StatelessWidget {
                       opacity: bloqueado ? 0.4 : 1,
                       child: _EmojiAnimado(
                         emoji: emoji,
+                        tamano: grande ? 80 : 48,
                         animacion: animacion,
                         // Bloqueado se queda quieto: no invita a tocarlo.
                         activo: !bloqueado && animar,
@@ -2767,35 +2781,38 @@ class _CuadroModo extends StatelessWidget {
                     Text(
                       titulo,
                       textAlign: TextAlign.center,
-                      style: text.headlineSmall?.copyWith(
-                        color: bloqueado
-                            ? context.paleta.tintaSuave
-                            : context.paleta.tonoTexto(color),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (bloqueado) ...[
-                          Icon(
-                            Icons.lock_rounded,
-                            size: 18,
-                            color: context.paleta.tintaSuave,
+                      style: (grande ? text.displaySmall : text.headlineSmall)
+                          ?.copyWith(
+                            color: bloqueado
+                                ? context.paleta.tintaSuave
+                                : context.paleta.tonoTexto(color),
                           ),
-                          const SizedBox(width: 4),
-                        ],
-                        Flexible(
-                          child: Text(
-                            detalle,
-                            textAlign: TextAlign.center,
-                            style: text.bodyMedium?.copyWith(
+                    ),
+                    if (detalle.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (bloqueado) ...[
+                            Icon(
+                              Icons.lock_rounded,
+                              size: 18,
                               color: context.paleta.tintaSuave,
                             ),
+                            const SizedBox(width: 4),
+                          ],
+                          Flexible(
+                            child: Text(
+                              detalle,
+                              textAlign: TextAlign.center,
+                              style: text.bodyMedium?.copyWith(
+                                color: context.paleta.tintaSuave,
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    ],
                     if (info case final dato?) ...[
                       const SizedBox(height: 12),
                       Container(
@@ -2839,9 +2856,11 @@ class _EmojiAnimado extends StatefulWidget {
     required this.emoji,
     required this.animacion,
     required this.activo,
+    this.tamano = 48,
   });
 
   final String emoji;
+  final double tamano;
   final _Animacion animacion;
   final bool activo;
 
@@ -2910,7 +2929,7 @@ class _EmojiAnimadoState extends State<_EmojiAnimado> {
                             : 1,
                         child: Text(
                           emoji,
-                          style: const TextStyle(fontSize: 48),
+                          style: TextStyle(fontSize: widget.tamano),
                         ),
                       ),
                     ),
@@ -2983,9 +3002,7 @@ class _PanelDificultades extends StatelessWidget {
               // Como al cambiar de pestaña: los niveles entran deslizándose y
               // creciendo; al volver se deshacen en polvo.
               child: TransicionMusical(
-                pestana: abierta ? 1 : 0,
                 direccion: direccion,
-                color: colorDificultad(seleccionada),
                 child: KeyedSubtree(
                   key: ValueKey(abierta),
                   child: abierta ? _niveles() : _carrusel(dificultades),
@@ -3024,7 +3041,8 @@ extension on _PanelDificultades {
             .indexWhere((item) => item.dificultad == seleccionada)
             .clamp(0, dificultades.length - 1),
         compacto: true,
-        proporcion: 1.25,
+        anchoRelativo: 0.84,
+        proporcion: 1.3,
         onCambio: (index) => onCambio(dificultades[index].dificultad),
         colorDe: (index) => colorDificultad(dificultades[index].dificultad),
         itemBuilder: (context, index, alFrente) {
