@@ -15,6 +15,7 @@ import {
   codigoValido,
   duracionContrarrelojMs,
   eliminadoDeRonda,
+  estadisticasSala,
   generarCodigo,
   maxJugadoresSala,
   type ModoSala,
@@ -22,25 +23,27 @@ import {
   nivelDeIndice,
   precioCrearSalaIntros,
   precioEntrarSalaIntros,
-  estadisticasSala,
   premiosSala,
   puntosAcierto,
-  todosListos,
   type TipoSala,
   tiposSala,
+  todosListos,
 } from "./salas.ts";
 import {
-  coinWalletBalance,
+  assignIntrosByPlayer,
   coinsEarnedByGenre,
+  coinWalletBalance,
   introCoinRewards,
   introPrice,
+  introsInMedley,
+  introsPerGenre,
   savedWelcomeCoins,
   welcomeCoins,
 } from "./intros.ts";
 import {
   hintCosts,
-  hintTypes,
   type HintType,
+  hintTypes,
   maskInitials,
   pickRandomHint,
   titleLetter,
@@ -50,18 +53,18 @@ import {
   coleccion,
   coleccionJugador,
   conGenero,
-  esGenero,
-  generoActual,
   enCatalogo,
+  esGenero,
+  type Genero,
+  generoActual,
   generoDe,
   generos,
   generosReales,
   idMezclado,
   idReal,
-  vecino,
-  type Genero,
   type TipoAudio,
   ubicacion,
+  vecino,
 } from "../_shared/genero.ts";
 
 const corsHeaders = {
@@ -422,14 +425,16 @@ async function clearGuestSession(token: string, uid: string): Promise<void> {
 /// Empezar desde cero: borra progreso, orden de niveles, intros, fichas y
 /// estadísticas de salas de una cuenta registrada, en todos los géneros.
 async function resetUserProgress(token: string, uid: string): Promise<void> {
-  for (const coleccion of [
-    ...generos.flatMap((genero) =>
-      ["progress", "difficultyOrders", "introProgress"].map((nombre) =>
-        coleccionJugador(nombre, genero)
-      )
-    ),
-    "fichas",
-  ]) {
+  for (
+    const coleccion of [
+      ...generos.flatMap((genero) =>
+        ["progress", "difficultyOrders", "introProgress"].map((nombre) =>
+          coleccionJugador(nombre, genero)
+        )
+      ),
+      "fichas",
+    ]
+  ) {
     const documentos = await listCollection(token, `users/${uid}/${coleccion}`);
     await clearDocuments(
       token,
@@ -537,21 +542,23 @@ async function listarCatalogo(
   if (generoActual() !== "aleatorio") {
     return await listCollection(token, coleccion(nombre));
   }
-  const listas = await Promise.all(generosReales.map(async (genero) =>
-    (await listCollection(token, coleccion(nombre, genero))).map((doc) => {
-      const partes = doc.name?.split("/") ?? [];
-      const id = partes.pop() ?? "";
-      return { ...doc, name: [...partes, idMezclado(genero, id)].join("/") };
-    })
-  ));
+  const listas = await Promise.all(
+    generosReales.map(async (genero) =>
+      (await listCollection(token, coleccion(nombre, genero))).map((doc) => {
+        const partes = doc.name?.split("/") ?? [];
+        const id = partes.pop() ?? "";
+        return { ...doc, name: [...partes, idMezclado(genero, id)].join("/") };
+      })
+    ),
+  );
   return listas.flat();
 }
 
 // Medley: 15 niveles por dificultad (sorteados por jugador entre los cinco
-// géneros) y hasta 100 intros; los demás, 5 y todas las del género.
+// géneros) y las 15 intros restantes de cada género.
 const esPopurri = () => generoActual() === "aleatorio";
 const nivelesPorDificultad = () => esPopurri() ? 15 : levelsPerDifficulty;
-const introsPopurri = 100;
+const introsPopurri = introsInMedley;
 
 async function publishedLevels(token: string): Promise<PublishedLevel[]> {
   const documents = await listarCatalogo(token, "levels");
@@ -797,7 +804,8 @@ async function getProgress(
         : [],
     );
     // Medley sale de lo que haya publicado; los géneros piden sus 5.
-    const done = (esPopurri() ? order.length > 0 : order.length === levelsPerDifficulty) &&
+    const done =
+      (esPopurri() ? order.length > 0 : order.length === levelsPerDifficulty) &&
       order.every((levelId) => completed.has(levelId));
     const unInstrumento = new Set(
       stringList(progressDoc?.fields.unInstrumentoIds),
@@ -903,7 +911,10 @@ async function createOfflineAudioUrl(
   if (!result.ok) {
     const details = (await result.text()).slice(0, 1000);
     console.error("Offline audio URL signing failed", result.status, details);
-    throw new HttpError(502, "No se pudo preparar la descarga offline de audio");
+    throw new HttpError(
+      502,
+      "No se pudo preparar la descarga offline de audio",
+    );
   }
   const data = await result.json() as {
     signedURL?: string;
@@ -956,7 +967,10 @@ async function createOfflineBundle(
       getDocument(token, enCatalogo("levels", levelId)),
       getDocument(token, enCatalogo("privateLevelAnswers", levelId)),
     ]);
-    if (!level || !answer || answer.fields.respuestaCancionNormalizada === undefined) {
+    if (
+      !level || !answer ||
+      answer.fields.respuestaCancionNormalizada === undefined
+    ) {
       throw new HttpError(404, `Faltan datos offline para ${levelId}`);
     }
     const instruments = level.fields.instrumentos;
@@ -965,7 +979,10 @@ async function createOfflineBundle(
     }
     const songId = nivel.cancion_id;
     if (typeof songId !== "string" || !validId(songId)) {
-      throw new HttpError(500, `El nivel ${levelId} no tiene una canción válida`);
+      throw new HttpError(
+        500,
+        `El nivel ${levelId} no tiene una canción válida`,
+      );
     }
     const song = await getDocument(
       token,
@@ -991,8 +1008,12 @@ async function createOfflineBundle(
         ruta,
       );
     };
-    for (const [instrument, value] of Object.entries(instruments as JsonObject)) {
-      if (!instrumentTypes.has(instrument) || !value || typeof value !== "object") {
+    for (
+      const [instrument, value] of Object.entries(instruments as JsonObject)
+    ) {
+      if (
+        !instrumentTypes.has(instrument) || !value || typeof value !== "object"
+      ) {
         throw new HttpError(500, `Instrumentos inválidos en ${levelId}`);
       }
       const storagePath = (value as JsonObject).storagePath;
@@ -1110,15 +1131,21 @@ async function purchaseInstrument(
   const purchasedPrices = purchased.map((type) => {
     const price = prices[type];
     if (typeof price !== "number" || ![300000, 400000].includes(price)) {
-      throw new HttpError(500, "El historial de precios de la partida no es válido");
+      throw new HttpError(
+        500,
+        "El historial de precios de la partida no es válido",
+      );
     }
     return price;
   });
   if (
     balance !== 1000000 -
-      purchasedPrices.reduce((total, price) => total + price, 0)
+        purchasedPrices.reduce((total, price) => total + price, 0)
   ) {
-    throw new HttpError(409, "El saldo no coincide con las compras registradas");
+    throw new HttpError(
+      409,
+      "El saldo no coincide con las compras registradas",
+    );
   }
   let price: number;
   try {
@@ -1493,9 +1520,7 @@ async function handleRequestHint(
 
   const pistasUsadas = stringList(game.fields.pistasUsadas);
   const introState = await loadIntroState(token, uid, guest);
-  const hintGenre = generoActual() === "aleatorio"
-    ? generoDe(levelId)
-    : generoActual();
+  const hintGenre = generoActual();
   const currentCoins = introState.balances[hintGenre];
 
   const purchased = stringList(game.fields.instrumentosComprados);
@@ -1567,18 +1592,13 @@ async function handleRequestHint(
     tipo: string,
     cost: number,
   ): Promise<JsonObject> {
-    const currencyGenre = currentCoins >= cost
-      ? hintGenre
-      : generoActual() === "aleatorio" &&
-          introState.balances.aleatorio >= cost
-      ? "aleatorio"
-      : null;
-    if (currencyGenre == null) {
+    if (currentCoins < cost) {
       throw new HttpError(
         409,
         `No tienes suficientes monedas del género ${hintGenre}`,
       );
     }
+    const currencyGenre = hintGenre;
 
     let valor = valorDe(tipo);
     let cuartoInstrumento: string | null = null;
@@ -2180,7 +2200,9 @@ function leaveRoom(
 async function roomStart(token: string, sala: JsonObject): Promise<JsonObject> {
   const levelIds = sala.tipo === "intros"
     ? (await listarCatalogo(token, "intros"))
-      .filter((document) => fromFields(document.fields ?? {}).published === true)
+      .filter((document) =>
+        fromFields(document.fields ?? {}).published === true
+      )
       .map((document) => document.name?.split("/").at(-1) ?? "")
       .filter(validId)
     : (await publishedLevels(token))
@@ -2249,7 +2271,9 @@ function roomGame(
 ): Promise<JsonObject> {
   return updateRoom<JsonObject>(token, codigo, async (sala) => {
     const jugador = roomMember(sala, uid);
-    if (sala.estado !== "jugando") return { resultado: { estado: sala.estado } };
+    if (sala.estado !== "jugando") {
+      return { resultado: { estado: sala.estado } };
+    }
     if (roomExpired(sala)) {
       return {
         campos: finishTimedRoom(sala),
@@ -2390,56 +2414,60 @@ async function answerRoomGame(
   levelId: string,
 ): Promise<JsonObject> {
   const gamePath = `games/${gameId}`;
-  const puntos = await updateRoom<number | null>(token, codigo, async (sala) => {
-    const jugador = roomMember(sala, uid);
-    if (sala.estado !== "jugando") {
-      throw new HttpError(409, "La sala ya terminó");
-    }
-    if (roomExpired(sala)) {
-      return { campos: finishTimedRoom(sala), resultado: null };
-    }
-    const game = await getDocument(token, gamePath);
-    if (
-      !game?.updateTime || game.fields.ganada === true ||
-      jugador.eliminado ||
-      game.fields.salaIndice !== roomSongIndex(sala, jugador)
-    ) {
-      throw new HttpError(409, "Esta canción ya no es la actual de la sala");
-    }
-    const ganar = updateWrite(gamePath, {
-      ganada: true,
-      failedAnswerAttempts: 0,
-      nextAnswerAt: null,
-      updatedAt: new Date().toISOString(),
-    }, game.updateTime);
-    const jugadores = roomPlayers(sala);
-    if (sala.modo === "eliminacion") {
-      jugadores[uid] = { ...jugador, aciertos: jugador.aciertos + 1 };
-      return {
-        campos: advanceElimination(sala, jugadores, [
-          ...(sala.acertaronRonda as string[] ?? []),
-          uid,
-        ]),
-        extra: [ganar],
-        resultado: 0,
+  const puntos = await updateRoom<number | null>(
+    token,
+    codigo,
+    async (sala) => {
+      const jugador = roomMember(sala, uid);
+      if (sala.estado !== "jugando") {
+        throw new HttpError(409, "La sala ya terminó");
+      }
+      if (roomExpired(sala)) {
+        return { campos: finishTimedRoom(sala), resultado: null };
+      }
+      const game = await getDocument(token, gamePath);
+      if (
+        !game?.updateTime || game.fields.ganada === true ||
+        jugador.eliminado ||
+        game.fields.salaIndice !== roomSongIndex(sala, jugador)
+      ) {
+        throw new HttpError(409, "Esta canción ya no es la actual de la sala");
+      }
+      const ganar = updateWrite(gamePath, {
+        ganada: true,
+        failedAnswerAttempts: 0,
+        nextAnswerAt: null,
+        updatedAt: new Date().toISOString(),
+      }, game.updateTime);
+      const jugadores = roomPlayers(sala);
+      if (sala.modo === "eliminacion") {
+        jugadores[uid] = { ...jugador, aciertos: jugador.aciertos + 1 };
+        return {
+          campos: advanceElimination(sala, jugadores, [
+            ...(sala.acertaronRonda as string[] ?? []),
+            uid,
+          ]),
+          extra: [ganar],
+          resultado: 0,
+        };
+      }
+      const segundos = (Date.now() - Date.parse(jugador.inicioCancion ?? "")) /
+        1000;
+      const ganados = puntosAcierto(
+        Number.isFinite(segundos) ? segundos : 0,
+        game.fields.presupuestoRestante as number,
+      );
+      jugadores[uid] = {
+        ...jugador,
+        puntos: jugador.puntos + ganados,
+        aciertos: jugador.aciertos + 1,
+        indice: jugador.indice + 1,
+        gameId: null,
+        inicioCancion: null,
       };
-    }
-    const segundos = (Date.now() - Date.parse(jugador.inicioCancion ?? "")) /
-      1000;
-    const ganados = puntosAcierto(
-      Number.isFinite(segundos) ? segundos : 0,
-      game.fields.presupuestoRestante as number,
-    );
-    jugadores[uid] = {
-      ...jugador,
-      puntos: jugador.puntos + ganados,
-      aciertos: jugador.aciertos + 1,
-      indice: jugador.indice + 1,
-      gameId: null,
-      inicioCancion: null,
-    };
-    return { campos: { jugadores }, extra: [ganar], resultado: ganados };
-  });
+      return { campos: { jugadores }, extra: [ganar], resultado: ganados };
+    },
+  );
   if (puntos === null) {
     throw new HttpError(409, "Se acabó el tiempo de la sala");
   }
@@ -2580,10 +2608,13 @@ async function answerRoomIntro(
           resultado: { ...reveal, puntos: 0 },
         };
       }
-      const segundos =
-        (Date.now() - Date.parse(jugador.inicioCancion ?? "")) / 1000;
+      const segundos = (Date.now() - Date.parse(jugador.inicioCancion ?? "")) /
+        1000;
       // Sin compras: solo cuentan los 100 base y la rapidez.
-      const ganados = puntosAcierto(Number.isFinite(segundos) ? segundos : 0, 0);
+      const ganados = puntosAcierto(
+        Number.isFinite(segundos) ? segundos : 0,
+        0,
+      );
       jugadores[uid] = {
         ...acierto,
         puntos: jugador.puntos + ganados,
@@ -2591,7 +2622,10 @@ async function answerRoomIntro(
         indiceIniciado: null,
         inicioCancion: null,
       };
-      return { campos: { jugadores }, resultado: { ...reveal, puntos: ganados } };
+      return {
+        campos: { jugadores },
+        resultado: { ...reveal, puntos: ganados },
+      };
     },
   );
   if (resultado === null) {
@@ -2628,10 +2662,50 @@ function stringList(value: unknown): string[] {
     : [];
 }
 
+async function listarIntros(
+  token: string,
+  selectedGenres: readonly typeof generosReales[number][],
+) {
+  const catalogs = await Promise.all(
+    selectedGenres.map(async (genero) =>
+      [
+        genero,
+        await listCollection(token, coleccion("intros", genero)),
+      ] as const
+    ),
+  );
+  const documentsByGenre = Object.fromEntries(catalogs) as Record<
+    typeof generosReales[number],
+    FirestoreDocument[]
+  >;
+  const fieldsById = new Map<string, JsonObject>();
+  const idsByGenre = new Map<
+    typeof generosReales[number],
+    string[]
+  >();
+
+  for (const genero of selectedGenres) {
+    const ids: string[] = [];
+    for (const document of documentsByGenre[genero]) {
+      const id = document.name?.split("/").at(-1) ?? "";
+      const fields = fromFields(document.fields ?? {});
+      if (!validId(id) || fields.published !== true) continue;
+      ids.push(id);
+      fieldsById.set(idMezclado(genero, id), fields);
+    }
+    idsByGenre.set(genero, ids);
+  }
+  return { fieldsById, idsByGenre };
+}
+
 async function loadIntroState(token: string, uid: string, guest: boolean) {
   const path = introStatePath(uid, guest);
-  const [documents, progressByGenre, statesByGenre] = await Promise.all([
-    listarCatalogo(token, "intros"),
+  const currentGenre = generoActual();
+  const selectedGenres = currentGenre === "aleatorio"
+    ? generosReales
+    : [currentGenre];
+  const [catalog, progressByGenre, statesByGenre] = await Promise.all([
+    listarIntros(token, selectedGenres),
     Promise.all(
       generos.map((genero) =>
         Promise.all(
@@ -2647,18 +2721,14 @@ async function loadIntroState(token: string, uid: string, guest: boolean) {
       ),
     ),
     Promise.all(
-      generos.map(async (genero) => [
-        genero,
-        await getDocument(token, introStatePath(uid, guest, genero)),
-      ] as const),
+      generos.map(async (genero) =>
+        [
+          genero,
+          await getDocument(token, introStatePath(uid, guest, genero)),
+        ] as const
+      ),
     ),
   ]);
-  const intros = new Map<string, JsonObject>();
-  for (const document of documents) {
-    const id = document.name?.split("/").at(-1) ?? "";
-    const fields = fromFields(document.fields ?? {});
-    if (validId(id) && fields.published === true) intros.set(id, fields);
-  }
 
   const states = Object.fromEntries(statesByGenre);
   const earnedByGenre = coinsEarnedByGenre(
@@ -2683,6 +2753,32 @@ async function loadIntroState(token: string, uid: string, guest: boolean) {
       [...new Set(stringList(states[genero]?.fields.unlockedIds))],
     ]),
   ) as Record<Genero, string[]>;
+  const personalIntroIds = new Map<typeof generosReales[number], string[]>();
+  const medleyIntroIds: string[] = [];
+  for (const genero of selectedGenres) {
+    const assignment = assignIntrosByPlayer(
+      catalog.idsByGenre.get(genero) ?? [],
+      uid,
+      genero,
+      unlockedByGenre[genero],
+      unlockedByGenre.aleatorio,
+    );
+    personalIntroIds.set(genero, assignment.personal);
+    medleyIntroIds.push(
+      ...assignment.medley.map((id) => idMezclado(genero, id)),
+    );
+  }
+  const introIds = currentGenre === "aleatorio"
+    ? medleyIntroIds
+    : personalIntroIds.get(currentGenre) ?? [];
+  const intros = new Map<string, JsonObject>();
+  for (const id of introIds) {
+    const catalogId = currentGenre === "aleatorio"
+      ? id
+      : idMezclado(currentGenre, id);
+    const fields = catalog.fieldsById.get(catalogId);
+    if (fields) intros.set(id, fields);
+  }
   const introSpentByGenre = Object.fromEntries(
     generos.map((genero) => {
       const state = states[genero];
@@ -2715,26 +2811,26 @@ async function loadIntroState(token: string, uid: string, guest: boolean) {
       await commitWrites(token, [
         medleyState
           ? updateWrite(
-              medleyPath,
-              {
-                bonoBienvenida: true,
-                monedasBienvenida: welcomeCoins,
-                unlockedIds: unlockedByGenre.aleatorio,
-                updatedAt: now,
-              },
-              medleyState.updateTime!,
-            )
-          : createWrite(medleyPath, {
+            medleyPath,
+            {
               bonoBienvenida: true,
               monedasBienvenida: welcomeCoins,
-              unlockedIds: [],
-              completedIds: [],
-              pistasMonedasGastadas: 0,
-              failedAnswerAttempts: 0,
-              nextAnswerAt: null,
-              createdAt: now,
+              unlockedIds: unlockedByGenre.aleatorio,
               updatedAt: now,
-            }),
+            },
+            medleyState.updateTime!,
+          )
+          : createWrite(medleyPath, {
+            bonoBienvenida: true,
+            monedasBienvenida: welcomeCoins,
+            unlockedIds: [],
+            completedIds: [],
+            pistasMonedasGastadas: 0,
+            failedAnswerAttempts: 0,
+            nextAnswerAt: null,
+            createdAt: now,
+            updatedAt: now,
+          }),
       ]);
       medleyState = await getDocument(token, medleyPath);
       states.aleatorio = medleyState;
@@ -2775,15 +2871,10 @@ function introSummary(
   state: Awaited<ReturnType<typeof loadIntroState>>,
 ): JsonObject {
   const unlocked = new Set(state.unlocked);
-  const canBuy = [...state.intros.keys()].some((id) => {
-    if (unlocked.has(id)) return false;
-    if (generoActual() !== "aleatorio") {
-      return state.balances[generoActual()] >= introPrice;
-    }
-    const source = generoDe(id);
-    return state.balances[source] >= introPrice ||
-      state.balances.aleatorio >= introPrice;
-  });
+  const unlockedInCatalog =
+    state.unlocked.filter((id) => state.intros.has(id)).length;
+  const canBuy = state.balances[generoActual()] >= introPrice &&
+    [...state.intros.keys()].some((id) => !unlocked.has(id));
   return {
     monedas: state.balances[generoActual()],
     monedas_por_genero: state.balances,
@@ -2791,7 +2882,7 @@ function introSummary(
     puede_sacar: canBuy,
     restantes: Math.min(
       [...state.intros.keys()].filter((id) => !unlocked.has(id)).length,
-      esPopurri() ? introsPopurri - unlocked.size : Infinity,
+      esPopurri() ? Math.max(0, introsPopurri - unlockedInCatalog) : Infinity,
     ),
     intros: state.unlocked
       .filter((id) => state.intros.has(id))
@@ -2824,82 +2915,39 @@ async function drawIntro(
   const locked = [...state.intros.keys()].filter((id) =>
     !state.unlocked.includes(id)
   );
+  const unlockedInCatalog =
+    state.unlocked.filter((id) => state.intros.has(id)).length;
   if (
     locked.length === 0 ||
-    (esPopurri() && state.unlocked.length >= introsPopurri)
+    (esPopurri() && unlockedInCatalog >= introsPopurri)
   ) {
     throw new HttpError(409, "Ya descubriste todas las intros");
   }
-  const eligible = locked.filter((id) => {
-    if (generoActual() !== "aleatorio") {
-      return state.balances[generoActual()] >= introPrice;
-    }
-    return state.balances[generoDe(id)] >= introPrice ||
-      state.balances.aleatorio >= introPrice;
-  });
-  if (eligible.length === 0) {
+  const currencyGenre = generoActual();
+  if (state.balances[currencyGenre] < introPrice) {
     throw new HttpError(
       409,
       "No tienes monedas suficientes. Adivina canciones del juego principal para ganar más.",
     );
   }
-  const introId = shuffled(eligible)[0];
-  const currencyGenre = generoActual() === "aleatorio"
-    ? state.balances[generoDe(introId)] >= introPrice
-      ? generoDe(introId)
-      : "aleatorio"
-    : generoActual();
+  const introId = shuffled(locked)[0];
   const unlocked = [...state.unlocked, introId];
   const now = new Date().toISOString();
-  const writes: JsonObject[] = [];
-  const spending = state.introSpentByGenre[currencyGenre] + introPrice;
   const fields: JsonObject = {
     unlockedIds: unlocked,
-    monedasIntrosGastadas:
-      state.introSpentByGenre[generoActual()] +
-      (currencyGenre === generoActual() ? introPrice : 0),
+    monedasIntrosGastadas: state.introSpentByGenre[currencyGenre] + introPrice,
     updatedAt: now,
   };
-  if (state.state) {
-    writes.push(updateWrite(state.path, fields, state.state.updateTime!));
-  } else {
-    writes.push(
-      createWrite(state.path, {
-        ...fields,
-        completedIds: [],
-        failedAnswerAttempts: 0,
-        nextAnswerAt: null,
-        createdAt: now,
-      }),
-    );
-  }
-  if (currencyGenre !== generoActual()) {
-    const currencyState = state.states[currencyGenre];
-    const currencyPath = introStatePath(uid, guest, currencyGenre);
-    if (currencyState) {
-      writes.push(
-        updateWrite(
-          currencyPath,
-          { monedasIntrosGastadas: spending, updatedAt: now },
-          currencyState.updateTime!,
-        ),
-      );
-    } else {
-      writes.push(
-        createWrite(currencyPath, {
-          unlockedIds: [],
-          completedIds: [],
-          monedasIntrosGastadas: spending,
-          pistasMonedasGastadas: 0,
-          failedAnswerAttempts: 0,
-          nextAnswerAt: null,
-          createdAt: now,
-          updatedAt: now,
-        }),
-      );
-    }
-  }
-  await commitWrites(token, writes);
+  const write = state.state
+    ? updateWrite(state.path, fields, state.state.updateTime!)
+    : createWrite(state.path, {
+      ...fields,
+      completedIds: [],
+      failedAnswerAttempts: 0,
+      nextAnswerAt: null,
+      createdAt: now,
+    });
+  await commitWrites(token, [write]);
   const balances = {
     ...state.balances,
     [currencyGenre]: state.balances[currencyGenre] - introPrice,
@@ -2948,7 +2996,9 @@ async function introOfflineBundle(
       ]);
       return {
         id,
-        titulo: done && typeof fields.titulo === "string" ? fields.titulo : null,
+        titulo: done && typeof fields.titulo === "string"
+          ? fields.titulo
+          : null,
         artista: done && typeof fields.artista === "string"
           ? fields.artista
           : null,
@@ -2990,7 +3040,12 @@ async function introAudioUrl(
   type: keyof typeof introAudioTypes,
   guest: boolean,
 ): Promise<JsonObject> {
-  const { intro, completed } = await loadIntroAccess(token, uid, introId, guest);
+  const { intro, completed } = await loadIntroAccess(
+    token,
+    uid,
+    introId,
+    guest,
+  );
   // La original y la portada revelan la canción: solo después de adivinarla.
   if (type !== "intro" && !completed) {
     throw new HttpError(403, "Adivina la canción para escucharla completa");
@@ -3007,7 +3062,9 @@ async function signedIntroUrl(
   const { field, file } = introAudioTypes[type];
   const custom = intro[field];
   const real = idReal(introId);
-  const path = typeof custom === "string" && custom ? custom : `${real}/${file}`;
+  const path = typeof custom === "string" && custom
+    ? custom
+    : `${real}/${file}`;
   if (
     !path.startsWith(`${real}/`) ||
     path.split("/").some((part) => !part || part === "." || part === "..")
@@ -3379,7 +3436,10 @@ async function handle(request: Request): Promise<Response> {
     }
     if (action === "reiniciarProgreso") {
       if (guest) {
-        throw new HttpError(403, "Solo una cuenta registrada puede reiniciarse");
+        throw new HttpError(
+          403,
+          "Solo una cuenta registrada puede reiniciarse",
+        );
       }
       // Hace falta haber confirmado la contraseña (o Google) hace poco.
       const authTime = verified.payload.auth_time;

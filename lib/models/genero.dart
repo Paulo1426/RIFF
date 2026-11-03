@@ -43,10 +43,10 @@ enum Genero {
   static List<Genero> get reales =>
       values.where((genero) => !genero.esPopurri).toList();
 
-  /// Medley sortea 15 niveles por dificultad y hasta 100 intros entre los
-  /// cinco géneros; cada género tiene 5 y 45.
+  /// Medley sortea 15 niveles por dificultad y mezcla 15 intros no asignadas
+  /// por cada género; cada género conserva 30 intros propias.
   int get nivelesPorDificultad => esPopurri ? 15 : 5;
-  int get totalIntros => esPopurri ? 100 : 45;
+  int get totalIntros => esPopurri ? 75 : 30;
 
   /// Prefijo para lo guardado en el teléfono (caché de audio, copias
   /// offline). Vallenato va sin prefijo para conservar lo ya descargado.

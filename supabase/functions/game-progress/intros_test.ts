@@ -1,9 +1,13 @@
 import {
+  assignIntrosByPlayer,
   coinBalance,
   coinsEarned,
   coinsEarnedByGenre,
   coinWalletBalance,
   introCoinRewards,
+  introsInMedley,
+  introsPerGenre,
+  introsPerGenreInMedley,
   savedWelcomeCoins,
   welcomeCoins,
 } from "./intros.ts";
@@ -64,4 +68,81 @@ Deno.test("el bono de bienvenida guardado sigue disponible al recargar", () => {
   assertEquals(coinBalance(0, 0, 0, welcome), 10);
   assertEquals(coinBalance(0, 2, 3, welcome), 5);
   assertEquals(savedWelcomeCoins([{ bonoBienvenida: true }]), 0);
+});
+
+Deno.test("cada jugador recibe 30 intros propias y 15 distintas para Medley", () => {
+  const ids = Array.from(
+    { length: 45 },
+    (_, index) => `cancion-${String(index + 1).padStart(2, "0")}`,
+  );
+  const genres = ["vallenato", "reggaeton", "rock_pop", "salsa", "popular"];
+  const first = assignIntrosByPlayer(ids, "usuario-1", "vallenato");
+  const second = assignIntrosByPlayer(ids, "usuario-2", "vallenato");
+  const medley = genres.flatMap((genre) =>
+    assignIntrosByPlayer(ids, "usuario-1", genre).medley.map((id) =>
+      `${genre}--${id}`
+    )
+  );
+
+  assertEquals(first.personal.length, introsPerGenre);
+  assertEquals(first.medley.length, introsPerGenreInMedley);
+  assertEquals(medley.length, introsInMedley);
+  assertEquals(new Set(medley).size, introsInMedley);
+  assertEquals(
+    first.personal.some((id) => first.medley.includes(id)),
+    false,
+  );
+  assertEquals(
+    [...first.personal, ...first.medley].length,
+    new Set([...first.personal, ...first.medley]).size,
+  );
+  assertEquals(
+    JSON.stringify(first),
+    JSON.stringify(assignIntrosByPlayer(ids, "usuario-1", "vallenato")),
+  );
+  assertEquals(
+    first.personal.every((id) => second.personal.includes(id)),
+    false,
+  );
+});
+
+Deno.test("la reasignación conserva las intros ya desbloqueadas", () => {
+  const ids = Array.from(
+    { length: 45 },
+    (_, index) => `cancion-${String(index + 1).padStart(2, "0")}`,
+  );
+  const original = assignIntrosByPlayer(ids, "usuario", "salsa");
+  const medleyId = `salsa--${original.medley[0]}`;
+  const updated = assignIntrosByPlayer(
+    ids,
+    "usuario",
+    "salsa",
+    [original.personal[0]],
+    [medleyId],
+  );
+
+  assertEquals(updated.personal.includes(original.personal[0]), true);
+  assertEquals(updated.medley.includes(original.medley[0]), true);
+
+  const sharedId = original.personal[1];
+  const repartitioned = assignIntrosByPlayer(
+    ids,
+    "usuario",
+    "salsa",
+    [sharedId],
+    [`salsa--${sharedId}`],
+  );
+  assertEquals(repartitioned.personal.includes(sharedId), true);
+  assertEquals(repartitioned.medley.includes(sharedId), false);
+
+  const medleyOnlyId = original.personal[2];
+  const moved = assignIntrosByPlayer(
+    ids,
+    "usuario",
+    "salsa",
+    [],
+    [`salsa--${medleyOnlyId}`],
+  );
+  assertEquals(moved.personal.includes(medleyOnlyId), false);
+  assertEquals(moved.medley.includes(medleyOnlyId), true);
 });

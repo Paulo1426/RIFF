@@ -14,7 +14,7 @@ AvanceJuego _avance({
   avanzada: avanzada,
   nivelesPorDificultad: 5,
   introsAdivinadas: intros,
-  totalIntros: 45,
+  totalIntros: 30,
 );
 
 bool _tiene(List<Logro> logros, String nombre) =>
@@ -42,10 +42,10 @@ void main() {
   test('Vallenatólogo pide 30 victorias y el 100 % del juego', () {
     const veinte = SaldoSalas(ganadasCancion: 30);
     expect(
-      _tiene(logrosDe(veinte, _avance(intros: 45)), 'Vallenatólogo'),
+      _tiene(logrosDe(veinte, _avance(intros: 30)), 'Vallenatólogo'),
       isFalse,
     );
-    final completo = _avance(facil: 5, media: 5, avanzada: 5, intros: 45);
+    final completo = _avance(facil: 5, media: 5, avanzada: 5, intros: 30);
     expect(_tiene(logrosDe(veinte, completo), 'Vallenatólogo'), isTrue);
     expect(
       _tiene(logrosDe(veinte, completo), 'Así se empieza la parranda'),
@@ -60,7 +60,7 @@ void main() {
       avanzada: 5,
       nivelesPorDificultad: 5,
       introsAdivinadas: 0,
-      totalIntros: 45,
+      totalIntros: 30,
       unInstrumento: uno,
     );
     const nombre = 'Música para mis oídos';
@@ -96,7 +96,7 @@ void main() {
 
   test('20 insignias generales sin repetir nombres', () {
     final avances = [
-      _avance(facil: 5, media: 5, avanzada: 5, intros: 45),
+      _avance(facil: 5, media: 5, avanzada: 5, intros: 30),
       _avance(facil: 5),
     ];
     final generales = logrosGenerales(const SaldoSalas(jugadas: 10), avances);

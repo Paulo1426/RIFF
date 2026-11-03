@@ -61,12 +61,9 @@ void main() {
     final state = EstadoIntros.fromJson({
       'monedas': 10,
       'monedas_ganadas': 0,
-      'monedas_por_genero': {
-        'vallenato': 3,
-        'aleatorio': 10,
-      },
+      'monedas_por_genero': {'vallenato': 3, 'aleatorio': 10},
       'puede_sacar': true,
-      'restantes': 45,
+      'restantes': 30,
       'intros': [],
     });
 

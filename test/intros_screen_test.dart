@@ -25,7 +25,7 @@ class _RepositorioFalso extends FirebaseGameRepository {
   }) async => EstadoIntros.fromJson({
     'monedas': 7,
     'monedas_ganadas': 9,
-    'restantes': 43,
+    'restantes': 27,
     'intros': [
       {
         'id': 'cancion-17',
@@ -88,8 +88,8 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.text('7'), findsOneWidget);
       // Las cartas salen directo: la descubierta con su título.
-      expect(find.textContaining('Quedan 43'), findsOneWidget);
-      expect(find.text('Sacar carta · 🪙 1'), findsOneWidget);
+      expect(find.textContaining('Quedan 27'), findsOneWidget);
+      expect(find.text('Sacar carta · 1 moneda'), findsOneWidget);
       expect(find.textContaining('Una canción'), findsOneWidget);
       // Descubiertas en orden alfabético, aunque "Una" salió primero.
       final abre = tester.getTopLeft(find.text('Abre la puerta'));

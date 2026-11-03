@@ -23,6 +23,7 @@ import '../widgets/liquid_glass/liquid_glass_button.dart';
 import '../widgets/liquid_glass/liquid_glass_card.dart';
 import '../widgets/recorrido.dart';
 import '../widgets/reproductor_cancion.dart';
+import '../widgets/monedas_genero.dart';
 
 // Color de las intros del género que se está jugando.
 Color get _colorIntros => paletaGenero(generoActivo).intro;
@@ -218,44 +219,10 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
 
   Widget _panelInferior(EstadoIntros estado) {
     final text = Theme.of(context).textTheme;
-    final saldosVisibles = generoActivo.esPopurri
-        ? Genero.values
-              .map(
-                (genero) => (
-                  genero: genero,
-                  saldo:
-                      estado.monedasPorGenero[genero.id] ??
-                      (genero == generoActivo ? estado.monedas : 0),
-                ),
-              )
-              .toList()
-        : [
-            (
-              genero: generoActivo,
-              saldo:
-                  estado.monedasPorGenero[generoActivo.id] ?? estado.monedas,
-            ),
-          ];
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (generoActivo.esPopurri) ...[
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 6,
-            runSpacing: 4,
-            children: [
-              for (final item in saldosVisibles)
-                Chip(
-                  visualDensity: VisualDensity.compact,
-                  avatar: Text(item.genero.simboloMoneda),
-                  label: Text('${item.saldo}'),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-        ],
         LiquidGlassButton(
           key: _claveSacar,
           onPressed:
@@ -302,14 +269,10 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
         Padding(
           key: _claveMonedas,
           padding: const EdgeInsets.only(right: 12),
-          child: Semantics(
-            label:
-                '${generoActivo.simboloMoneda} ${estado.monedas} monedas de ${generoActivo.nombre}',
-            excludeSemantics: true,
-            child: Chip(
-              avatar: Text(generoActivo.simboloMoneda),
-              label: Text('${estado.monedas}'),
-            ),
+          child: MonedasGenero(
+            genero: generoActivo,
+            saldo: estado.monedas,
+            saldos: estado.monedasPorGenero,
           ),
         ),
     ];

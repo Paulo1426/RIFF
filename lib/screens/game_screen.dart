@@ -111,9 +111,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   final Map<TipoPista, String> _pistasDesbloqueadas = {};
   TipoPista? _cargandoPista;
 
-  Genero get _generoMoneda => generoActivo.esPopurri
-      ? Genero.deId(widget.nivel.id.split('--').first)
-      : generoActivo;
+  Genero get _generoMoneda => generoActivo;
 
   @override
   void initState() {
@@ -375,8 +373,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         builder: (context, setDialogState) => PistasDialog(
           saldoMonedas: _monedasDisponibles,
           simboloMoneda: _generoMoneda.simboloMoneda,
-          saldoMedley: _monedasPorGenero['aleatorio'] ?? 0,
-          mostrarMonedasPorGenero: generoActivo.esPopurri,
           pistasDesbloqueadas: _pistasDesbloqueadas,
           cargandoTipo: _cargandoPista,
           onComprarPista: (tipo) async {

@@ -11,9 +11,6 @@ class PistaCard extends StatelessWidget {
     required this.tipo,
     required this.saldoMonedas,
     this.simboloMoneda = '🪙',
-    this.saldoAlternativo = 0,
-    this.simboloMonedaAlternativo = '🎲',
-    this.monedaAlternativaActiva = false,
     this.desbloqueada = false,
     this.valor,
     this.cargando = false,
@@ -23,9 +20,6 @@ class PistaCard extends StatelessWidget {
   final TipoPista tipo;
   final int saldoMonedas;
   final String simboloMoneda;
-  final int saldoAlternativo;
-  final String simboloMonedaAlternativo;
-  final bool monedaAlternativaActiva;
   final bool desbloqueada;
   final String? valor;
   final bool cargando;
@@ -36,14 +30,7 @@ class PistaCard extends StatelessWidget {
     final theme = Theme.of(context);
     final text = theme.textTheme;
     final costo = tipo.costoMonedas;
-    final compraConPrincipal = saldoMonedas >= costo;
-    final compraConAlternativa = saldoAlternativo >= costo;
-    final puedeComprar = !desbloqueada &&
-        (compraConPrincipal || compraConAlternativa) &&
-        !cargando;
-    final monedaCompra = compraConPrincipal
-        ? simboloMoneda
-        : simboloMonedaAlternativo;
+    final puedeComprar = !desbloqueada && saldoMonedas >= costo && !cargando;
 
     return LiquidGlassCard(
       borderRadius: 16,
@@ -110,9 +97,7 @@ class PistaCard extends StatelessWidget {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  monedaAlternativaActiva
-                                      ? '$simboloMoneda/$simboloMonedaAlternativo'
-                                      : simboloMoneda,
+                                  simboloMoneda,
                                   style: const TextStyle(fontSize: 12),
                                 ),
                                 const SizedBox(width: 4),
@@ -198,9 +183,7 @@ class PistaCard extends StatelessWidget {
                       )
                     : Text(
                         puedeComprar
-                            ? 'Desbloquear ($monedaCompra $costo)'
-                            : monedaAlternativaActiva
-                            ? 'Faltan monedas ($simboloMoneda $saldoMonedas o $simboloMonedaAlternativo $saldoAlternativo)'
+                            ? 'Desbloquear ($simboloMoneda $costo)'
                             : 'Faltan monedas (tienes $saldoMonedas)',
                       ),
               ),

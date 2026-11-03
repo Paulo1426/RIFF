@@ -31,6 +31,7 @@ import '../widgets/liquid_glass/liquid_glass_bottom_nav.dart';
 import '../widgets/liquid_glass/liquid_glass_card.dart';
 import '../widgets/liquid_glass/liquid_glass_dialog.dart';
 import '../widgets/liquid_glass/liquid_level_card.dart';
+import '../widgets/monedas_genero.dart';
 import 'carrusel_dificultades.dart';
 import 'game_screen.dart';
 import 'instrucciones_dialog.dart';
@@ -150,6 +151,7 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
   final _avance = <Genero, String>{};
   // Lo mismo sin formato, para el progreso general.
   final _datos = <Genero, ({EstadoJuegoRemoto estado, EstadoIntros? intros})>{};
+  bool _cargandoAvances = false;
   // Las salas son de todos los géneros.
   SaldoSalas _saldo = const SaldoSalas();
   StreamSubscription<SaldoSalas>? _suscripcionSaldo;
@@ -160,9 +162,6 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _avisoAuriculares(context);
     });
-    for (final genero in Genero.values.where((g) => g.disponible)) {
-      unawaited(_cargarAvance(genero));
-    }
     if (!widget.user.isAnonymous) {
       _suscripcionSaldo = ref
           .read(firebaseGameRepositoryProvider)
@@ -181,17 +180,24 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
     super.dispose();
   }
 
+  Future<void> _cargarAvances() async {
+    for (final genero in _generosDelProgreso) {
+      if (!mounted) return;
+      await _cargarAvance(genero);
+    }
+  }
+
+  List<Genero> get _generosDelProgreso => Genero.values
+      .where((genero) => genero.disponible && !genero.esPopurri)
+      .toList();
+
   Future<void> _cargarAvance(Genero genero) async {
     final repo = ref.read(firebaseGameRepositoryProvider);
     try {
-      // A la vez: las intros no esperan al progreso. Se desbloquean con el
-      // primer nivel: si fallan, sin dato.
-      final (estado, intros) = await (
-        repo.cargarEstado(genero: genero),
-        repo
-            .cargarIntros(genero: genero)
-            .then<EstadoIntros?>((e) => e, onError: (_) => null),
-      ).wait;
+      final estado = await repo.cargarEstado(genero: genero);
+      final intros = await repo
+          .cargarIntros(genero: genero)
+          .then<EstadoIntros?>((e) => e, onError: (_) => null);
       // Sin niveles cargados (género en preparación) no hay nivel que mostrar.
       final hayNiveles = estado.dificultades.any((d) => d.total > 0);
       final adivinadas = intros?.intros
@@ -215,6 +221,31 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
       // Sin conexión o sin progreso aún: la tarjeta sale sin la línea.
       debugPrint('Sin avance de ${genero.nombre}: $error');
     }
+  }
+
+  Future<void> _abrirProgresoTodo() async {
+    if (_cargandoAvances) return;
+    final tieneTodo =
+        _datos.length == _generosDelProgreso.length &&
+        _datos.values.every((dato) => dato.intros != null);
+    if (!tieneTodo) {
+      setState(() => _cargandoAvances = true);
+      try {
+        await _cargarAvances();
+      } finally {
+        if (mounted) setState(() => _cargandoAvances = false);
+      }
+    }
+    if (!mounted) return;
+    _abrir(
+      'Progreso general',
+      _ProgresoTodo(
+        datos: Map.of(_datos),
+        saldo: _saldo,
+        esInvitado: widget.user.isAnonymous,
+      ),
+      acento: AppColors.oro,
+    );
   }
 
   // Después de los géneros (Medley incluido) van las salas y el progreso
@@ -312,20 +343,14 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
         emoji: '📈',
         animacion: _Animacion.saltar,
         titulo: 'Progreso general',
-        detalle: 'Todos los géneros, salas e insignias generales.',
+        detalle: _cargandoAvances
+            ? 'Cargando tu progreso...'
+            : 'Toca para consultar todos tus géneros.',
         info: _datos.isEmpty ? null : '$niveles niveles · 🎧 $intros intros',
         color: AppColors.oro,
         alFrente: alFrente,
         animar: moverse,
-        onTap: () => _abrir(
-          'Progreso general',
-          _ProgresoTodo(
-            datos: Map.of(_datos),
-            saldo: _saldo,
-            esInvitado: widget.user.isAnonymous,
-          ),
-          acento: AppColors.oro,
-        ),
+        onTap: _cargandoAvances ? null : _abrirProgresoTodo,
       );
     }
     final invitado = widget.user.isAnonymous;
@@ -628,6 +653,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   StreamSubscription<SaldoSalas>? _suscripcionSaldo;
   // Monedas de Adivina la intro para la barra (null hasta saberlas).
   int? _monedas;
+  Map<String, int> _monedasPorGenero = const {};
   // El saldo de salas ya llegó (antes es todo cero y no sirve para insignias).
   bool _saldoCargado = false;
   // Revisando insignias o mostrando avisos al terminar un nivel.
@@ -824,17 +850,18 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         _loading = false;
       });
       unawaited(_revisarInsignias());
-        unawaited(
-          _estadoIntros().then((intros) {
-            if (mounted) {
-              setState(() {
-                _resumenIntros = intros;
-                _monedas = intros?.monedas ?? _monedas;
-              });
-              _revisarInsignias();
-            }
-          }),
-        );
+      unawaited(
+        _estadoIntros().then((intros) {
+          if (mounted) {
+            setState(() {
+              _resumenIntros = intros;
+              _monedas = intros?.monedas ?? _monedas;
+              _monedasPorGenero = intros?.monedasPorGenero ?? _monedasPorGenero;
+            });
+            _revisarInsignias();
+          }
+        }),
+      );
     } catch (error) {
       if (!mounted) return;
       await _loadOfflineSnapshot(error);
@@ -1296,6 +1323,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         _offlineSnapshot = null;
         _resumenIntros = null;
         _monedas = null;
+        _monedasPorGenero = const {};
         _seleccionada = null;
       });
       widget.onReiniciarProgreso();
@@ -1433,7 +1461,14 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         onPressed: widget.onCambiarGenero,
       ),
     if ((_pestana == _pIntro || _pestana == _pProgreso) && _monedas != null)
-      _Saldo(widget.genero.simboloMoneda, _monedas!, 'monedas'),
+      Padding(
+        padding: const EdgeInsets.only(left: 6),
+        child: MonedasGenero(
+          genero: widget.genero,
+          saldo: _monedas!,
+          saldos: _monedasPorGenero,
+        ),
+      ),
   ];
 
   void _cambiarPestana(int pestana) {
@@ -1448,6 +1483,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
             if (mounted && intros != null) {
               setState(() {
                 _monedas = intros.monedas;
+                _monedasPorGenero = intros.monedasPorGenero;
                 _resumenIntros = intros;
               });
               _revisarInsignias();
@@ -1513,6 +1549,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       onEstado: (intros) {
         setState(() {
           _monedas = intros.monedas;
+          _monedasPorGenero = intros.monedasPorGenero;
           _resumenIntros = intros;
         });
         _revisarInsignias();
@@ -3425,6 +3462,55 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
     super.dispose();
   }
 
+  Future<void> _mostrarErrorAcceso({
+    Object? error,
+    String? codigo,
+    String? mensaje,
+    bool inicioConCorreo = false,
+  }) async {
+    if (error is FirebaseAuthException) {
+      codigo = error.code;
+      mensaje = error.message ?? error.code;
+    }
+
+    final alerta = switch (codigo) {
+      'network-request-failed' => 'No hay conexión a internet.',
+      'wrong-password' ||
+      'user-not-found' ||
+      'invalid-credential' ||
+      'invalid-login-credentials' ||
+      'invalid-email' when inicioConCorreo => 'Correo o usuario incorrecto.',
+      _ when error is SocketException || error is TimeoutException =>
+        'No hay conexión a internet.',
+      _ => null,
+    };
+
+    if (!mounted) return;
+    if (alerta == null) {
+      setState(() => _error = mensaje ?? error.toString());
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => LiquidGlassDialog(
+        icon: Icon(
+          Icons.error_outline,
+          color: Theme.of(context).colorScheme.error,
+          size: 36,
+        ),
+        title: const Text('Error de inicio de sesión'),
+        content: Text(alerta),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Aceptar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() {
@@ -3447,9 +3533,9 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
       }
       widget.onSignedIn?.call();
     } on FirebaseAuthException catch (error) {
-      if (mounted) setState(() => _error = error.message ?? error.code);
+      await _mostrarErrorAcceso(error: error, inicioConCorreo: !_registering);
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      await _mostrarErrorAcceso(error: error);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -3471,9 +3557,11 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
       await FirebaseAuth.instance.signInWithCredential(credential);
       widget.onSignedIn?.call();
     } on FirebaseAuthException catch (error) {
-      if (mounted) setState(() => _error = error.message ?? error.code);
+      await _mostrarErrorAcceso(error: error);
     } on GoogleSignInException catch (error) {
-      if (mounted) {
+      if (error.code.name.toLowerCase().contains('network')) {
+        await _mostrarErrorAcceso(codigo: 'network-request-failed');
+      } else if (mounted) {
         setState(() {
           _error = error.code == GoogleSignInExceptionCode.canceled
               ? 'Se canceló el inicio de sesión con Google.'
@@ -3481,7 +3569,7 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
         });
       }
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      await _mostrarErrorAcceso(error: error);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -3496,9 +3584,9 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
       await FirebaseAuth.instance.signInAnonymously();
       widget.onSignedIn?.call();
     } on FirebaseAuthException catch (error) {
-      if (mounted) setState(() => _error = error.message ?? error.code);
+      await _mostrarErrorAcceso(error: error);
     } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+      await _mostrarErrorAcceso(error: error);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -3604,10 +3692,15 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                                       labelText: 'Correo',
                                       prefixIcon: Icon(Icons.mail_outline),
                                     ),
-                                    validator: (value) =>
-                                        value == null || !value.contains('@')
-                                        ? 'Escribe un correo válido'
-                                        : null,
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Escribe un correo';
+                                      }
+                                      return _registering &&
+                                              !value.contains('@')
+                                          ? 'Escribe un correo válido'
+                                          : null;
+                                    },
                                   ),
                                   const SizedBox(height: 12),
                                   TextFormField(
@@ -3632,10 +3725,14 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                                         ),
                                       ),
                                     ),
-                                    validator: (value) =>
-                                        value == null || value.length < 6
-                                        ? 'Usa al menos 6 caracteres'
-                                        : null,
+                                    validator: (value) {
+                                      if (value == null || value.isEmpty) {
+                                        return 'Escribe una contraseña';
+                                      }
+                                      return _registering && value.length < 6
+                                          ? 'Usa al menos 6 caracteres'
+                                          : null;
+                                    },
                                   ),
                                   if (_error != null) ...[
                                     const SizedBox(height: 12),

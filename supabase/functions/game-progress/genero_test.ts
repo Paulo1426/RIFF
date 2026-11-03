@@ -1,19 +1,21 @@
 import {
   coleccion,
-  enCatalogo,
-  idMezclado,
-  vecino,
   coleccionJugador,
   conGenero,
+  enCatalogo,
   esGenero,
   generoActual,
+  idMezclado,
   ubicacion,
+  vecino,
 } from "../_shared/genero.ts";
 
 function assertEquals(actual: unknown, expected: unknown) {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
     throw new Error(
-      `Se esperaba ${JSON.stringify(expected)} y llegó ${JSON.stringify(actual)}`,
+      `Se esperaba ${JSON.stringify(expected)} y llegó ${
+        JSON.stringify(actual)
+      }`,
     );
   }
 }
@@ -21,7 +23,10 @@ function assertEquals(actual: unknown, expected: unknown) {
 Deno.test("colecciones con prefijo y un bucket por género con carpetas", () => {
   assertEquals(generoActual(), "vallenato");
   assertEquals(coleccion("songs"), "vallenato_songs");
-  assertEquals(coleccion("privateLevelAnswers"), "vallenato_privateLevelAnswers");
+  assertEquals(
+    coleccion("privateLevelAnswers"),
+    "vallenato_privateLevelAnswers",
+  );
   assertEquals(ubicacion("instrumentos", "cancion-001/bateria.mp3"), {
     bucket: "vallenato",
     ruta: "instrumentos/cancion-001/bateria.mp3",
@@ -57,16 +62,30 @@ Deno.test("cada petición usa su propio género", async () => {
   assertEquals(generoActual(), "vallenato");
 });
 
+Deno.test("el progreso de canciones de Medley no comparte desbloqueos", () => {
+  const normal = conGenero("vallenato", () => coleccionJugador("progress"));
+  const medley = conGenero("aleatorio", () => coleccionJugador("progress"));
+
+  assertEquals(normal, "progress");
+  assertEquals(medley, "aleatorio_progress");
+});
+
 Deno.test("Medley mezcla los cinco catálogos con el género en el id", () => {
   conGenero("aleatorio", () => {
     assertEquals(idMezclado("salsa", "facil-03"), "salsa--facil-03");
-    assertEquals(enCatalogo("levels", "salsa--facil-03"), "salsa_levels/facil-03");
+    assertEquals(
+      enCatalogo("levels", "salsa--facil-03"),
+      "salsa_levels/facil-03",
+    );
     assertEquals(
       enCatalogo("intros", "rock_pop--cancion-07"),
       "rock_pop_intros/cancion-07",
     );
     // La canción de un nivel vive en el catálogo de ese nivel.
-    assertEquals(vecino("popular--medio-02", "cancion-008"), "popular--cancion-008");
+    assertEquals(
+      vecino("popular--medio-02", "cancion-008"),
+      "popular--cancion-008",
+    );
     assertEquals(coleccionJugador("progress"), "aleatorio_progress");
     let fallo = false;
     try {

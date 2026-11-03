@@ -13,15 +13,11 @@ class PistasDialog extends StatelessWidget {
     required this.pistasDesbloqueadas,
     required this.onComprarPista,
     this.simboloMoneda = '🪙',
-    this.saldoMedley = 0,
-    this.mostrarMonedasPorGenero = false,
     this.cargandoTipo,
   });
 
   final int saldoMonedas;
   final String simboloMoneda;
-  final int saldoMedley;
-  final bool mostrarMonedasPorGenero;
   final Map<TipoPista, String> pistasDesbloqueadas;
   final void Function(TipoPista tipo) onComprarPista;
   final TipoPista? cargandoTipo;
@@ -57,19 +53,13 @@ class PistasDialog extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Wrap(
-            alignment: WrapAlignment.end,
-            spacing: 6,
-            children: [
-              _saldo(text, simboloMoneda, saldoMonedas),
-              if (mostrarMonedasPorGenero) _saldo(text, '🎲', saldoMedley),
-            ],
+          Align(
+            alignment: Alignment.centerRight,
+            child: _saldo(text, simboloMoneda, saldoMonedas),
           ),
           const SizedBox(height: 8),
           Text(
-            mostrarMonedasPorGenero
-                ? 'En Medley puedes pagar con la moneda de la canción o con monedas 🎲 de Medley.'
-                : 'Usa tus monedas de este género para desbloquear pistas y adivinar la canción:',
+            'Usa monedas de esta sección para desbloquear pistas y adivinar la canción:',
             style: text.bodyMedium?.copyWith(
               color: text.bodyMedium?.color?.withValues(alpha: 0.85),
             ),
@@ -80,9 +70,6 @@ class PistasDialog extends StatelessWidget {
               tipo: tipo,
               saldoMonedas: saldoMonedas,
               simboloMoneda: simboloMoneda,
-              saldoAlternativo: mostrarMonedasPorGenero ? saldoMedley : 0,
-              simboloMonedaAlternativo: '🎲',
-              monedaAlternativaActiva: mostrarMonedasPorGenero,
               desbloqueada: tipo == TipoPista.sorpresa
                   // La sorpresa se agota cuando ya salieron las tres.
                   ? TipoPistaExtension.sorpresas.every(
@@ -111,9 +98,7 @@ class PistasDialog extends StatelessWidget {
     decoration: BoxDecoration(
       color: AppColors.signalOrange.withValues(alpha: 0.15),
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(
-        color: AppColors.signalOrange.withValues(alpha: 0.3),
-      ),
+      border: Border.all(color: AppColors.signalOrange.withValues(alpha: 0.3)),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,

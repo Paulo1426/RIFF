@@ -20,12 +20,9 @@ void main() {
     estadoJson: const {
       'monedas': 1,
       'monedas_ganadas': 2,
-      'monedas_por_genero': {
-        'vallenato': 1,
-        'aleatorio': 10,
-      },
+      'monedas_por_genero': {'vallenato': 1, 'aleatorio': 10},
       'puede_sacar': true,
-      'restantes': 44,
+      'restantes': 29,
       'intros': [
         {'id': 'cancion-26', 'numero': 1, 'estado': 'desbloqueada'},
       ],

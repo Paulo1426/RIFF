@@ -17,8 +17,8 @@ void main() {
         media: completo ? 5 : 0,
         avanzada: completo ? 5 : 0,
         nivelesPorDificultad: 5,
-        introsAdivinadas: completo ? 45 : 0,
-        totalIntros: 45,
+        introsAdivinadas: completo ? 30 : 0,
+        totalIntros: 30,
         unInstrumento: completo ? 15 : 0,
       );
       final salas = SaldoSalas(
