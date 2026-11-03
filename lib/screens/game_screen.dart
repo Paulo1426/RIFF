@@ -6,6 +6,7 @@ import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/genero.dart';
 import '../models/instrumento.dart';
 import '../models/nivel.dart';
 import '../models/partida.dart';
@@ -106,8 +107,13 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   int _playbackGeneration = 0;
   late final Partida? _offlinePartida;
   int _monedasDisponibles = 0;
+  Map<String, int> _monedasPorGenero = const {};
   final Map<TipoPista, String> _pistasDesbloqueadas = {};
   TipoPista? _cargandoPista;
+
+  Genero get _generoMoneda => generoActivo.esPopurri
+      ? Genero.deId(widget.nivel.id.split('--').first)
+      : generoActivo;
 
   @override
   void initState() {
@@ -280,13 +286,21 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             .read(firebaseGameRepositoryProvider)
             .cargarIntros();
         if (mounted) {
-          setState(() => _monedasDisponibles = estado.monedas);
+          setState(() {
+            _monedasPorGenero = estado.monedasPorGenero;
+            _monedasDisponibles =
+                _monedasPorGenero[_generoMoneda.id] ?? estado.monedas;
+          });
         }
       } else {
         final uid = ref.read(usuarioProvider).id;
         final store = await ref.read(offlineIntroStoreProvider).load(uid);
         if (mounted && store != null) {
-          setState(() => _monedasDisponibles = store.estado.monedas);
+          setState(() {
+            _monedasPorGenero = store.estado.monedasPorGenero;
+            _monedasDisponibles =
+                _monedasPorGenero[_generoMoneda.id] ?? store.estado.monedas;
+          });
         }
       }
     } catch (e) {
@@ -310,7 +324,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           .pedirPista(gameId: widget.gameId, tipo: tipo);
       if (!mounted) return;
       setState(() {
-        _monedasDisponibles = resultado.monedasRestantes;
+        _monedasPorGenero = resultado.monedasPorGenero;
+        _monedasDisponibles =
+            _monedasPorGenero[_generoMoneda.id] ?? resultado.monedasRestantes;
         // Se guarda con el tipo que salió (la sorpresa trae el suyo).
         _pistasDesbloqueadas[resultado.tipo] =
             resultado.tipo == TipoPista.cuartoInstrumento
@@ -358,6 +374,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       builder: (dialogCtx) => StatefulBuilder(
         builder: (context, setDialogState) => PistasDialog(
           saldoMonedas: _monedasDisponibles,
+          simboloMoneda: _generoMoneda.simboloMoneda,
+          saldoMedley: _monedasPorGenero['aleatorio'] ?? 0,
+          mostrarMonedasPorGenero: generoActivo.esPopurri,
           pistasDesbloqueadas: _pistasDesbloqueadas,
           cargandoTipo: _cargandoPista,
           onComprarPista: (tipo) async {
@@ -766,7 +785,11 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           _premio = resultado.puntos > 0
               ? ('🏆', resultado.puntos, 'puntos')
               : resultado.monedas > 0
-              ? ('🪙', resultado.monedas, 'monedas para Adivina la intro')
+              ? (
+                  generoActivo.simboloMoneda,
+                  resultado.monedas,
+                  'monedas para Adivina la intro',
+                )
               : null;
         });
       } else {
@@ -1112,7 +1135,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
               IconButton(
                 tooltip: _playingOffline
                     ? 'Las pistas necesitan conexión a internet'
-                    : 'Pistas y comodines (🪙 $_monedasDisponibles)',
+                    : 'Pistas y comodines (${_generoMoneda.simboloMoneda} $_monedasDisponibles)',
                 icon: Badge(
                   label: Text('$_monedasDisponibles'),
                   isLabelVisible: _monedasDisponibles > 0,

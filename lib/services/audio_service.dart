@@ -50,6 +50,7 @@ class AudioService {
     List<String?>? cacheKeys,
     Duration inicio = Duration.zero,
     Duration? duracion = const Duration(seconds: 5),
+    Duration fundidoSalida = Duration.zero,
   }) async {
     if (urls.isEmpty) {
       throw ArgumentError('No hay audios para reproducir');
@@ -67,6 +68,8 @@ class AudioService {
     _cancelPlayback = cancellation;
     AudioSession? audioSession;
     var audioSessionActive = false;
+    final fundidos = <StreamSubscription<Duration>>[];
+    final errorFundido = Completer<void>();
     try {
       for (final url in urls) {
         if (!identical(_cancelPlayback, cancellation)) return;
@@ -92,6 +95,31 @@ class AudioService {
           // El clip marca el fin del fragmento, así pausar no consume su duración.
           await player.setClip(start: inicio, end: inicio + duracion);
         }
+        final duracionClip = duracion;
+        if (duracionClip != null && fundidoSalida > Duration.zero) {
+          fundidos.add(
+            player.positionStream.listen((position) {
+              final transcurrido = position - inicio;
+              final inicioFundido = duracionClip - fundidoSalida;
+              if (transcurrido < inicioFundido) return;
+              final restante = duracionClip - transcurrido;
+              final volumen = (restante.inMilliseconds /
+                      fundidoSalida.inMilliseconds)
+                  .clamp(0.0, 1.0)
+                  .toDouble();
+              unawaited(
+                player.setVolume(volumen).catchError((
+                  Object error,
+                  StackTrace stackTrace,
+                ) {
+                  if (!errorFundido.isCompleted) {
+                    errorFundido.completeError(error, stackTrace);
+                  }
+                }),
+              );
+            }),
+          );
+        }
       }
       if (!identical(_cancelPlayback, cancellation)) return;
       audioSession = await AudioSession.instance;
@@ -114,10 +142,16 @@ class AudioService {
           ),
         ),
       ).then<void>((_) {});
-      await Future.any<void>([completed, playErrors, cancellation.future]);
+      await Future.any<void>([
+        completed,
+        playErrors,
+        cancellation.future,
+        errorFundido.future,
+      ]);
     } catch (error) {
       if (identical(_cancelPlayback, cancellation)) rethrow;
     } finally {
+      await Future.wait(fundidos.map((subscription) => subscription.cancel()));
       if (identical(_cancelPlayback, cancellation)) {
         await detener();
       }

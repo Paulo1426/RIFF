@@ -30,8 +30,8 @@ import {
   tiposSala,
 } from "./salas.ts";
 import {
-  coinBalance,
-  coinsEarned,
+  coinWalletBalance,
+  coinsEarnedByGenre,
   introCoinRewards,
   introPrice,
   savedWelcomeCoins,
@@ -59,6 +59,7 @@ import {
   idMezclado,
   idReal,
   vecino,
+  type Genero,
   type TipoAudio,
   ubicacion,
 } from "../_shared/genero.ts";
@@ -1492,12 +1493,10 @@ async function handleRequestHint(
 
   const pistasUsadas = stringList(game.fields.pistasUsadas);
   const introState = await loadIntroState(token, uid, guest);
-  const currentCoins = coinBalance(
-    introState.earned,
-    introState.unlocked.length,
-    introState.hintCoinsSpent,
-    introState.welcome ?? 0,
-  );
+  const hintGenre = generoActual() === "aleatorio"
+    ? generoDe(levelId)
+    : generoActual();
+  const currentCoins = introState.balances[hintGenre];
 
   const purchased = stringList(game.fields.instrumentosComprados);
   const rawInstruments = level.fields.instrumentos;
@@ -1556,6 +1555,7 @@ async function handleRequestHint(
       costo: 0,
       pistasUsadas,
       monedasRestantes: currentCoins,
+      monedasPorGenero: introState.balances,
       instrumentosComprados: purchased,
     };
   }
@@ -1567,10 +1567,16 @@ async function handleRequestHint(
     tipo: string,
     cost: number,
   ): Promise<JsonObject> {
-    if (currentCoins < cost) {
+    const currencyGenre = currentCoins >= cost
+      ? hintGenre
+      : generoActual() === "aleatorio" &&
+          introState.balances.aleatorio >= cost
+      ? "aleatorio"
+      : null;
+    if (currencyGenre == null) {
       throw new HttpError(
         409,
-        `No tienes suficientes monedas (${currentCoins} de ${cost})`,
+        `No tienes suficientes monedas del género ${hintGenre}`,
       );
     }
 
@@ -1619,19 +1625,21 @@ async function handleRequestHint(
       updateWrite(gamePath, gameUpdates, game!.updateTime!),
     ];
 
-    // Descontar monedas del usuario en su introProgress/state
-    const newSpent = introState.hintCoinsSpent + cost;
-    if (introState.state) {
+    // El gasto de una pista queda en la cartera que pagó.
+    const currencyState = introState.states[currencyGenre];
+    const newSpent = introState.hintSpentByGenre[currencyGenre] + cost;
+    const currencyPath = introStatePath(uid, guest, currencyGenre);
+    if (currencyState) {
       writes.push(
         updateWrite(
-          introState.path,
+          currencyPath,
           { pistasMonedasGastadas: newSpent, updatedAt: now },
-          introState.state.updateTime!,
+          currencyState.updateTime!,
         ),
       );
     } else {
       writes.push(
-        createWrite(introState.path, {
+        createWrite(currencyPath, {
           unlockedIds: [],
           completedIds: [],
           pistasMonedasGastadas: newSpent,
@@ -1645,6 +1653,10 @@ async function handleRequestHint(
 
     await commitWrites(token, writes);
 
+    const balances = {
+      ...introState.balances,
+      [currencyGenre]: introState.balances[currencyGenre] - cost,
+    };
     return {
       tipo,
       valor,
@@ -1652,7 +1664,8 @@ async function handleRequestHint(
       yaComprada: false,
       costo: cost,
       pistasUsadas: updatedPistas,
-      monedasRestantes: currentCoins - cost,
+      monedasRestantes: balances[hintGenre],
+      monedasPorGenero: balances,
       instrumentosComprados: updatedPurchased,
     };
   }
@@ -2590,8 +2603,8 @@ async function answerRoomIntro(
 // --- Minijuego "Adivina la intro" ---
 // Firestore: intros/{id} (solo servidor: título, artista, respuesta y rutas en
 // el bucket de intros) y {users|guestSessions}/{uid}/introProgress/state con
-// las intros obtenidas (en orden de salida) y las adivinadas.
-// Las monedas no se guardan: salen de los niveles completados.
+// las intros obtenidas (en orden de salida), las adivinadas y los gastos por
+// cartera. Las monedas ganadas salen de los niveles completados.
 
 const introAudioTypes = {
   intro: { field: "introAudioPath", file: "intro.mp3" },
@@ -2599,9 +2612,13 @@ const introAudioTypes = {
   cover: { field: "portadaPath", file: "portada.jpg" },
 } as const;
 
-function introStatePath(uid: string, guest: boolean): string {
+function introStatePath(
+  uid: string,
+  guest: boolean,
+  genero: Genero = generoActual(),
+): string {
   return `${guest ? "guestSessions" : "users"}/${uid}/${
-    coleccionJugador("introProgress")
+    coleccionJugador("introProgress", genero)
   }/state`;
 }
 
@@ -2613,9 +2630,28 @@ function stringList(value: unknown): string[] {
 
 async function loadIntroState(token: string, uid: string, guest: boolean) {
   const path = introStatePath(uid, guest);
-  const [documents, state] = await Promise.all([
+  const [documents, progressByGenre, statesByGenre] = await Promise.all([
     listarCatalogo(token, "intros"),
-    getDocument(token, path),
+    Promise.all(
+      generos.map((genero) =>
+        Promise.all(
+          difficulties.map((difficulty) =>
+            getDocument(
+              token,
+              `${guest ? `guestSessions/${uid}` : `users/${uid}`}/${
+                coleccionJugador("progress", genero)
+              }/${difficulty}`,
+            )
+          ),
+        )
+      ),
+    ),
+    Promise.all(
+      generos.map(async (genero) => [
+        genero,
+        await getDocument(token, introStatePath(uid, guest, genero)),
+      ] as const),
+    ),
   ]);
   const intros = new Map<string, JsonObject>();
   for (const document of documents) {
@@ -2624,91 +2660,110 @@ async function loadIntroState(token: string, uid: string, guest: boolean) {
     if (validId(id) && fields.published === true) intros.set(id, fields);
   }
 
-  // Agregar progreso de TODOS los géneros para monedas globales (incluye aleatorio).
-  const allProgress = await Promise.all(
-    generos.map((genero) =>
-      Promise.all(
-        difficulties.map((difficulty) =>
-          getDocument(token, `${uid === "guest" ? `guestSessions/${uid}` : `users/${uid}`}/${coleccionJugador("progress", genero)}/${difficulty}`)
-        )
-      )
-    )
-  );
-  const earned = coinsEarned(
+  const states = Object.fromEntries(statesByGenre);
+  const earnedByGenre = coinsEarnedByGenre(
     Object.fromEntries(
-      difficulties.map((difficulty, diffIndex) => {
-        const allCompleted: string[] = [];
-        for (const genreProgress of allProgress) {
-          const doc = genreProgress[diffIndex];
-          const ids = stringList(doc?.fields.completedLevelIds);
-          allCompleted.push(...ids);
-        }
-        return [difficulty, [...new Set(allCompleted)]] as const;
-      }),
+      generos.map((genero, genreIndex) => [
+        genero,
+        Object.fromEntries(
+          difficulties.map((difficulty, difficultyIndex) => [
+            difficulty,
+            stringList(
+              progressByGenre[genreIndex][difficultyIndex]?.fields
+                .completedLevelIds,
+            ),
+          ]),
+        ),
+      ]),
     ),
-  );
+  ) as Record<Genero, number>;
+  const unlockedByGenre = Object.fromEntries(
+    generos.map((genero) => [
+      genero,
+      [...new Set(stringList(states[genero]?.fields.unlockedIds))],
+    ]),
+  ) as Record<Genero, string[]>;
+  const introSpentByGenre = Object.fromEntries(
+    generos.map((genero) => {
+      const state = states[genero];
+      const recorded = state?.fields.monedasIntrosGastadas;
+      return [
+        genero,
+        typeof recorded === "number"
+          ? recorded
+          : unlockedByGenre[genero].length,
+      ];
+    }),
+  ) as Record<Genero, number>;
+  const hintSpentByGenre = Object.fromEntries(
+    generos.map((genero) => [
+      genero,
+      typeof states[genero]?.fields.pistasMonedasGastadas === "number"
+        ? states[genero]!.fields.pistasMonedasGastadas as number
+        : 0,
+    ]),
+  ) as Record<Genero, number>;
 
-  // Sumar pistas gastadas en todos los géneros (incluye aleatorio).
-  let hintCoinsSpent = 0;
-  for (const genero of generos) {
-    const genrePath = `${uid === "guest" ? `guestSessions/${uid}` : `users/${uid}`}/${coleccionJugador("introProgress", genero)}/state`;
-    const genreState = await getDocument(token, genrePath);
-    hintCoinsSpent += typeof genreState?.fields.pistasMonedasGastadas === "number"
-      ? genreState.fields.pistasMonedasGastadas
-      : 0;
-  }
-
-  // Bono de bienvenida para usuarios nuevos (solo una vez global).
-  // Verificar si YA se dio en ALGÚN género (incluye aleatorio).
-  let welcomeGiven = false;
-  const welcomeStates: JsonObject[] = [];
-  for (const genero of generos) {
-    const genrePath = `${uid === "guest" ? `guestSessions/${uid}` : `users/${uid}`}/${coleccionJugador("introProgress", genero)}/state`;
-    const genreState = await getDocument(token, genrePath);
-    if (genreState) welcomeStates.push(genreState.fields);
-    if (genreState?.fields.bonoBienvenida === true) {
-      welcomeGiven = true;
-    }
-  }
-  let welcome = savedWelcomeCoins(welcomeStates);
-  let unlocked = [...new Set(stringList(state?.fields.unlockedIds))];
-  if (!welcomeGiven && !guest) {
-    welcome = welcomeCoins;
-    // Guardar el bono en el género actual.
-    const now = new Date().toISOString();
-    await commitWrites(token, [
-      state
-        ? updateWrite(
-            path,
-            {
+  let welcome = 0;
+  if (!guest) {
+    let medleyState = states.aleatorio;
+    if (medleyState?.fields.bonoBienvenida === true) {
+      welcome = savedWelcomeCoins([medleyState.fields]);
+    } else {
+      const medleyPath = introStatePath(uid, guest, "aleatorio");
+      const now = new Date().toISOString();
+      await commitWrites(token, [
+        medleyState
+          ? updateWrite(
+              medleyPath,
+              {
+                bonoBienvenida: true,
+                monedasBienvenida: welcomeCoins,
+                unlockedIds: unlockedByGenre.aleatorio,
+                updatedAt: now,
+              },
+              medleyState.updateTime!,
+            )
+          : createWrite(medleyPath, {
               bonoBienvenida: true,
               monedasBienvenida: welcomeCoins,
-              unlockedIds: unlocked,
+              unlockedIds: [],
+              completedIds: [],
+              pistasMonedasGastadas: 0,
+              failedAnswerAttempts: 0,
+              nextAnswerAt: null,
+              createdAt: now,
               updatedAt: now,
-            },
-            state.updateTime!,
-          )
-        : createWrite(path, {
-            bonoBienvenida: true,
-            monedasBienvenida: welcomeCoins,
-            unlockedIds: unlocked,
-            completedIds: [],
-            pistasMonedasGastadas: 0,
-            failedAnswerAttempts: 0,
-            nextAnswerAt: null,
-            createdAt: now,
-            updatedAt: now,
-          }),
-    ]);
+            }),
+      ]);
+      medleyState = await getDocument(token, medleyPath);
+      states.aleatorio = medleyState;
+      welcome = welcomeCoins;
+    }
   }
+  const balances = Object.fromEntries(
+    generos.map((genero) => [
+      genero,
+      coinWalletBalance(
+        earnedByGenre[genero] +
+          (genero === "aleatorio" ? welcome : 0),
+        introSpentByGenre[genero],
+        hintSpentByGenre[genero],
+      ),
+    ]),
+  ) as Record<Genero, number>;
+  const state = states[generoActual()];
+  const unlocked = unlockedByGenre[generoActual()];
 
   return {
     path,
     state,
     intros,
-    earned,
-    hintCoinsSpent,
-    welcome,
+    states,
+    earnedByGenre,
+    introSpentByGenre,
+    hintSpentByGenre,
+    balances,
     unlocked,
     completed: new Set(stringList(state?.fields.completedIds)),
   };
@@ -2720,14 +2775,20 @@ function introSummary(
   state: Awaited<ReturnType<typeof loadIntroState>>,
 ): JsonObject {
   const unlocked = new Set(state.unlocked);
+  const canBuy = [...state.intros.keys()].some((id) => {
+    if (unlocked.has(id)) return false;
+    if (generoActual() !== "aleatorio") {
+      return state.balances[generoActual()] >= introPrice;
+    }
+    const source = generoDe(id);
+    return state.balances[source] >= introPrice ||
+      state.balances.aleatorio >= introPrice;
+  });
   return {
-    monedas: coinBalance(
-      state.earned,
-      state.unlocked.length,
-      state.hintCoinsSpent,
-      state.welcome ?? 0,
-    ),
-    monedas_ganadas: state.earned,
+    monedas: state.balances[generoActual()],
+    monedas_por_genero: state.balances,
+    monedas_ganadas: state.earnedByGenre[generoActual()],
+    puede_sacar: canBuy,
     restantes: Math.min(
       [...state.intros.keys()].filter((id) => !unlocked.has(id)).length,
       esPopurri() ? introsPopurri - unlocked.size : Infinity,
@@ -2769,35 +2830,85 @@ async function drawIntro(
   ) {
     throw new HttpError(409, "Ya descubriste todas las intros");
   }
-  if (
-    coinBalance(state.earned, state.unlocked.length, state.hintCoinsSpent, state.welcome ?? 0) <
-      introPrice
-  ) {
+  const eligible = locked.filter((id) => {
+    if (generoActual() !== "aleatorio") {
+      return state.balances[generoActual()] >= introPrice;
+    }
+    return state.balances[generoDe(id)] >= introPrice ||
+      state.balances.aleatorio >= introPrice;
+  });
+  if (eligible.length === 0) {
     throw new HttpError(
       409,
       "No tienes monedas suficientes. Adivina canciones del juego principal para ganar más.",
     );
   }
-  const introId = shuffled(locked)[0];
+  const introId = shuffled(eligible)[0];
+  const currencyGenre = generoActual() === "aleatorio"
+    ? state.balances[generoDe(introId)] >= introPrice
+      ? generoDe(introId)
+      : "aleatorio"
+    : generoActual();
   const unlocked = [...state.unlocked, introId];
   const now = new Date().toISOString();
-  await commitWrites(token, [
-    state.state
-      ? updateWrite(
-        state.path,
-        { unlockedIds: unlocked, updatedAt: now },
-        state.state.updateTime!,
-      )
-      : createWrite(state.path, {
-        unlockedIds: unlocked,
+  const writes: JsonObject[] = [];
+  const spending = state.introSpentByGenre[currencyGenre] + introPrice;
+  const fields: JsonObject = {
+    unlockedIds: unlocked,
+    monedasIntrosGastadas:
+      state.introSpentByGenre[generoActual()] +
+      (currencyGenre === generoActual() ? introPrice : 0),
+    updatedAt: now,
+  };
+  if (state.state) {
+    writes.push(updateWrite(state.path, fields, state.state.updateTime!));
+  } else {
+    writes.push(
+      createWrite(state.path, {
+        ...fields,
         completedIds: [],
         failedAnswerAttempts: 0,
         nextAnswerAt: null,
         createdAt: now,
-        updatedAt: now,
       }),
-  ]);
-  return { ...introSummary({ ...state, unlocked }), nueva: introId };
+    );
+  }
+  if (currencyGenre !== generoActual()) {
+    const currencyState = state.states[currencyGenre];
+    const currencyPath = introStatePath(uid, guest, currencyGenre);
+    if (currencyState) {
+      writes.push(
+        updateWrite(
+          currencyPath,
+          { monedasIntrosGastadas: spending, updatedAt: now },
+          currencyState.updateTime!,
+        ),
+      );
+    } else {
+      writes.push(
+        createWrite(currencyPath, {
+          unlockedIds: [],
+          completedIds: [],
+          monedasIntrosGastadas: spending,
+          pistasMonedasGastadas: 0,
+          failedAnswerAttempts: 0,
+          nextAnswerAt: null,
+          createdAt: now,
+          updatedAt: now,
+        }),
+      );
+    }
+  }
+  await commitWrites(token, writes);
+  const balances = {
+    ...state.balances,
+    [currencyGenre]: state.balances[currencyGenre] - introPrice,
+  };
+  return {
+    ...introSummary({ ...state, unlocked, balances }),
+    nueva: introId,
+    monedaGastada: currencyGenre,
+  };
 }
 
 /// Paquete para jugar sin conexión las intros ya obtenidas: enlace de la

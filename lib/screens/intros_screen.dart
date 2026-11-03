@@ -67,10 +67,10 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
   List<PasoRecorrido> _pasos() => [
     PasoRecorrido(
       clave: _claveMonedas,
-      titulo: '🪙 Tus monedas',
+      titulo: 'Monedas de cada género',
       texto:
-          'Las ganas al completar por primera vez un nivel de Adivina la '
-          'canción: Fácil 2, Media 3 y Avanzada 4.',
+          'Cada género tiene su moneda. Ganas 2, 3 o 4 al completar por '
+          'primera vez un nivel; las monedas de Medley solo se usan allí.',
     ),
     PasoRecorrido(
       clave: _claveSacar,
@@ -218,21 +218,57 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
 
   Widget _panelInferior(EstadoIntros estado) {
     final text = Theme.of(context).textTheme;
-    final sinMonedas = estado.monedas < 1;
+    final saldosVisibles = generoActivo.esPopurri
+        ? Genero.values
+              .map(
+                (genero) => (
+                  genero: genero,
+                  saldo:
+                      estado.monedasPorGenero[genero.id] ??
+                      (genero == generoActivo ? estado.monedas : 0),
+                ),
+              )
+              .toList()
+        : [
+            (
+              genero: generoActivo,
+              saldo:
+                  estado.monedasPorGenero[generoActivo.id] ?? estado.monedas,
+            ),
+          ];
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (generoActivo.esPopurri) ...[
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              for (final item in saldosVisibles)
+                Chip(
+                  visualDensity: VisualDensity.compact,
+                  avatar: Text(item.genero.simboloMoneda),
+                  label: Text('${item.saldo}'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
         LiquidGlassButton(
           key: _claveSacar,
           onPressed:
-              _sacando || _sinConexion || sinMonedas || estado.restantes == 0
+              _sacando ||
+                  _sinConexion ||
+                  !estado.puedeSacar ||
+                  estado.restantes == 0
               ? null
               : _sacarCarta,
           icon: Icons.style_rounded,
           label: estado.restantes == 0
               ? '¡Tienes todas las intros!'
-              : 'Sacar carta · 🪙 1',
+              : 'Sacar carta · 1 moneda',
         ),
         const SizedBox(height: 8),
         Text(
@@ -241,9 +277,8 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
                     'cartas necesitas internet.'
               : estado.restantes == 0
               ? 'Descubriste las ${estado.intros.length} intros.'
-              : sinMonedas
-              ? 'Gana monedas adivinando canciones del juego principal: '
-                    'Fácil 2, Media 3 y Avanzada 4.'
+              : !estado.puedeSacar
+              ? 'Gana monedas completando niveles del género correspondiente.'
               : 'Quedan ${estado.restantes} intros por descubrir.',
           textAlign: TextAlign.center,
           style: text.bodySmall?.copyWith(color: context.paleta.tintaSuave),
@@ -268,10 +303,11 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
           key: _claveMonedas,
           padding: const EdgeInsets.only(right: 12),
           child: Semantics(
-            label: '${estado.monedas} monedas',
+            label:
+                '${generoActivo.simboloMoneda} ${estado.monedas} monedas de ${generoActivo.nombre}',
             excludeSemantics: true,
             child: Chip(
-              avatar: const Text('🪙'),
+              avatar: Text(generoActivo.simboloMoneda),
               label: Text('${estado.monedas}'),
             ),
           ),
@@ -886,7 +922,12 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       await _audioService.reproducir(
         urls: [url],
         cacheKeys: [guardado == null && enCache ? clave : null],
-        duracion: null,
+        duracion: tipo == 'intro'
+            ? const Duration(seconds: 30)
+            : null,
+        fundidoSalida: tipo == 'intro'
+            ? const Duration(seconds: 2)
+            : Duration.zero,
       );
     } catch (error) {
       if (mounted) {
@@ -1098,7 +1139,7 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
   Widget _barraDeTiempo() {
     final text = Theme.of(context).textTheme;
     final posicion = _playing ? _audioService.posicion : Duration.zero;
-    final total = _playing ? _audioService.duracion : null;
+    final total = _playing ? const Duration(seconds: 30) : null;
     final avance = total == null || total.inMilliseconds == 0
         ? 0.0
         : (posicion.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);

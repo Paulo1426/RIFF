@@ -566,11 +566,15 @@ class EstadoIntros {
     required this.monedasGanadas,
     required this.restantes,
     required this.intros,
+    this.monedasPorGenero = const {},
+    this.puedeSacar = true,
     this.nueva,
   });
 
   final int monedas;
   final int monedasGanadas;
+  final Map<String, int> monedasPorGenero;
+  final bool puedeSacar;
   // Intros que aún no salen.
   final int restantes;
   final List<IntroAsignada> intros;
@@ -581,6 +585,8 @@ class EstadoIntros {
   Map<String, dynamic> toJson() => {
     'monedas': monedas,
     'monedas_ganadas': monedasGanadas,
+    'monedas_por_genero': monedasPorGenero,
+    'puede_sacar': puedeSacar,
     'restantes': restantes,
     'nueva': nueva,
     'intros': [for (final intro in intros) intro.toJson()],
@@ -589,6 +595,12 @@ class EstadoIntros {
   factory EstadoIntros.fromJson(Map<String, dynamic> json) => EstadoIntros(
     monedas: (json['monedas'] as num).toInt(),
     monedasGanadas: (json['monedas_ganadas'] as num).toInt(),
+    monedasPorGenero: {
+      for (final entry
+          in (json['monedas_por_genero'] as Map? ?? {}).entries)
+        entry.key as String: (entry.value as num).toInt(),
+    },
+    puedeSacar: json['puede_sacar'] as bool? ?? true,
     restantes: (json['restantes'] as num).toInt(),
     nueva: json['nueva'] as String?,
     intros: (json['intros'] as List<dynamic>)

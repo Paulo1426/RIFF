@@ -156,6 +156,7 @@ class ResultadoPista {
   final int costo;
   final List<String> pistasUsadas;
   final int monedasRestantes;
+  final Map<String, int> monedasPorGenero;
   final List<String> instrumentosComprados;
 
   const ResultadoPista({
@@ -166,6 +167,7 @@ class ResultadoPista {
     this.costo = 0,
     this.pistasUsadas = const [],
     required this.monedasRestantes,
+    this.monedasPorGenero = const {},
     this.instrumentosComprados = const [],
   });
 
@@ -182,6 +184,11 @@ class ResultadoPista {
               .toList(growable: false) ??
           const [],
       monedasRestantes: (json['monedasRestantes'] as num?)?.toInt() ?? 0,
+      monedasPorGenero: {
+        for (final entry
+            in (json['monedasPorGenero'] as Map? ?? {}).entries)
+          entry.key as String: (entry.value as num).toInt(),
+      },
       instrumentosComprados:
           (json['instrumentosComprados'] as List<dynamic>?)
               ?.map((e) => e.toString())

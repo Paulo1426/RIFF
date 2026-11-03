@@ -35,10 +35,27 @@ export function coinsEarned(
     (total, [difficulty, reward]) =>
       total +
       new Set(
-        completedByDifficulty[difficulty as keyof typeof introCoinRewards] ??
-          [],
-      ).size * reward,
+          completedByDifficulty[difficulty as keyof typeof introCoinRewards] ??
+            [],
+        ).size * reward,
     0,
+  );
+}
+
+/// Calcula por separado las monedas ganadas en cada género.
+export function coinsEarnedByGenre(
+  completedByGenre: Readonly<
+    Record<
+      string,
+      Partial<Record<keyof typeof introCoinRewards, readonly string[]>>
+    >
+  >,
+): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(completedByGenre).map(([genre, completed]) => [
+      genre,
+      coinsEarned(completed),
+    ]),
   );
 }
 
@@ -50,5 +67,21 @@ export function coinBalance(
   hintCoinsSpent = 0,
   welcome = 0,
 ): number {
-  return Math.max(0, earned + welcome - unlockedCount * introPrice - hintCoinsSpent);
+  return Math.max(
+    0,
+    earned + welcome - unlockedCount * introPrice - hintCoinsSpent,
+  );
+}
+
+/// Saldo de una cartera de género con sus gastos de intros y pistas.
+export function coinWalletBalance(
+  earned: number,
+  introCoinsSpent: number,
+  hintCoinsSpent = 0,
+  welcome = 0,
+): number {
+  return Math.max(
+    0,
+    earned + welcome - introCoinsSpent - hintCoinsSpent,
+  );
 }

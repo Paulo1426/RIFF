@@ -52,10 +52,12 @@ Cada vez que repites un nivel, los precios y la melodía cambian.
 
 ### Modo extra: Adivina la intro
 
-Cada nivel adivinado por primera vez da monedas: 2 en Fácil, 3 en Media y 4 en
-Avanzada. Cada moneda saca una carta con la intro de una canción al azar, que
-también hay que adivinar. Con los 15 niveles se ganan las 45 monedas que cuestan
-todas las intros.
+Cada nivel adivinado por primera vez da monedas al género correspondiente: 2
+en Fácil, 3 en Media y 4 en Avanzada. Cada género tiene su propio símbolo y
+saldo. Las monedas de Medley solo se usan allí; en Medley también puedes gastar
+la moneda del género de la canción o intro. El bono inicial de 10 monedas se
+guarda en Medley. Cada carta cuesta una moneda; las intros duran 30 segundos y
+terminan con un fundido de audio.
 
 ## Características
 

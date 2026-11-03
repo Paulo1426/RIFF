@@ -1,9 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:riff/models/genero.dart';
 import 'package:riff/models/nivel.dart';
 import 'package:riff/models/pista.dart';
 import 'package:riff/services/firebase_game_repository.dart';
 
 void main() {
+  test('cada género tiene un símbolo de moneda distinto', () {
+    expect(
+      Genero.values.map((genero) => genero.simboloMoneda).toSet(),
+      hasLength(Genero.values.length),
+    );
+  });
+
   test('TipoPista extension properties and parsing work correctly', () {
     expect(TipoPista.sorpresa.id, 'random');
     expect(TipoPista.sorpresa.costoMonedas, 3);
@@ -35,6 +43,7 @@ void main() {
       'yaComprada': false,
       'pistasUsadas': ['artist'],
       'monedasRestantes': 4,
+      'monedasPorGenero': {'vallenato': 4, 'aleatorio': 10},
       'instrumentosComprados': ['bateria', 'bajo'],
     });
 
@@ -44,7 +53,29 @@ void main() {
     expect(result.yaComprada, isFalse);
     expect(result.pistasUsadas, ['artist']);
     expect(result.monedasRestantes, 4);
+    expect(result.monedasPorGenero, {'vallenato': 4, 'aleatorio': 10});
     expect(result.instrumentosComprados, ['bateria', 'bajo']);
+  });
+
+  test('EstadoIntros parses balances separated by genre', () {
+    final state = EstadoIntros.fromJson({
+      'monedas': 10,
+      'monedas_ganadas': 0,
+      'monedas_por_genero': {
+        'vallenato': 3,
+        'aleatorio': 10,
+      },
+      'puede_sacar': true,
+      'restantes': 45,
+      'intros': [],
+    });
+
+    expect(state.monedasPorGenero, {'vallenato': 3, 'aleatorio': 10});
+    expect(state.puedeSacar, isTrue);
+    expect(
+      EstadoIntros.fromJson(state.toJson()).monedasPorGenero,
+      state.monedasPorGenero,
+    );
   });
 
   test('retains backend status for actionable error messages', () {

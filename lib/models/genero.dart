@@ -30,6 +30,15 @@ enum Genero {
 
   bool get esPopurri => this == aleatorio;
 
+  String get simboloMoneda => switch (this) {
+    Genero.vallenato => '🪗',
+    Genero.reggaeton => '🎧',
+    Genero.rockPop => '🎸',
+    Genero.salsa => '🎺',
+    Genero.popular => '🎻',
+    Genero.aleatorio => '🎲',
+  };
+
   /// Los cinco géneros con catálogo propio (sin Medley).
   static List<Genero> get reales =>
       values.where((genero) => !genero.esPopurri).toList();

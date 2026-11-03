@@ -54,6 +54,25 @@ void main() {
     expect(button.onPressed, isNull);
   });
 
+  testWidgets('Medley can pay a hint from its own currency', (tester) async {
+    await tester.pumpWidget(
+      buildTestableWidget(
+        const PistaCard(
+          tipo: TipoPista.cuartoInstrumento,
+          saldoMonedas: 0,
+          saldoAlternativo: 5,
+          simboloMoneda: '🎸',
+          simboloMonedaAlternativo: '🎲',
+          monedaAlternativaActiva: true,
+        ),
+      ),
+    );
+
+    expect(find.text('Desbloquear (🎲 5)'), findsOneWidget);
+    final button = tester.widget<FilledButton>(find.byType(FilledButton));
+    expect(button.onPressed, isNotNull);
+  });
+
   testWidgets('PistaCard displays value when unlocked', (tester) async {
     await tester.pumpWidget(
       buildTestableWidget(

@@ -151,7 +151,7 @@ class InstruccionesDialog extends StatelessWidget {
                             icono: Icons.headphones_rounded,
                             children: [
                               Text(
-                                'Cada nivel que ganas por primera vez te da monedas 🪙:',
+                                'Cada nivel ganado por primera vez da monedas a su género:',
                               ),
                               SizedBox(height: 10),
                               Wrap(
@@ -168,10 +168,13 @@ class InstruccionesDialog extends StatelessWidget {
                                 'Repetir un nivel ya ganado no da monedas.',
                               ),
                               _Vineta(
-                                'En Adivina la intro, 1 moneda saca una carta con una intro al azar.',
+                                'Las monedas tienen un símbolo por género. Las 🎲 de Medley son exclusivas de ese modo; allí también puedes usar la moneda del género de la canción o intro.',
                               ),
                               _Vineta(
-                                'Escucha los primeros segundos y escribe la canción; si aciertas suena la original.',
+                                'En Adivina la intro, 1 moneda saca una carta con una intro al azar. El bono inicial de 10 monedas es para Medley.',
+                              ),
+                              _Vineta(
+                                'La intro dura 30 segundos y termina con un fundido. Escribe la canción; si aciertas suena la original.',
                               ),
                               _Vineta(
                                 'Tras 3 fallos seguidos debes esperar 30 segundos.',
@@ -236,7 +239,7 @@ class InstruccionesDialog extends StatelessWidget {
                             icono: Icons.confirmation_number_rounded,
                             children: [
                               Text(
-                                'Las fichas 🎟️ son la moneda de las salas, distintas de las monedas 🪙.',
+                                'Las fichas 🎟️ son la moneda de las salas y no se mezclan con las monedas de los géneros.',
                               ),
                               SizedBox(height: 10),
                               Wrap(

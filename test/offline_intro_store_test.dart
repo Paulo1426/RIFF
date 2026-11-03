@@ -20,6 +20,11 @@ void main() {
     estadoJson: const {
       'monedas': 1,
       'monedas_ganadas': 2,
+      'monedas_por_genero': {
+        'vallenato': 1,
+        'aleatorio': 10,
+      },
+      'puede_sacar': true,
       'restantes': 44,
       'intros': [
         {'id': 'cancion-26', 'numero': 1, 'estado': 'desbloqueada'},
@@ -51,5 +56,7 @@ void main() {
     );
     expect(copia.intros['cancion-26']!.fullPath, 'original.mp3');
     expect(copia.pendientes.single['introId'], 'cancion-26');
+    expect(copia.estado.monedasPorGenero['aleatorio'], 10);
+    expect(copia.estado.puedeSacar, isTrue);
   });
 }

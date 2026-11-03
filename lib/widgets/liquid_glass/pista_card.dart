@@ -10,6 +10,10 @@ class PistaCard extends StatelessWidget {
     super.key,
     required this.tipo,
     required this.saldoMonedas,
+    this.simboloMoneda = '🪙',
+    this.saldoAlternativo = 0,
+    this.simboloMonedaAlternativo = '🎲',
+    this.monedaAlternativaActiva = false,
     this.desbloqueada = false,
     this.valor,
     this.cargando = false,
@@ -18,6 +22,10 @@ class PistaCard extends StatelessWidget {
 
   final TipoPista tipo;
   final int saldoMonedas;
+  final String simboloMoneda;
+  final int saldoAlternativo;
+  final String simboloMonedaAlternativo;
+  final bool monedaAlternativaActiva;
   final bool desbloqueada;
   final String? valor;
   final bool cargando;
@@ -28,7 +36,14 @@ class PistaCard extends StatelessWidget {
     final theme = Theme.of(context);
     final text = theme.textTheme;
     final costo = tipo.costoMonedas;
-    final puedeComprar = !desbloqueada && saldoMonedas >= costo && !cargando;
+    final compraConPrincipal = saldoMonedas >= costo;
+    final compraConAlternativa = saldoAlternativo >= costo;
+    final puedeComprar = !desbloqueada &&
+        (compraConPrincipal || compraConAlternativa) &&
+        !cargando;
+    final monedaCompra = compraConPrincipal
+        ? simboloMoneda
+        : simboloMonedaAlternativo;
 
     return LiquidGlassCard(
       borderRadius: 16,
@@ -94,9 +109,11 @@ class PistaCard extends StatelessWidget {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Text(
-                                  '🪙',
-                                  style: TextStyle(fontSize: 12),
+                                Text(
+                                  monedaAlternativaActiva
+                                      ? '$simboloMoneda/$simboloMonedaAlternativo'
+                                      : simboloMoneda,
+                                  style: const TextStyle(fontSize: 12),
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
@@ -180,8 +197,10 @@ class PistaCard extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : Text(
-                        saldoMonedas >= costo
-                            ? 'Desbloquear (🪙 $costo)'
+                        puedeComprar
+                            ? 'Desbloquear ($monedaCompra $costo)'
+                            : monedaAlternativaActiva
+                            ? 'Faltan monedas ($simboloMoneda $saldoMonedas o $simboloMonedaAlternativo $saldoAlternativo)'
                             : 'Faltan monedas (tienes $saldoMonedas)',
                       ),
               ),

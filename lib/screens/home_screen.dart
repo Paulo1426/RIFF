@@ -658,13 +658,14 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     PasoRecorrido(
       clave: _clavesPestanas[_pIntro],
       titulo: '🎧 Intro',
-      texto: 'Tu colección de Adivina la intro y el botón para sacar cartas.',
+      texto:
+          'Tu colección, las monedas de este género y el botón para sacar cartas.',
     ),
     PasoRecorrido(
       clave: _clavesPestanas[_pProgreso],
       titulo: '📈 Progreso',
       texto:
-          'Tus niveles, tus monedas 🪙, tus fichas 🎟️ y las canciones que '
+          'Tus niveles, las monedas de este género, tus fichas 🎟️ y las canciones que '
           'ya adivinaste.',
     ),
     PasoRecorrido(
@@ -694,7 +695,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           titulo: '🎚️ Dificultades y niveles',
           texto:
               'Desliza entre Fácil, Media y Avanzada. Completa sus 5 niveles '
-              'para abrir la siguiente y gana monedas 🪙 para las intros.',
+              'para abrir la siguiente y ganar monedas de este género.',
         ),
       ],
     );
@@ -1422,7 +1423,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     ),
   };
 
-  /// Monedas 🪙 en Intro y Progreso; fichas 🎟️ en Salas y Progreso.
+  /// Moneda del género en Intro y Progreso; fichas 🎟️ en Salas y Progreso.
   List<Widget> _accionesBarra() => [
     // Desde el menú se vuelve a la selección de género (Ajustes está abajo).
     if (_pestana == 0)
@@ -1432,7 +1433,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         onPressed: widget.onCambiarGenero,
       ),
     if ((_pestana == _pIntro || _pestana == _pProgreso) && _monedas != null)
-      _Saldo('🪙', _monedas!, 'monedas'),
+      _Saldo(widget.genero.simboloMoneda, _monedas!, 'monedas'),
   ];
 
   void _cambiarPestana(int pestana) {
