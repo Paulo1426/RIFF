@@ -5,6 +5,9 @@
 export const introCoinRewards = { facil: 2, medio: 3, avanzado: 4 } as const;
 export const introPrice = 1;
 
+// Bono de bienvenida para usuarios nuevos: 10 monedas.
+export const welcomeCoins = 10;
+
 /// Monedas ganadas a partir de los niveles completados de cada dificultad.
 /// Repetir un nivel no suma: se cuentan ids únicos.
 export function coinsEarned(
@@ -24,10 +27,12 @@ export function coinsEarned(
 }
 
 /// Saldo disponible: lo ganado menos lo gastado en intros desbloqueadas y pistas.
+/// [welcome] son las monedas de bienvenida (solo para usuarios nuevos).
 export function coinBalance(
   earned: number,
   unlockedCount: number,
   hintCoinsSpent = 0,
+  welcome = 0,
 ): number {
-  return Math.max(0, earned - unlockedCount * introPrice - hintCoinsSpent);
+  return Math.max(0, earned + welcome - unlockedCount * introPrice - hintCoinsSpent);
 }

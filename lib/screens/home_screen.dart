@@ -116,6 +116,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     user: user,
                     genero: genero,
                     onCambiarGenero: () => setState(() => _genero = null),
+                    onReiniciarProgreso: () => setState(() => _genero = null),
                   ),
           ),
         );
@@ -587,6 +588,7 @@ class _AuthenticatedHome extends ConsumerStatefulWidget {
     required this.user,
     required this.genero,
     required this.onCambiarGenero,
+    required this.onReiniciarProgreso,
   });
 
   final User user;
@@ -594,6 +596,8 @@ class _AuthenticatedHome extends ConsumerStatefulWidget {
   final Genero genero;
   // Vuelve al selector de géneros.
   final VoidCallback onCambiarGenero;
+  // Se llama al reiniciar progreso para volver al selector de géneros.
+  final VoidCallback onReiniciarProgreso;
 
   @override
   ConsumerState<_AuthenticatedHome> createState() => _AuthenticatedHomeState();
@@ -696,17 +700,13 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     );
   }
 
-  // "Adivina la intro" se abre al completar el primer nivel.
-  bool get _introsDisponibles =>
-      _estado?.dificultades.any((item) => item.completados > 0) ?? false;
-
   /// Avisa de las insignias conseguidas desde la última vez. Solo con todos
   /// los datos cargados, para no tomar como nueva una que ya se tenía.
   Future<void> _revisarInsignias() async {
     final estado = _estado;
     if (estado == null || _loading) return;
     if (!widget.user.isAnonymous && !_saldoCargado) return;
-    if (_introsDisponibles && _resumenIntros == null) return;
+    if (_resumenIntros == null) return;
     if (_avisando) {
       _revisarOtraVez = true;
       return;
@@ -823,7 +823,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         _loading = false;
       });
       unawaited(_revisarInsignias());
-      if (_introsDisponibles) {
         unawaited(
           _estadoIntros().then((intros) {
             if (mounted) {
@@ -835,7 +834,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
             }
           }),
         );
-      }
     } catch (error) {
       if (!mounted) return;
       await _loadOfflineSnapshot(error);
@@ -1134,13 +1132,9 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     if (resultado != null) {
       final antes = _desbloqueadas();
       final terminadoAntes = _juegoTerminado();
-      final introsAntes = _introsDisponibles;
       // Las insignias esperan a que salgan estos avisos.
       _avisando = true;
       await _cargar();
-      if (!introsAntes && _introsDisponibles && mounted) {
-        await _avisarIntros();
-      }
       final nuevas = _desbloqueadas().difference(antes);
       for (final dificultad in nuevas) {
         if (!mounted) break;
@@ -1180,28 +1174,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       content: const Text(
         'Superaste las tres dificultades: Fácil, Media y Avanzada. '
         '¡Tienes un oído de campeón! Puedes repetir cualquier nivel cuando quieras.',
-        textAlign: TextAlign.center,
-      ),
-      actions: [
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('¡Genial!'),
-        ),
-      ],
-    ),
-  );
-
-  Future<void> _avisarIntros() => showDialog<void>(
-    context: context,
-    builder: (context) => LiquidGlassDialog(
-      icon: const Icon(Icons.headphones_rounded, size: 48),
-      title: const Text(
-        '¡Desbloqueaste Adivina la intro!',
-        textAlign: TextAlign.center,
-      ),
-      content: const Text(
-        'Cada canción que adivines te da monedas: Fácil 2, Media 3 y '
-        'Avanzada 4. Úsalas en el menú principal para sacar cartas con intros.',
         textAlign: TextAlign.center,
       ),
       actions: [
@@ -1264,7 +1236,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
 
   /// Intros del jugador: del servidor o, sin conexión, de la copia guardada.
   Future<EstadoIntros?> _estadoIntros() async {
-    if (!_introsDisponibles) return null;
     try {
       return await ref
           .read(firebaseGameRepositoryProvider)
@@ -1326,6 +1297,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
         _monedas = null;
         _seleccionada = null;
       });
+      widget.onReiniciarProgreso();
     }
     // También si falló a medias: se vuelve a cargar lo que haya.
     if (_loading) await _cargar();
@@ -1507,7 +1479,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       genero: widget.genero,
       claveCarrusel: _claveMenu,
       onVisible: _recorridoSiEsNuevo,
-      introsDisponibles: _introsDisponibles,
       offlineMode: _offlineMode,
       infoCancion: _infoCancion(estado!),
       infoIntros: _resumenIntros == null
@@ -1535,13 +1506,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
 
   Widget _pestanaIntro() {
     if (_esperandoProgreso() case final espera?) return espera;
-    if (!_introsDisponibles) {
-      return _bloqueada(
-        'intro-bloqueada',
-        'Adivina la intro se desbloquea al completar tu primer nivel de '
-            'Adivina la canción.',
-      );
-    }
     return IntrosScreen(
       key: const ValueKey('intro'),
       embebida: true,
@@ -1554,24 +1518,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       },
     );
   }
-
-  Widget _bloqueada(String clave, String motivo) => Center(
-    key: ValueKey(clave),
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: LiquidGlassCard(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.lock_rounded, size: 40),
-            const SizedBox(height: 12),
-            Text(motivo, textAlign: TextAlign.center),
-          ],
-        ),
-      ),
-    ),
-  );
 
   void _cerrarNiveles() => setState(() => _nivelesAbiertos = false);
 
@@ -2563,9 +2509,7 @@ class _ProgresoGeneral extends StatelessWidget {
                 hechos: adivinadas,
                 total: totalIntros,
                 color: paletaGenero(generoActivo).intro,
-                detalle: intros == null
-                    ? 'Se desbloquea al completar tu primer nivel.'
-                    : '${intros.intros.length} cartas obtenidas',
+                detalle: '${intros?.intros.length ?? 0} cartas obtenidas',
               ),
       ],
     );
@@ -2580,7 +2524,6 @@ class _MenuPrincipal extends StatelessWidget {
     required this.genero,
     required this.claveCarrusel,
     required this.onVisible,
-    required this.introsDisponibles,
     required this.offlineMode,
     required this.infoCancion,
     required this.infoIntros,
@@ -2598,7 +2541,6 @@ class _MenuPrincipal extends StatelessWidget {
   final String? infoIntros;
   // Avisa cuando el menú ya está en pantalla (para el recorrido inicial).
   final VoidCallback onVisible;
-  final bool introsDisponibles;
   final bool offlineMode;
   final VoidCallback onInstrumentos;
   final VoidCallback onIntros;
@@ -2635,7 +2577,6 @@ class _MenuPrincipal extends StatelessWidget {
   }
 
   Widget _cuadro(int index, bool alFrente, {bool animar = true}) {
-    final introsBloqueadas = !introsDisponibles;
     return switch (index) {
       0 => _CuadroModo(
         emoji: genero.instrumentos,
@@ -2653,18 +2594,15 @@ class _MenuPrincipal extends StatelessWidget {
         emoji: '🎧',
         animacion: _Animacion.mecer,
         titulo: 'Adivina la intro',
-        detalle: !introsDisponibles
-            ? 'Se desbloquea al completar tu primer nivel.'
-            : offlineMode
+        detalle: offlineMode
             ? 'Sin conexión: escucha las intros que adivinaste.'
             : 'Escucha 30 segundos y adivina la canción.',
-        info: introsBloqueadas ? null : infoIntros,
+        info: infoIntros,
         color: paletaGenero(genero).intro,
         alFrente: alFrente,
         // Solo la del frente se mueve; las laterales, quietas.
         animar: animar && alFrente,
-        bloqueado: introsBloqueadas,
-        onTap: introsBloqueadas ? null : onIntros,
+        onTap: onIntros,
       ),
       _ => _CuadroModo(
         emoji: '📈',
