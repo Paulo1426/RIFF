@@ -117,6 +117,9 @@ flutter pub get
 flutter run --dart-define=SUPABASE_URL=https://TU_PROYECTO.supabase.co --dart-define=SUPABASE_ANON_KEY=TU_CLAVE_PUBLICA
 ```
 
+En VS Code, F5 publica primero las funciones `audio-link` y `game-progress` y
+después inicia la app. Debes tener Supabase CLI autenticado.
+
 El juego no abre hasta que haya niveles publicados en Firestore (se cargan con
 `scripts/cargar_niveles_firestore.mjs`). La respuesta de cada canción va en
 `privateLevelAnswers`, nunca dentro del documento del nivel.

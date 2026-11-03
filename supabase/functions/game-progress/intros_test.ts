@@ -2,6 +2,8 @@ import {
   coinBalance,
   coinsEarned,
   introCoinRewards,
+  savedWelcomeCoins,
+  welcomeCoins,
 } from "./intros.ts";
 
 function assertEquals(actual: unknown, expected: unknown) {
@@ -31,4 +33,14 @@ Deno.test("repetir un nivel no vuelve a pagar", () => {
 Deno.test("el saldo descuenta una moneda por intro y nunca es negativo", () => {
   assertEquals(coinBalance(9, 4), 5);
   assertEquals(coinBalance(2, 5), 0);
+});
+
+Deno.test("el bono de bienvenida guardado sigue disponible al recargar", () => {
+  const welcome = savedWelcomeCoins([
+    { bonoBienvenida: true, monedasBienvenida: welcomeCoins },
+  ]);
+  assertEquals(welcome, 10);
+  assertEquals(coinBalance(0, 0, 0, welcome), 10);
+  assertEquals(coinBalance(0, 2, 3, welcome), 5);
+  assertEquals(savedWelcomeCoins([{ bonoBienvenida: true }]), 0);
 });

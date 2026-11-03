@@ -34,6 +34,7 @@ import {
   coinsEarned,
   introCoinRewards,
   introPrice,
+  savedWelcomeCoins,
   welcomeCoins,
 } from "./intros.ts";
 import {
@@ -2660,15 +2661,16 @@ async function loadIntroState(token: string, uid: string, guest: boolean) {
   // Bono de bienvenida para usuarios nuevos (solo una vez global).
   // Verificar si YA se dio en ALGÚN género (incluye aleatorio).
   let welcomeGiven = false;
+  const welcomeStates: JsonObject[] = [];
   for (const genero of generos) {
     const genrePath = `${uid === "guest" ? `guestSessions/${uid}` : `users/${uid}`}/${coleccionJugador("introProgress", genero)}/state`;
     const genreState = await getDocument(token, genrePath);
+    if (genreState) welcomeStates.push(genreState.fields);
     if (genreState?.fields.bonoBienvenida === true) {
       welcomeGiven = true;
-      break;
     }
   }
-  let welcome = 0;
+  let welcome = savedWelcomeCoins(welcomeStates);
   let unlocked = [...new Set(stringList(state?.fields.unlockedIds))];
   if (!welcomeGiven && !guest) {
     welcome = welcomeCoins;
@@ -2678,11 +2680,17 @@ async function loadIntroState(token: string, uid: string, guest: boolean) {
       state
         ? updateWrite(
             path,
-            { bonoBienvenida: true, unlockedIds: unlocked, updatedAt: now },
+            {
+              bonoBienvenida: true,
+              monedasBienvenida: welcomeCoins,
+              unlockedIds: unlocked,
+              updatedAt: now,
+            },
             state.updateTime!,
           )
         : createWrite(path, {
             bonoBienvenida: true,
+            monedasBienvenida: welcomeCoins,
             unlockedIds: unlocked,
             completedIds: [],
             pistasMonedasGastadas: 0,

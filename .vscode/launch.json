@@ -1,0 +1,17 @@
+{
+  // F5 ejecuta en el dispositivo elegido en la barra inferior de VS Code.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "RIFF",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "preLaunchTask": "Publicar funciones",
+      "toolArgs": [
+        "--dart-define=SUPABASE_URL=https://hwjvwabvuavkexgibzps.supabase.co",
+        "--dart-define=SUPABASE_ANON_KEY=sb_publishable_R2OsMivFieugYs48edAydA_pCVvSNzM"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Publicar funciones",
+      "type": "shell",
+      "command": "npx --yes supabase functions deploy audio-link --project-ref hwjvwabvuavkexgibzps; if ($LASTEXITCODE -eq 0) { npx --yes supabase functions deploy game-progress --project-ref hwjvwabvuavkexgibzps }; exit $LASTEXITCODE",
+      "options": { "shell": { "executable": "powershell.exe", "args": ["-NoProfile", "-Command"] } },
+      "problemMatcher": []
+    }
+  ]
+}
