@@ -8,9 +8,11 @@ import 'firebase_options.dart';
 import 'providers/providers.dart';
 import 'screens/home_screen.dart';
 import 'theme/liquid_glass_theme.dart';
+import 'services/logs_release.dart';
 import 'services/supabase_service.dart';
 
 Future<void> main() async {
+  silenciarLogsEnRelease();
   WidgetsFlutterBinding.ensureInitialized();
   // Las fuentes van en lib/assets/fonts: sin descargas ni salto de letras al
   // abrir, y también sin conexión.

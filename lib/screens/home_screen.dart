@@ -12,6 +12,7 @@ import '../models/logros.dart';
 import '../models/nivel.dart';
 import '../models/sala.dart';
 import '../providers/providers.dart';
+import '../services/validadores_acceso.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/offline_game_store.dart';
 import '../animations/ciclo_lento.dart';
@@ -3692,15 +3693,10 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                                       labelText: 'Correo',
                                       prefixIcon: Icon(Icons.mail_outline),
                                     ),
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'Escribe un correo';
-                                      }
-                                      return _registering &&
-                                              !value.contains('@')
-                                          ? 'Escribe un correo válido'
-                                          : null;
-                                    },
+                                    validator: (value) => validarCorreo(
+                                      value,
+                                      registrando: _registering,
+                                    ),
                                   ),
                                   const SizedBox(height: 12),
                                   TextFormField(
@@ -3725,14 +3721,10 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                                         ),
                                       ),
                                     ),
-                                    validator: (value) {
-                                      if (value == null || value.isEmpty) {
-                                        return 'Escribe una contraseña';
-                                      }
-                                      return _registering && value.length < 6
-                                          ? 'Usa al menos 6 caracteres'
-                                          : null;
-                                    },
+                                    validator: (value) => validarClave(
+                                      value,
+                                      registrando: _registering,
+                                    ),
                                   ),
                                   if (_error != null) ...[
                                     const SizedBox(height: 12),
