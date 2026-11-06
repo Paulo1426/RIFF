@@ -16,8 +16,15 @@
       "problemMatcher": []
     },
     {
-      "label": "Publicar funciones y APK",
-      "dependsOn": ["Publicar funciones", "Publicar APK"],
+      "label": "Publicar web",
+      "type": "shell",
+      "command": "flutter build web --release --dart-define=SUPABASE_URL=https://hwjvwabvuavkexgibzps.supabase.co --dart-define=SUPABASE_ANON_KEY=sb_publishable_R2OsMivFieugYs48edAydA_pCVvSNzM; if ($?) { firebase deploy --only hosting --non-interactive }",
+      "options": { "shell": { "executable": "powershell.exe", "args": ["-NoProfile", "-Command"] } },
+      "problemMatcher": []
+    },
+    {
+      "label": "Publicar funciones, APK y web",
+      "dependsOn": ["Publicar funciones", "Publicar APK", "Publicar web"],
       "dependsOrder": "sequence",
       "problemMatcher": []
     }

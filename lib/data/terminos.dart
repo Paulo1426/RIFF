@@ -11,18 +11,17 @@ const seccionesTerminos = <(String, List<String>)>[
   (
     '1. Definiciones',
     [
-      '• «Autor» o «nosotros»: el creador y operador de RIFF, cuyo nombre aparece al final de estos Términos.',
-      '• «Aplicación» o «RIFF»: el juego musical para Android, incluidos su diseño, código, logotipo, textos, menús y funciones.',
-      '• «Usuario» o «tú»: la persona que descarga, instala o utiliza la Aplicación, con cuenta registrada o como invitado.',
-      '• «Contenido Musical»: las canciones, fragmentos, pistas de instrumentos, versiones instrumentales, introducciones, carátulas, nombres de artistas y música de fondo que la Aplicación reproduce o muestra.',
-      '• «Moneda Virtual»: las monedas por género, las monedas de Medley, las fichas de salas y el presupuesto del juego, que existen solo dentro de la Aplicación.',
-      '• «Servicios»: todo lo que ofrece RIFF: niveles, modo Adivina la intro, Medley, salas multijugador, insignias, estadísticas y progreso guardado.',
+      '• «RIFF» o «la Aplicación»: el juego musical para Android que estás usando, con su diseño, código, logotipo, textos, menús y todas sus funciones.',
+      '• «Usuario» o «tú»: cualquier persona que descarga, instala o usa RIFF, ya sea con una cuenta registrada o como invitado.',
+      '• «Contenido Musical»: todo el material musical que RIFF reproduce o muestra: canciones y fragmentos, pistas de instrumentos, versiones instrumentales, intros, carátulas, nombres de artistas y música de fondo de los menús.',
+      '• «Monedas y fichas»: los puntos de juego, es decir, las monedas por género, las monedas de Medley, las fichas de las salas y el presupuesto de cada partida. Solo existen dentro de RIFF y no son dinero.',
+      '• «Servicios»: lo que RIFF te ofrece: los niveles, Adivina la intro, Medley, las salas multijugador, las insignias, las estadísticas y el guardado de tu progreso.',
     ],
   ),
   (
     '2. Aceptación y capacidad',
     [
-      'Estos Términos son un acuerdo entre tú y el Autor. Se aceptan una sola vez por cuenta, después de iniciar sesión, y siguen vigentes mientras uses la Aplicación. Si publicamos una versión nueva con cambios importantes, te pediremos aceptarla otra vez.',
+      'Estos Términos son un acuerdo entre tú y RIFF. Se aceptan una sola vez por cuenta, después de iniciar sesión, y siguen vigentes mientras uses la Aplicación. Si publicamos una versión nueva con cambios importantes, te pediremos aceptarla otra vez.',
       'Debes ser mayor de edad según la ley colombiana (18 años) o contar con la autorización de tu padre, madre o representante legal, quien se hace responsable del uso que hagas de RIFF. Si eres menor de edad, tus datos solo se tratarán respetando el interés superior del niño, niña o adolescente y sus derechos fundamentales (Ley 1581 de 2012, artículo 7, y Ley 1098 de 2006).',
     ],
   ),
@@ -64,14 +63,14 @@ const seccionesTerminos = <(String, List<String>)>[
     '7. Retiro de contenido y reclamaciones de derechos de autor',
     [
       'Respetamos los derechos de autor. Si eres titular de derechos, o su representante, y crees que algún Contenido Musical se usa en RIFF sin tu autorización, o quieres que se corrija el crédito, escríbenos por correo a jpaulogutierrez@unicesar.edu.co indicando: tu identificación y la calidad en que actúas, la obra y la ubicación en la Aplicación, y una forma de contactarte.',
-      'Revisaremos la solicitud de buena fe y, cuando corresponda, retiraremos o sustituiremos el contenido sin demora y sin que ello genere responsabilidad para el Autor frente a los Usuarios.',
+      'Revisaremos la solicitud de buena fe y, cuando corresponda, retiraremos o sustituiremos el contenido sin demora y sin que ello genere responsabilidad para RIFF frente a los Usuarios.',
     ],
   ),
   (
     '8. Licencia de uso de la Aplicación',
     [
-      'El Autor te concede una licencia personal, limitada, revocable, no exclusiva, intransferible y gratuita para instalar y usar RIFF en tus dispositivos Android, solo para tu entretenimiento y con fines no comerciales.',
-      'RIFF, su código, diseño, interfaz, logotipo, nombre, textos, animaciones y organización de los niveles son propiedad del Autor (© 2026 Joannes Gutierrez) o se usan con permiso, y están protegidos por las normas de propiedad intelectual. Salvo que se indique otra licencia de forma expresa para una parte del proyecto, todos los derechos están reservados.',
+      'RIFF te concede una licencia personal, limitada, revocable, no exclusiva, intransferible y gratuita para instalar y usar RIFF en tus dispositivos Android, solo para tu entretenimiento y con fines no comerciales.',
+      'RIFF, su código, diseño, interfaz, logotipo, nombre, textos, animaciones y organización de los niveles son propiedad de Joannes Gutierrez (© 2026) o se usan con permiso, y están protegidos por las normas de propiedad intelectual. Salvo que se indique otra licencia de forma expresa para una parte del proyecto, todos los derechos están reservados.',
     ],
   ),
   (
@@ -142,7 +141,7 @@ const seccionesTerminos = <(String, List<String>)>[
   (
     '16. Límite de responsabilidad',
     [
-      'En la medida permitida por la ley colombiana, el Autor no será responsable por daños indirectos, pérdida de datos, de progreso o de saldos virtuales, interrupciones del servicio, ni por el contenido o las acciones de otros jugadores, ni por fallas de servicios de terceros como Google, Supabase o tu operador de internet.',
+      'En la medida permitida por la ley colombiana, RIFF no será responsable por daños indirectos, pérdida de datos, de progreso o de saldos virtuales, interrupciones del servicio, ni por el contenido o las acciones de otros jugadores, ni por fallas de servicios de terceros como Google, Supabase o tu operador de internet.',
       'Nada de lo anterior limita derechos que la ley no permita limitar, incluidos los que te reconoce el Estatuto del Consumidor (Ley 1480 de 2011) cuando resulte aplicable. Como RIFF es gratuita, no existe contraprestación económica que reembolsar.',
     ],
   ),
@@ -162,7 +161,7 @@ const seccionesTerminos = <(String, List<String>)>[
     '19. Disposiciones finales',
     [
       'Si alguna parte de estos Términos resulta inválida o no se puede aplicar, el resto seguirá vigente. Que no exijamos de inmediato el cumplimiento de alguna regla no significa que renunciemos a ella.',
-      'Estos Términos son el acuerdo completo entre tú y el Autor sobre el uso de RIFF y reemplazan cualquier acuerdo anterior sobre el mismo tema.',
+      'Estos Términos son el acuerdo completo entre tú y RIFF sobre el uso de RIFF y reemplazan cualquier acuerdo anterior sobre el mismo tema.',
     ],
   ),
 ];
