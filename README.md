@@ -22,6 +22,12 @@ RIFF todavía no está publicado en las tiendas oficiales. Mientras tanto, puede
   </a>
 </p>
 
+<p align="center">
+  <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https%3A%2F%2Fgithub.com%2FPaulo1426%2FRIFF%2Freleases%2Fdownload%2Fapk-latest%2Fapp-release.apk" alt="Código QR para descargar el APK de RIFF" width="220">
+  <br>
+  <em>Escanea el código QR para descargar el APK</em>
+</p>
+
 ### ¿Cómo instalarlo?
 
 1. Descarga el archivo APK desde tu dispositivo Android.
