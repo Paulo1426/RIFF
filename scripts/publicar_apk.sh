@@ -3,6 +3,7 @@
 # (se reemplaza cada vez; enlace de descarga fijo). Ejecutar junto a publicar
 # las funciones. Requiere `gh` autenticado (gh auth login).
 set -e
+PATH="$PATH:/c/Program Files/GitHub CLI" # gh recién instalado puede no estar en el PATH de la terminal
 cd "$(dirname "$0")/.."
 
 sh scripts/build_release.sh \
