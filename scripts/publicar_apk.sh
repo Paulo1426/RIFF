@@ -4,6 +4,7 @@
 # las funciones. Requiere `gh` autenticado (gh auth login).
 set -e
 PATH="$PATH:/c/Program Files/GitHub CLI" # gh recién instalado puede no estar en el PATH de la terminal
+unset GITHUB_TOKEN # un token viejo en el entorno gana sobre el login de `gh auth login`
 cd "$(dirname "$0")/.."
 
 sh scripts/build_release.sh \

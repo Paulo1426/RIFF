@@ -7,6 +7,13 @@
       "command": "npx --yes supabase functions deploy audio-link game-progress --remote=hwjvwabvuavkexgibzps --use-api --yes",
       "options": { "shell": { "executable": "powershell.exe", "args": ["-NoProfile", "-Command"] } },
       "problemMatcher": []
+    },
+    {
+      "label": "Publicar APK",
+      "type": "shell",
+      "command": "& 'C:\\Program Files\\Git\\bin\\bash.exe' scripts/publicar_apk.sh",
+      "options": { "shell": { "executable": "powershell.exe", "args": ["-NoProfile", "-Command"] } },
+      "problemMatcher": []
     }
   ]
 }
