@@ -222,9 +222,6 @@ RIFF cuenta con una interfaz moderna, animaciones y una identidad visual inspira
 
 </div>
 
-<p align="center">
-  <img src="https://github.com/Paulo1426/RIFF/raw/main/lib/assets/images/portada/login.png" alt="Pantalla de inicio de sesión de RIFF" width="280">
-</p>
 
 ---
 
