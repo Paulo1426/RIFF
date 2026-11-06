@@ -14,6 +14,12 @@
       "command": "& 'C:\\Program Files\\Git\\bin\\bash.exe' scripts/publicar_apk.sh",
       "options": { "shell": { "executable": "powershell.exe", "args": ["-NoProfile", "-Command"] } },
       "problemMatcher": []
+    },
+    {
+      "label": "Publicar funciones y APK",
+      "dependsOn": ["Publicar funciones", "Publicar APK"],
+      "dependsOrder": "sequence",
+      "problemMatcher": []
     }
   ]
 }
