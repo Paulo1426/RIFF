@@ -28,6 +28,18 @@ RIFF todavía no está publicado en las tiendas oficiales. Mientras tanto, puede
   <em>Escanea el código QR para descargar el APK</em>
 </p>
 
+### Jugar en el navegador
+
+También puedes jugar RIFF desde el navegador, en PC o en el móvil, sin instalar nada:
+
+<p align="center">
+  <a href="https://riff-adivina-la-cancion.web.app">
+    <strong>🌐 JUGAR RIFF EN LA WEB</strong>
+  </a>
+</p>
+
+La versión web no incluye modo offline ni recordatorios.
+
 ### ¿Cómo instalarlo?
 
 1. Descarga el archivo APK desde tu dispositivo Android.
