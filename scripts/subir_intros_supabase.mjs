@@ -10,7 +10,11 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { genero, readJson } from "./cargar_niveles_firestore.mjs";
 
+import { comprimir } from "./comprimir_audio.mjs";
+
 const segundosIntro = 30;
+const kbpsIntro = 128;
+const kbpsOriginal = 112;
 const supabaseUrl = process.env.SUPABASE_URL ??
   "https://hwjvwabvuavkexgibzps.supabase.co";
 const bucket = genero.replaceAll("_", "-");
@@ -165,8 +169,9 @@ async function main() {
     listas.push({
       intro,
       archivos: [
-        ["intro.mp3", recortar(original, segundosIntro), "audio/mpeg"],
-        ["original.mp3", original, "audio/mpeg"],
+        // La intro se recorta del original y se comprime; la portada sale del original.
+        ["intro.mp3", await comprimir(recortar(original, segundosIntro), kbpsIntro), "audio/mpeg"],
+        ["original.mp3", await comprimir(original, kbpsOriginal), "audio/mpeg"],
         ["portada.jpg", portada(original), "image/jpeg"],
       ],
     });
