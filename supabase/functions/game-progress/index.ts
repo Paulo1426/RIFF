@@ -890,8 +890,18 @@ async function createOfflineAudioUrl(
   // Género del archivo; en Medley, el de la canción (no "aleatorio").
   genero = generoDe(""),
 ): Promise<string> {
-  const supabaseUrl = requiredEnv("SUPABASE_URL").replace(/\/+$/, "");
-  const serviceRoleKey = requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
+  // Las intros viven en un segundo proyecto de Supabase (por el límite de
+  // almacenamiento); mientras INTROS_SUPABASE_URL no exista, salen del principal.
+  const proyectoIntros = tipo === "intro"
+    ? Deno.env.get("INTROS_SUPABASE_URL")
+    : undefined;
+  const supabaseUrl = (proyectoIntros ?? requiredEnv("SUPABASE_URL")).replace(
+    /\/+$/,
+    "",
+  );
+  const serviceRoleKey = proyectoIntros
+    ? requiredEnv("INTROS_SUPABASE_SERVICE_ROLE_KEY")
+    : requiredEnv("SUPABASE_SERVICE_ROLE_KEY");
   const { bucket, ruta } = ubicacion(tipo, path, genero);
   const objectPath = ruta.split("/").map(encodeURIComponent).join("/");
   const result = await fetch(

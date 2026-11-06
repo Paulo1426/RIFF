@@ -15,6 +15,9 @@ import { comprimir } from "./comprimir_audio.mjs";
 const segundosIntro = 30;
 const kbpsIntro = 128;
 const kbpsOriginal = 112;
+// SIN_COMPRIMIR=1: sube el audio tal cual (el recorte de la intro no recodifica);
+// al original solo se le quita la etiqueta ID3 (la carátula ya va en portada.jpg).
+const sinComprimir = process.env.SIN_COMPRIMIR === "1";
 const supabaseUrl = process.env.SUPABASE_URL ??
   "https://hwjvwabvuavkexgibzps.supabase.co";
 const bucket = genero.replaceAll("_", "-");
@@ -170,8 +173,8 @@ async function main() {
       intro,
       archivos: [
         // La intro se recorta del original y se comprime; la portada sale del original.
-        ["intro.mp3", await comprimir(recortar(original, segundosIntro), kbpsIntro), "audio/mpeg"],
-        ["original.mp3", await comprimir(original, kbpsOriginal), "audio/mpeg"],
+        ["intro.mp3", sinComprimir ? recortar(original, segundosIntro) : await comprimir(recortar(original, segundosIntro), kbpsIntro), "audio/mpeg"],
+        ["original.mp3", sinComprimir ? original.subarray(finId3(original)) : await comprimir(original, kbpsOriginal), "audio/mpeg"],
         ["portada.jpg", portada(original), "image/jpeg"],
       ],
     });
