@@ -1,8 +1,10 @@
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme.dart';
 
@@ -31,6 +33,12 @@ class RecorridoInicial {
 
   Future<bool> pendiente() async {
     try {
+      if (kIsWeb) {
+        return !((await SharedPreferences.getInstance()).getBool(
+              'recorrido_$id',
+            ) ??
+            false);
+      }
       return !await (await _archivo()).exists();
     } catch (error) {
       debugPrint('No se pudo leer si el recorrido $id ya se vio: $error');
@@ -40,6 +48,13 @@ class RecorridoInicial {
 
   Future<void> marcarVisto() async {
     try {
+      if (kIsWeb) {
+        await (await SharedPreferences.getInstance()).setBool(
+          'recorrido_$id',
+          true,
+        );
+        return;
+      }
       await (await _archivo()).create(recursive: true);
     } catch (error) {
       debugPrint('No se pudo guardar que el recorrido $id se vio: $error');

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/genero.dart';
@@ -147,6 +148,7 @@ class OfflineIntroStore {
 
   /// Borra las copias de [uid] en todos los géneros (al reiniciar el progreso).
   Future<void> borrar(String uid) async {
+    if (kIsWeb) return; // web: sin copia offline
     for (final genero in Genero.values) {
       final archivo = await _file(uid, genero);
       if (await archivo.exists()) await archivo.delete();
@@ -164,6 +166,7 @@ class OfflineIntroStore {
   }
 
   Future<void> save(OfflineIntroSnapshot snapshot) async {
+    if (kIsWeb) return;
     final file = await _file(snapshot.uid);
     final temporary = File('${file.path}.tmp');
     await temporary.writeAsString(jsonEncode(snapshot.toJson()));
@@ -172,6 +175,7 @@ class OfflineIntroStore {
   }
 
   Future<OfflineIntroSnapshot?> load(String uid) async {
+    if (kIsWeb) return null;
     final file = await _file(uid);
     if (!await file.exists()) return null;
     try {

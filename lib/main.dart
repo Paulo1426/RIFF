@@ -28,9 +28,9 @@ Future<void> main() async {
     }
   });
   final firebaseSupported =
-      !kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.android ||
-          defaultTargetPlatform == TargetPlatform.iOS);
+      kIsWeb ||
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
   if (firebaseSupported) {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -66,7 +66,26 @@ class SongGuessApp extends ConsumerWidget {
     darkTheme: buildLiquidGlassTheme(oscuro: true),
     themeMode: ref.watch(modoTemaProvider),
     // Las tarjetas de vidrio comparten una sola captura del fondo.
-    builder: (context, child) => BackdropGroup(child: child!),
+    builder: (context, child) {
+      final app = BackdropGroup(child: child!);
+      if (!kIsWeb) return app;
+      // Web en PC: columna de móvil centrada. MediaQuery también se acota
+      // para que los widgets que miden la pantalla usen ese ancho.
+      final media = MediaQuery.of(context);
+      final ancho = media.size.width.clamp(0.0, 480.0);
+      return ColoredBox(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: Center(
+          child: SizedBox(
+            width: ancho,
+            child: MediaQuery(
+              data: media.copyWith(size: Size(ancho, media.size.height)),
+              child: app,
+            ),
+          ),
+        ),
+      );
+    },
     home:
         home ??
         (firebaseSupported

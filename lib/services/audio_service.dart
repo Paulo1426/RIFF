@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
@@ -38,6 +39,7 @@ class AudioService {
   static String _conGenero(String key) => '${generoActivo.prefijo}$key';
 
   Future<File?> cachedFile(String key) async {
+    if (kIsWeb) return null; // web: sin caché en disco
     final file = await _cacheFile(_conGenero(key));
     return await file.exists() ? file : null;
   }
@@ -77,7 +79,7 @@ class AudioService {
         _players.add(player);
         final index = _players.length - 1;
         final cacheKey = claves == null ? null : claves[index];
-        if (cacheKey == null) {
+        if (cacheKey == null || kIsWeb) {
           final uri = Uri.parse(url);
           if (uri.scheme == 'file') {
             await player.setFilePath(uri.toFilePath());

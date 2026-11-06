@@ -78,3 +78,7 @@ ESTUDIO_DEL_PROYECTO.md
 
 # Canciones y respuestas de todos los géneros (solo local).
 RESPUESTAS.md
+node_modules
+
+# Términos, créditos e implementación legal (solo local).
+TERMINOS_Y_CREDITOS.md

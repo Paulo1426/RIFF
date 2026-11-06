@@ -2,9 +2,12 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/genero.dart';
 
@@ -75,7 +78,10 @@ class MusicaMenu with WidgetsBindingObserver {
     _player = player;
     WidgetsBinding.instance.addObserver(this);
     try {
-      _silenciada = await (await _archivoSilencio()).exists();
+      _silenciada = kIsWeb
+          ? (await SharedPreferences.getInstance()).getBool(_claveSilencio) ??
+                false
+          : await (await _archivoSilencio()).exists();
       _actual = _azar.nextInt(_pistas.length);
       await player.setAsset(_pistas.keys.elementAt(_actual));
       await player.setLoopMode(LoopMode.off);
@@ -96,6 +102,7 @@ class MusicaMenu with WidgetsBindingObserver {
         if (estado == ProcessingState.completed && !_cambiando) _siguiente();
       });
       _actualizar();
+      if (kIsWeb) _esperarToque();
     } catch (error) {
       debugPrint('No se pudo cargar la música del menú: $error');
     }
@@ -129,6 +136,13 @@ class MusicaMenu with WidgetsBindingObserver {
     _silenciada = !_silenciada;
     _actualizar();
     try {
+      if (kIsWeb) {
+        await (await SharedPreferences.getInstance()).setBool(
+          _claveSilencio,
+          _silenciada,
+        );
+        return;
+      }
       final archivo = await _archivoSilencio();
       if (_silenciada) {
         await archivo.create(recursive: true);
@@ -155,6 +169,20 @@ class MusicaMenu with WidgetsBindingObserver {
     _player = null;
   }
 
+  /// Web: el navegador bloquea el audio hasta el primer toque; entonces arranca.
+  void _esperarToque() {
+    void alTocar(PointerEvent evento) {
+      if (evento is! PointerDownEvent) return;
+      GestureBinding.instance.pointerRouter.removeGlobalRoute(alTocar);
+      final player = _player;
+      if (player == null || !_debeSonar) return;
+      unawaited(player.play().catchError((_) {}));
+      _fundir(player, _volumenPista, _rapido);
+    }
+
+    GestureBinding.instance.pointerRouter.addGlobalRoute(alTocar);
+  }
+
   void _actualizar() {
     final player = _player;
     if (player == null || player.audioSource == null) return;
@@ -170,7 +198,8 @@ class MusicaMenu with WidgetsBindingObserver {
     } else {
       if (!player.playing) {
         unawaited(player.setVolume(0));
-        unawaited(player.play());
+        // Web: sin toque previo el navegador rechaza play(); _esperarToque reintenta.
+        unawaited(player.play().catchError((_) {}));
       }
       _fundir(player, _volumenPista, _rapido);
     }
@@ -235,6 +264,8 @@ class MusicaMenu with WidgetsBindingObserver {
       }
     });
   }
+
+  static const _claveSilencio = 'musica_menu_silenciada';
 
   Future<File> _archivoSilencio() async {
     final directory = await getApplicationSupportDirectory();

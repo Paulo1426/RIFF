@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:confetti/confetti.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -928,7 +929,7 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       final url = await _urlRemota('cover').timeout(const Duration(seconds: 4));
       if (!mounted) return;
       // Se guarda para verla también sin conexión.
-      if (enCache) {
+      if (enCache && !kIsWeb) {
         final archivo = await _audioService
             .descargarYGuardar(url, clave)
             .timeout(const Duration(seconds: 4));

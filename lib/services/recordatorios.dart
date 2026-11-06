@@ -33,7 +33,7 @@ class Recordatorios {
   static Future<void> programar() async {
     // shortcut: solo Android; para iOS habría que pedir permiso con
     // DarwinInitializationSettings.
-    if (!Platform.isAndroid) return;
+    if (kIsWeb || !Platform.isAndroid) return;
     try {
       tz.initializeTimeZones();
       await _plugin.initialize(

@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -35,7 +36,9 @@ import '../widgets/liquid_glass/liquid_level_card.dart';
 import '../widgets/monedas_genero.dart';
 import 'carrusel_dificultades.dart';
 import 'game_screen.dart';
+import 'informacion_dialog.dart';
 import 'instrucciones_dialog.dart';
+import '../widgets/puerta_terminos.dart';
 import '../widgets/recorrido.dart';
 import 'intros_screen.dart';
 import 'salas_screen.dart';
@@ -92,12 +95,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             onSignedIn: () => setState(() => _entered = true),
           );
         }
+        // Los términos se aceptan una sola vez por cuenta, tras iniciar sesión.
+        Widget conTerminos(Widget hijo) => PuertaTerminos(
+          key: ValueKey(user.uid),
+          uid: user.uid,
+          onRechazar: () => _cerrarSesionDe(context, ref, user),
+          child: hijo,
+        );
         if (_desdeLogin) {
-          return BienvenidaLogin(
-            nombre: user.isAnonymous ? null : _nombreSesion(user),
-            onFin: () {
-              if (mounted) setState(() => _desdeLogin = false);
-            },
+          return conTerminos(
+            BienvenidaLogin(
+              nombre: user.isAnonymous ? null : _nombreSesion(user),
+              onFin: () {
+                if (mounted) setState(() => _desdeLogin = false);
+              },
+            ),
           );
         }
         final genero = _genero;
@@ -106,24 +118,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           (_) => ref.read(musicaMenuProvider).usarGenero(genero),
         );
         // El mismo fundido cruzado que entre pestañas.
-        return TransicionMusical(
-          child: KeyedSubtree(
-            key: ValueKey(genero),
-            child: genero == null
-                ? _SelectorGenero(
-                    user: user,
-                    onElegir: (genero) => setState(() {
-                      generoActivo = genero;
-                      _genero = genero;
-                    }),
-                  )
-                : _AuthenticatedHome(
-                    key: ValueKey(user.uid),
-                    user: user,
-                    genero: genero,
-                    onCambiarGenero: () => setState(() => _genero = null),
-                    onReiniciarProgreso: () => setState(() => _genero = null),
-                  ),
+        return conTerminos(
+          TransicionMusical(
+            child: KeyedSubtree(
+              key: ValueKey(genero),
+              child: genero == null
+                  ? _SelectorGenero(
+                      user: user,
+                      onElegir: (genero) => setState(() {
+                        generoActivo = genero;
+                        _genero = genero;
+                      }),
+                    )
+                  : _AuthenticatedHome(
+                      key: ValueKey(user.uid),
+                      user: user,
+                      genero: genero,
+                      onCambiarGenero: () => setState(() => _genero = null),
+                      onReiniciarProgreso: () =>
+                          setState(() => _genero = null),
+                    ),
+            ),
           ),
         );
       },
@@ -523,6 +538,9 @@ Future<bool> _reiniciarCuenta(
       await user.reauthenticateWithCredential(
         EmailAuthProvider.credential(email: user.email!, password: clave),
       );
+    } else if (kIsWeb) {
+      // Web: google_sign_in no tiene authenticate(); se usa la ventana de Firebase.
+      await user.reauthenticateWithPopup(GoogleAuthProvider());
     } else {
       await prepararGoogle();
       final cuenta = await GoogleSignIn.instance.authenticate();
@@ -876,6 +894,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   /// Baja en segundo plano [levelId] recién ganado para repetirlo sin
   /// conexión. Los instrumentos que ya sonaron salen de la caché.
   Future<void> _actualizarPaquete(String levelId) async {
+    if (kIsWeb) return; // web: sin descargas offline
     try {
       _seguirEnGenero();
       final bundle = await ref
@@ -2341,6 +2360,13 @@ class _PestanaConfiguracionState extends ConsumerState<_PestanaConfiguracion> {
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: widget.onRecorrido,
                 ),
+              ListTile(
+                leading: const Icon(Icons.info_outline_rounded),
+                title: const Text('Información'),
+                subtitle: const Text('Términos y condiciones'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => mostrarInformacion(context),
+              ),
             ],
           ),
         ),
@@ -3552,14 +3578,18 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
       _error = null;
     });
     try {
-      await prepararGoogle();
-      final account = await GoogleSignIn.instance.authenticate();
-      final idToken = account.authentication.idToken;
-      if (idToken == null || idToken.isEmpty) {
-        throw StateError('Google no devolvió un token de autenticación.');
+      if (kIsWeb) {
+        await FirebaseAuth.instance.signInWithPopup(GoogleAuthProvider());
+      } else {
+        await prepararGoogle();
+        final account = await GoogleSignIn.instance.authenticate();
+        final idToken = account.authentication.idToken;
+        if (idToken == null || idToken.isEmpty) {
+          throw StateError('Google no devolvió un token de autenticación.');
+        }
+        final credential = GoogleAuthProvider.credential(idToken: idToken);
+        await FirebaseAuth.instance.signInWithCredential(credential);
       }
-      final credential = GoogleAuthProvider.credential(idToken: idToken);
-      await FirebaseAuth.instance.signInWithCredential(credential);
       widget.onSignedIn?.call();
     } on FirebaseAuthException catch (error) {
       await _mostrarErrorAcceso(error: error);

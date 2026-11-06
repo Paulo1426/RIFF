@@ -1,8 +1,10 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/nivel.dart';
 import '../models/partida.dart';
 import '../models/usuario.dart';
@@ -65,9 +67,16 @@ class ModoTema extends StateNotifier<ThemeMode> {
 
   Future<void> cargar() async {
     try {
-      final archivo = await _archivo();
-      if (!await archivo.exists()) return;
-      final guardado = await archivo.readAsString();
+      String? guardado;
+      if (kIsWeb) {
+        guardado = (await SharedPreferences.getInstance()).getString(
+          'modo_tema',
+        );
+      } else {
+        final archivo = await _archivo();
+        if (!await archivo.exists()) return;
+        guardado = await archivo.readAsString();
+      }
       state = ThemeMode.values.firstWhere(
         (modo) => modo.name == guardado,
         orElse: () => ThemeMode.light,
@@ -80,7 +89,14 @@ class ModoTema extends StateNotifier<ThemeMode> {
   Future<void> cambiar(ThemeMode modo) async {
     state = modo;
     try {
-      await (await _archivo()).writeAsString(modo.name);
+      if (kIsWeb) {
+        await (await SharedPreferences.getInstance()).setString(
+          'modo_tema',
+          modo.name,
+        );
+      } else {
+        await (await _archivo()).writeAsString(modo.name);
+      }
     } catch (error) {
       debugPrint('No se pudo guardar el modo de tema: $error');
     }

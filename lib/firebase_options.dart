@@ -48,12 +48,12 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions web = FirebaseOptions(
     apiKey: 'AIzaSyCHsAzEEapwQc423PrBgd2XGOjLow6twTs',
-    appId: '1:655179331422:web:2020bd443f07467ac881cf',
+    appId: '1:655179331422:web:4a39da22c2ba7636c881cf',
     messagingSenderId: '655179331422',
     projectId: 'song-gues-game',
     authDomain: 'song-gues-game.firebaseapp.com',
     storageBucket: 'song-gues-game.firebasestorage.app',
-    measurementId: 'G-10H4Z4HFT6',
+    measurementId: 'G-RBYHHVDR1T',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
