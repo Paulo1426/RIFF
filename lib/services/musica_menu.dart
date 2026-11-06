@@ -6,18 +6,49 @@ import 'package:flutter/widgets.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../models/genero.dart';
+
 class MusicaMenu with WidgetsBindingObserver {
   // Incluidas en la app: suenan también sin conexión. El valor ajusta el
-  // volumen de cada una (intro.mp3 está grabada más fuerte).
-  static const _pistas = {
-    'lib/assets/audio/menu/intro2.mp3': 1.0,
-    'lib/assets/audio/menu/intro3.mp3': 1.0,
-    'lib/assets/audio/menu/intro.mp3': 0.8,
+  // volumen de cada una para que todas suenen parejo (intro.mp3 está grabada
+  // más fuerte).
+  static const _general = {
+    'lib/assets/audio/menu/general/pista1.mp3': 1.6,
+    'lib/assets/audio/menu/general/pista2.mp3': 1.2,
+    'lib/assets/audio/menu/general/pista3.mp3': 1.4,
+    'lib/assets/audio/menu/general/pista4.mp3': 1.3,
+  };
+  static const _porGenero = {
+    Genero.vallenato: {
+      'lib/assets/audio/menu/vallenato/intro2.mp3': 1.0,
+      'lib/assets/audio/menu/vallenato/intro3.mp3': 1.0,
+      'lib/assets/audio/menu/vallenato/intro.mp3': 0.8,
+    },
+    Genero.salsa: {
+      'lib/assets/audio/menu/salsa/pista1.mp3': 1.0,
+      'lib/assets/audio/menu/salsa/pista2.mp3': 0.95,
+    },
+    Genero.rockPop: {
+      'lib/assets/audio/menu/rock_pop/pista1.mp3': 0.72,
+      'lib/assets/audio/menu/rock_pop/pista2.mp3': 1.3,
+    },
+    Genero.reggaeton: {
+      'lib/assets/audio/menu/reggaeton/pista1.mp3': 0.9,
+      'lib/assets/audio/menu/reggaeton/pista2.mp3': 1.0,
+    },
+    Genero.popular: {
+      'lib/assets/audio/menu/popular/pista1.mp3': 1.2,
+      'lib/assets/audio/menu/popular/pista2.mp3': 1.5,
+    },
   };
   static const _volumen = 0.009;
 
   static const _cruce = Duration(milliseconds: 2500);
   static const _rapido = Duration(milliseconds: 800);
+
+  // Pistas del género en pantalla; el selector, Medley y las salas usan las
+  // generales.
+  Map<String, double> _pistas = _general;
 
   final _azar = Random();
   AudioPlayer? _player;
@@ -68,6 +99,20 @@ class MusicaMenu with WidgetsBindingObserver {
     } catch (error) {
       debugPrint('No se pudo cargar la música del menú: $error');
     }
+  }
+
+  /// Cambia a la música del género (null, Medley y salas: la general) con el
+  /// mismo fundido que entre canciones.
+  void usarGenero(Genero? genero) {
+    final pistas = _porGenero[genero] ?? _general;
+    if (identical(pistas, _pistas)) return;
+    _pistas = pistas;
+    final player = _player;
+    if (player == null || player.audioSource == null) {
+      _actual = _azar.nextInt(pistas.length);
+      return;
+    }
+    _siguiente(distinta: false);
   }
 
   void entrarNivel() {
@@ -133,7 +178,7 @@ class MusicaMenu with WidgetsBindingObserver {
 
   /// Baja la canción actual y empieza otra al azar (distinta si hay más de
   /// una) subiendo el volumen.
-  void _siguiente() {
+  void _siguiente({bool distinta = true}) {
     final player = _player;
     if (player == null) return;
     _fundir(
@@ -141,7 +186,9 @@ class MusicaMenu with WidgetsBindingObserver {
       0,
       _cruce,
       alTerminar: () async {
-        if (_pistas.length > 1) {
+        if (!distinta) {
+          _actual = _azar.nextInt(_pistas.length);
+        } else if (_pistas.length > 1) {
           final otra = _azar.nextInt(_pistas.length - 1);
           _actual = otra >= _actual ? otra + 1 : otra;
         }

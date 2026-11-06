@@ -78,7 +78,12 @@ flutter:
 
   assets:
     - lib/assets/images/logo/
-    - lib/assets/audio/menu/
+    - lib/assets/audio/menu/vallenato/
+    - lib/assets/audio/menu/general/
+    - lib/assets/audio/menu/salsa/
+    - lib/assets/audio/menu/rock_pop/
+    - lib/assets/audio/menu/reggaeton/
+    - lib/assets/audio/menu/popular/
     # Manrope y Jersey 10 dentro de la app: google_fonts las toma de aquí y no
     # las descarga al abrir.
     - lib/assets/fonts/

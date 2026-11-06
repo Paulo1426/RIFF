@@ -1,131 +1,148 @@
+# 🎵 RIFF
+
 <p align="center">
-  <img src="lib/assets/images/logo/riff_logo.png" alt="Logo de RIFF" width="320">
+  <img src="https://github.com/Paulo1426/RIFF/raw/main/lib/assets/images/logo/riff_logo.png" alt="Logo de RIFF" width="220">
 </p>
 
-<h1 align="center">RIFF</h1>
+<h3 align="center">¿Puedes reconocer una canción escuchando sus instrumentos?</h3>
+
+RIFF es un juego musical para dispositivos Android en el que tendrás que descubrir canciones utilizando únicamente tu oído. Escucha diferentes instrumentos, administra tu presupuesto y demuestra cuánto sabes de música.
+
+## 📥 Descargar
+
+RIFF aún no está publicado en tiendas oficiales. Mientras tanto puedes instalar la última versión directamente:
 
 <p align="center">
-  Juego móvil de adivinar canciones escuchándolas instrumento por instrumento.
-  <br>
-  Flutter · Firebase · Supabase
+  <a href="https://github.com/Paulo1426/RIFF/releases/download/apk-latest/app-release.apk"><b>⬇️ Descargar RIFF para Android (APK)</b></a>
+</p>
+
+1. Descarga el archivo desde tu celular Android.
+2. Ábrelo. Si Android lo pide, permite instalar apps de esta fuente.
+3. Instala y juega.
+
+El APK se actualiza con cada nueva versión. Más detalles en la [página de la versión](https://github.com/Paulo1426/RIFF/releases/tag/apk-latest).
+
+---
+
+## 🎮 ¿Qué es RIFF?
+
+RIFF es un juego de adivinar canciones inspirado en diferentes géneros musicales, como el vallenato, la salsa, el pop, el rock, las rancheras, la música popular colombiana y el reguetón.
+
+La dinámica consiste en descubrir una canción escuchando sus instrumentos por separado. Cada canción está dividida en cuatro pistas musicales:
+
+- 🥁 **Batería**
+- 🪗 **Acordeón**
+- 🎸 **Guitarra**
+- 🎸 **Bajo**
+
+No siempre tendrás todas las pistas disponibles. Tendrás que elegir cuidadosamente cuáles comprar para intentar descubrir la canción antes de quedarte sin opciones.
+
+## 🕹️ ¿Cómo se juega?
+
+Cada partida pone a prueba tu capacidad para reconocer melodías y tomar decisiones.
+
+**1. Elige tu dificultad**
+
+RIFF cuenta con tres niveles de dificultad:
+
+- Fácil
+- Media
+- Avanzada
+
+Cada dificultad contiene cinco niveles. Al completar todos los niveles, desbloquearás la siguiente dificultad.
+
+**2. Administra tu presupuesto**
+
+Comienzas cada nivel con **$1.000.000** para comprar tres de los cuatro instrumentos disponibles.
+
+Los precios se mantienen ocultos hasta realizar cada compra. Cada instrumento cuesta $300.000 o $400.000, y las tres compras siempre suman exactamente tu presupuesto.
+
+**3. Escucha los instrumentos**
+
+Cada instrumento que compres te permitirá escuchar su pista musical de manera individual o combinada con las demás.
+
+Cada fragmento tiene una duración de 30 segundos.
+
+**4. Descubre dónde está la melodía**
+
+Después de realizar las tres compras, tendrás que descubrir si la melodía principal está entre los instrumentos que elegiste.
+
+- Si compraste el instrumento que contiene la melodía, desbloquearás las cuatro pistas y la mezcla instrumental completa.
+- Si la melodía está en el instrumento que no compraste, tendrás que descubrir la canción utilizando únicamente las pistas disponibles.
+
+**5. Adivina la canción**
+
+Cuando tengas una respuesta, escribe el nombre de la canción.
+
+¡Si aciertas, desbloquearás la grabación original con voz y podrás escucharla en el reproductor del juego!
+
+Tu progreso también quedará guardado.
+
+> **¡Cada partida es diferente!** Cuando repitas un nivel, los precios y la ubicación de la melodía cambiarán, así que tendrás que utilizar nuevas estrategias.
+
+---
+
+## 🎧 Modo extra: Adivina la intro
+
+¿Quieres poner a prueba tu oído de otra manera?
+
+RIFF también cuenta con un modo adicional en el que tendrás que reconocer canciones escuchando únicamente sus introducciones.
+
+**¿Cómo funciona?**
+
+- Cada nivel que completes por primera vez te dará monedas según la dificultad:
+  - Fácil: 2 monedas.
+  - Media: 3 monedas.
+  - Avanzada: 4 monedas.
+- Las monedas se acumulan según el género musical correspondiente.
+- Cada género tiene su propio símbolo y saldo.
+- Cada carta de intro cuesta una moneda.
+- Las introducciones duran 30 segundos y terminan con un efecto de fundido de audio.
+
+También recibirás un bono inicial de 10 monedas que podrás utilizar en este modo.
+
+Las monedas de Medley son independientes y solo pueden utilizarse allí. En Medley también podrás utilizar las monedas del género correspondiente a la canción o introducción.
+
+---
+
+## ✨ Características principales
+
+- **Inicio de sesión:** accede con tu correo electrónico, cuenta de Google o juega como invitado.
+- **Modo invitado:** permite disfrutar del juego sin crear una cuenta, aunque el progreso no se conserva entre sesiones.
+- **Diferentes dificultades:** comienza con retos sencillos y avanza hacia desafíos más complicados.
+- **Experiencia musical:** escucha instrumentos individuales, combinaciones y canciones originales.
+- **Progreso guardado:** conserva tus avances y desbloquea nuevos niveles.
+- **Modo sin conexión:** los audios que ya hayas reproducido pueden permanecer disponibles en caché y el progreso local puede sincronizarse cuando recuperes la conexión.
+- **Diseño moderno:** disfruta de una interfaz inspirada en el estilo Liquid Glass, con animaciones, transiciones y música de fondo en los menús.
+
+---
+
+## 📱 Experiencia visual
+
+RIFF cuenta con una interfaz diseñada para ofrecer una experiencia moderna, dinámica e intuitiva.
+
+<p align="center">
+  <img src="https://github.com/Paulo1426/RIFF/raw/main/lib/assets/images/portada/login.png" alt="Pantalla de inicio de sesión de RIFF" width="280">
 </p>
 
 ---
 
-## ¿Qué es RIFF?
+## 📲 Plataforma disponible
 
-RIFF es un juego musical inspirado en el vallenato y la música colombiana. Cada
-nivel es una canción separada en pistas por instrumento (*stems*): batería,
-acordeón, bajo y guitarra. El jugador tiene un presupuesto para comprar
-instrumentos, los escucha por separado o mezclados y debe adivinar qué canción
-es.
+Actualmente, RIFF está desarrollado para dispositivos **Android**.
 
-<p align="center">
-  <img src="lib/assets/images/portada/login.png" alt="Portada de inicio de sesión" width="420">
-</p>
+---
 
-<!--
-Capturas de pantalla: guárdalas en docs/screenshots/ y descomenta esta tabla.
+## 🛠️ Para desarrolladores
 
-| Inicio | Partida | Canción adivinada | Adivina la intro |
-|:-:|:-:|:-:|:-:|
-| <img src="docs/screenshots/home.png" width="180"> | <img src="docs/screenshots/partida.png" width="180"> | <img src="docs/screenshots/ganada.png" width="180"> | <img src="docs/screenshots/intros.png" width="180"> |
--->
+Tecnologías, estructura del proyecto y cómo ejecutarlo: [DOCUMENTACION_TECNICA.md](DOCUMENTACION_TECNICA.md).
 
-## Cómo se juega
+---
 
-1. **Elige una dificultad**: Fácil, Media o Avanzada. Cada una tiene cinco
-   niveles; al completarlos se desbloquea la siguiente.
-2. **Compra instrumentos**: empiezas con **$1.000.000** y puedes comprar tres
-   de los cuatro instrumentos. El precio de cada uno se revela al comprarlo
-   ($300.000 o $400.000) y las tres compras suman exactamente el presupuesto.
-3. **Escucha**: cada instrumento comprado reproduce su pista. Puedes oírlos por
-   separado o mezclados. Los fragmentos duran 30 segundos.
-4. **Encuentra la melodía**: tras la tercera compra, la melodía queda en uno de
-   los instrumentos. Si la compraste, se desbloquean las cuatro pistas y la
-   mezcla instrumental. Si quedó en el instrumento que no compraste, tienes que
-   adivinar solo con lo que tienes.
-5. **Adivina la canción**: escribe el nombre. Si aciertas, se desbloquea la
-   grabación original con voz en el mini reproductor y se guarda tu progreso.
+## 🎼 ¡Pon a prueba tu oído musical!
 
-Cada vez que repites un nivel, los precios y la melodía cambian.
+No necesitas ser músico para jugar. Solo necesitas prestar atención, reconocer las melodías y tomar buenas decisiones.
 
-### Modo extra: Adivina la intro
+**Escucha. Descubre. Adivina.**
 
-Cada nivel adivinado por primera vez da monedas al género correspondiente: 2
-en Fácil, 3 en Media y 4 en Avanzada. Cada género tiene su propio símbolo y
-saldo. Las monedas de Medley solo se usan allí; en Medley también puedes gastar
-la moneda del género de la canción o intro. El bono inicial de 10 monedas se
-guarda en Medley. Cada carta cuesta una moneda; las intros duran 30 segundos y
-terminan con un fundido de audio.
-
-## Características
-
-- **Inicio de sesión** con correo y contraseña, Google o modo invitado (el
-  invitado no guarda progreso entre sesiones).
-- **Reglas en el servidor**: precios, melodía, respuestas y progreso se
-  deciden en Supabase Edge Functions, no en el teléfono. La app no puede ver la
-  respuesta ni el instrumento de la melodía.
-- **Modo sin conexión**: los audios se guardan en caché al reproducirlos y el
-  progreso local se sincroniza al recuperar internet.
-- **Interfaz "liquid glass"** con animaciones, transiciones entre pantallas y
-  música de fondo en los menús.
-
-## Tecnologías
-
-| Parte | Tecnología |
-| --- | --- |
-| App | Flutter / Dart 3, Riverpod |
-| Inicio de sesión | Firebase Authentication |
-| Catálogo y progreso | Cloud Firestore |
-| Lógica del juego | Supabase Edge Functions (`game-progress`, `audio-link`) |
-| Audios | Supabase Storage |
-| Reproducción | just_audio, audio_session |
-
-## Estructura
-
-```text
-lib/
-  screens/     pantallas (inicio, partida, intros, instrucciones)
-  widgets/     componentes de UI (liquid glass, reproductor)
-  animations/  animaciones
-  services/    repositorios, audio, almacenamiento offline
-  models/      Nivel, Partida, Instrumento, Usuario
-  providers/   providers de Riverpod
-supabase/functions/
-  game-progress/  niveles, partidas, compras, respuestas y monedas
-  audio-link/     enlaces temporales a los audios autorizados
-scripts/       carga de niveles e intros en Firestore
-```
-
-## Ejecutar el proyecto
-
-Necesitas Flutter, un proyecto de Firebase y uno de Supabase. Las reglas de
-acceso están en `firestore.rules` y `storage.rules`.
-
-Desplegar el backend (con los secretos ya configurados en Supabase Dashboard):
-
-```powershell
-supabase login
-supabase link --project-ref TU_PROJECT_REF
-supabase functions deploy game-progress
-supabase functions deploy audio-link
-```
-
-Ejecutar la app con la URL y la clave anon pública de Supabase:
-
-```powershell
-flutter pub get
-flutter run --dart-define=SUPABASE_URL=https://TU_PROYECTO.supabase.co --dart-define=SUPABASE_ANON_KEY=TU_CLAVE_PUBLICA
-```
-
-En VS Code, F5 publica primero las funciones `audio-link` y `game-progress` y
-después inicia la app. Debes tener Supabase CLI autenticado.
-
-El juego no abre hasta que haya niveles publicados en Firestore (se cargan con
-`scripts/cargar_niveles_firestore.mjs`). La respuesta de cada canción va en
-`privateLevelAnswers`, nunca dentro del documento del nivel.
-
-## Plataformas
-
-Android e iOS. Firebase no está configurado para web ni escritorio.
+**Bienvenido a RIFF.**

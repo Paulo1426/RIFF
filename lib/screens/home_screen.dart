@@ -101,6 +101,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           );
         }
         final genero = _genero;
+        // Cada género tiene su música; el selector, Medley y las salas, la general.
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => ref.read(musicaMenuProvider).usarGenero(genero),
+        );
         // El mismo fundido cruzado que entre pestañas.
         return TransicionMusical(
           child: KeyedSubtree(
