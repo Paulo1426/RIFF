@@ -13,7 +13,7 @@ import { comprimir } from "./comprimir_audio.mjs";
 import { genero } from "./cargar_niveles_firestore.mjs";
 
 const kbps = 112;
-const supabaseUrl = process.env.SUPABASE_URL ?? "https://hwjvwabvuavkexgibzps.supabase.co";
+const supabaseUrl = process.env.SUPABASE_URL ?? "https://btfoclgtqhokqkgbpxmp.supabase.co";
 const bucket = genero.replaceAll("_", "-");
 const stems = new Set(["acordeon", "bajo", "bateria", "guitarra", "otros"]);
 
@@ -45,6 +45,18 @@ async function main() {
   const base = resolve(args.find((a) => !a.startsWith("--")) ?? ".");
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (apply && !key) throw new Error("Define SUPABASE_SERVICE_ROLE_KEY.");
+  if (apply) {
+    // Bucket privado del género (en un proyecto nuevo aún no existe).
+    const creado = await fetch(`${supabaseUrl}/storage/v1/bucket`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, apikey: key, "Content-Type": "application/json" },
+      body: JSON.stringify({ id: bucket, name: bucket, public: false }),
+    });
+    const texto = await creado.text();
+    if (!creado.ok && !/already exists|Duplicate/i.test(texto)) {
+      throw new Error(`No se pudo crear el bucket ${bucket} (${creado.status}): ${texto}`);
+    }
+  }
 
   let antes = 0, despues = 0, n = 0;
   for (const dificultad of (await readdir(base)).filter((d) => /^0\d /.test(d)).sort()) {

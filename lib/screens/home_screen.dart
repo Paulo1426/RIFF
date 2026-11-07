@@ -2363,7 +2363,7 @@ class _PestanaConfiguracionState extends ConsumerState<_PestanaConfiguracion> {
               ListTile(
                 leading: const Icon(Icons.info_outline_rounded),
                 title: const Text('Información'),
-                subtitle: const Text('Términos y condiciones'),
+                subtitle: const Text('Términos y condiciones y créditos'),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => mostrarInformacion(context),
               ),

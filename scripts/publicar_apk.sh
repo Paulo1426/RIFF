@@ -8,8 +8,8 @@ unset GITHUB_TOKEN # un token viejo en el entorno gana sobre el login de `gh aut
 cd "$(dirname "$0")/.."
 
 sh scripts/build_release.sh \
-  --dart-define=SUPABASE_URL=https://hwjvwabvuavkexgibzps.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=sb_publishable_R2OsMivFieugYs48edAydA_pCVvSNzM
+  --dart-define=SUPABASE_URL=https://btfoclgtqhokqkgbpxmp.supabase.co \
+  --dart-define=SUPABASE_ANON_KEY=sb_publishable_bdGU9q84AizSHnqrFglH-g_nngqbut0
 
 apk=build/app/outputs/flutter-apk/app-release.apk
 fecha=$(date '+%Y-%m-%d %H:%M')

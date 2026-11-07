@@ -50,13 +50,14 @@ const seccionesTerminos = <(String, List<String>)>[
       'RIFF no es dueño de ese Contenido Musical. Los derechos de autor y los derechos conexos sobre las obras, interpretaciones y grabaciones pertenecen a sus titulares: autores, compositores, artistas intérpretes, productores fonográficos y editores musicales. En Colombia, la gestión y el recaudo de los derechos de autor de las obras musicales corresponden a la Sociedad de Autores y Compositores de Colombia (SAYCO), y la de los derechos conexos de artistas y productores a las entidades de gestión competentes. Las canciones solicitadas y usadas en la Aplicación se reconocen como propiedad de sus respectivos titulares, representados en Colombia por SAYCO, en los términos de la Ley 23 de 1982, la Ley 44 de 1993, la Ley 1915 de 2018 y la Decisión Andina 351 de 1993.',
       'Estos Términos no te dan ninguna licencia ni derecho sobre ese Contenido Musical. Solo puedes escucharlo dentro de la Aplicación, de forma personal y privada, mientras juegas.',
       'No puedes copiar, descargar, grabar, extraer, redistribuir, comunicar públicamente, vender ni usar ese contenido fuera de la Aplicación, ni con fines comerciales, sin permiso de sus titulares o de la entidad que los gestiona.',
+      'La lista completa de canciones y artistas aparece en la sección «Créditos» de este mismo menú de Información.',
     ],
   ),
   (
     '6. Reconocimiento a los artistas',
     [
-      'RIFF reconoce el trabajo de cada artista, compositor y productor cuyas canciones aparecen en la Aplicación. Al acertar un nivel o una intro mostramos el título, el artista y la carátula de la canción.',
-      'La música de fondo de los menús procede de recopilaciones y mezclas de terceros. Los derechos de esa música pertenecen a sus titulares.',
+      'RIFF reconoce el trabajo de cada artista, compositor y productor cuyas canciones aparecen en la Aplicación. Mostramos el título y el artista de cada canción (incluidos los artistas invitados o colaboradores) en la sección «Créditos», y la carátula al acertar un nivel o una intro.',
+      'La música de fondo de los menús procede de recopilaciones y mezclas de terceros; sus autores originales se indican en «Créditos» cuando se conocen. Los derechos de esa música pertenecen a sus titulares.',
     ],
   ),
   (

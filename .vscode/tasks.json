@@ -4,7 +4,7 @@
     {
       "label": "Publicar funciones",
       "type": "shell",
-      "command": "npx --yes supabase functions deploy audio-link game-progress --remote=hwjvwabvuavkexgibzps --use-api --yes",
+      "command": "npx --yes supabase functions deploy audio-link game-progress --remote=btfoclgtqhokqkgbpxmp --use-api --yes",
       "options": { "shell": { "executable": "powershell.exe", "args": ["-NoProfile", "-Command"] } },
       "problemMatcher": []
     },
@@ -18,7 +18,7 @@
     {
       "label": "Publicar web",
       "type": "shell",
-      "command": "flutter build web --release --dart-define=SUPABASE_URL=https://hwjvwabvuavkexgibzps.supabase.co --dart-define=SUPABASE_ANON_KEY=sb_publishable_R2OsMivFieugYs48edAydA_pCVvSNzM; if ($?) { firebase deploy --only hosting --non-interactive }",
+      "command": "flutter build web --release --dart-define=SUPABASE_URL=https://btfoclgtqhokqkgbpxmp.supabase.co --dart-define=SUPABASE_ANON_KEY=sb_publishable_bdGU9q84AizSHnqrFglH-g_nngqbut0; if ($?) { firebase deploy --only hosting --non-interactive }",
       "options": { "shell": { "executable": "powershell.exe", "args": ["-NoProfile", "-Command"] } },
       "problemMatcher": []
     },

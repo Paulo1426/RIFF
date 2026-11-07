@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:riff/data/creditos.dart';
 import 'package:riff/data/terminos.dart';
 import 'package:riff/screens/informacion_dialog.dart';
 import 'package:riff/theme.dart';
@@ -10,7 +11,18 @@ void main() {
     expect(cierreTerminos, contains('2026'));
   });
 
-  testWidgets('información: los términos no se desbordan en teléfono', (
+  test('créditos: los cinco géneros tienen sus 60 canciones con artista', () {
+    expect(creditosPorGenero.length, 5);
+    for (final canciones in creditosPorGenero.values) {
+      expect(canciones.length, 60);
+      for (final (titulo, artista) in canciones) {
+        expect(titulo.trim(), isNotEmpty);
+        expect(artista.trim(), isNotEmpty);
+      }
+    }
+  });
+
+  testWidgets('información: términos y créditos no se desbordan en teléfono', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(360, 640);
@@ -20,6 +32,12 @@ void main() {
       MaterialApp(theme: buildAppTheme(), home: const InformacionDialog()),
     );
     expect(find.text('Términos y condiciones'), findsOneWidget);
+    await tester.tap(find.text('Créditos'));
+    await tester.pumpAndSettle();
+    expect(find.text('Vallenato'), findsOneWidget);
+    await tester.tap(find.text('Vallenato'));
+    await tester.pumpAndSettle();
+    expect(find.text('Martin Elias Diaz'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

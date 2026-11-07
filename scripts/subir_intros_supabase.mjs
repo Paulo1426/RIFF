@@ -19,7 +19,7 @@ const kbpsOriginal = 112;
 // al original solo se le quita la etiqueta ID3 (la carátula ya va en portada.jpg).
 const sinComprimir = process.env.SIN_COMPRIMIR === "1";
 const supabaseUrl = process.env.SUPABASE_URL ??
-  "https://hwjvwabvuavkexgibzps.supabase.co";
+  "https://btfoclgtqhokqkgbpxmp.supabase.co";
 const bucket = genero.replaceAll("_", "-");
 const carpeta = `intro_${bucket}`;
 

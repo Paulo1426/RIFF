@@ -1,5 +1,5 @@
 // Generado a partir de RESPUESTAS.md: canciones y artistas que aparecen en RIFF.
-// Cada entrada es (título, artista). Por ahora no se muestran en la app.
+// Cada entrada es (título, artista). Se muestran en Ajustes → Información → Créditos.
 
 const creditosPorGenero = <String, List<(String, String)>>{
   'Vallenato': [
