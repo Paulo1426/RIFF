@@ -5,9 +5,16 @@ import 'package:flutter/material.dart';
 /// subiendo desde más abajo. Solo cambia opacidad y posición, lo más barato de
 /// animar: sin tirones aunque haya vidrio desenfocado.
 class TransicionMusical extends StatelessWidget {
-  const TransicionMusical({super.key, required this.child});
+  const TransicionMusical({
+    super.key,
+    required this.child,
+    this.retroceso = false,
+  });
 
   final Widget child;
+  // Al volver atrás la pantalla nueva entra desde arriba y la vieja se va hacia
+  // abajo, como regresando; al avanzar, al revés.
+  final bool retroceso;
 
   // Lo bastante larga y con desplazamiento suficiente para que se note.
   static const duracion = Duration(milliseconds: 350);
@@ -35,8 +42,12 @@ class TransicionMusical extends StatelessWidget {
             position: quieto
                 ? const AlwaysStoppedAnimation(Offset.zero)
                 : Tween(
-                    // Entra desde abajo; sale hacia arriba.
-                    begin: Offset(0, entra ? subida : -subida / 2),
+                    // Avanzando entra desde abajo y sale hacia arriba;
+                    // retrocediendo, al revés.
+                    begin: Offset(
+                      0,
+                      (entra ? subida : -subida / 2) * (retroceso ? -1 : 1),
+                    ),
                     end: Offset.zero,
                   ).animate(tramo),
             child: hijo,

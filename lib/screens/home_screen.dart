@@ -60,6 +60,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _desdeLogin = false;
   // Género elegido en el selector; null muestra el selector.
   Genero? _genero;
+  // Se volvió al menú principal: la transición va en sentido contrario.
+  bool _volviendo = false;
   late final Stream<User?> _authStateChanges =
       widget.authStateChanges ?? FirebaseAuth.instance.authStateChanges();
 
@@ -120,6 +122,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         // El mismo fundido cruzado que entre pestañas.
         return conTerminos(
           TransicionMusical(
+            retroceso: _volviendo,
             child: KeyedSubtree(
               key: ValueKey(genero),
               child: genero == null
@@ -127,6 +130,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       user: user,
                       onElegir: (genero) => setState(() {
                         generoActivo = genero;
+                        _volviendo = false;
                         _genero = genero;
                       }),
                     )
@@ -134,9 +138,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       key: ValueKey(user.uid),
                       user: user,
                       genero: genero,
-                      onCambiarGenero: () => setState(() => _genero = null),
-                      onReiniciarProgreso: () =>
-                          setState(() => _genero = null),
+                      onCambiarGenero: () => setState(() {
+                        _volviendo = true;
+                        _genero = null;
+                      }),
+                      onReiniciarProgreso: () => setState(() {
+                        _volviendo = true;
+                        _genero = null;
+                      }),
                     ),
             ),
           ),
@@ -1479,10 +1488,30 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   List<Widget> _accionesBarra() => [
     // Desde el menú se vuelve a la selección de género (Ajustes está abajo).
     if (_pestana == 0)
-      IconButton(
-        tooltip: 'Elegir género',
-        icon: const Icon(Icons.apps_rounded),
-        onPressed: widget.onCambiarGenero,
+      Tooltip(
+        message: 'Menú principal',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: widget.onCambiarGenero,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.apps_rounded),
+                const SizedBox(width: 4),
+                Text(
+                  'Menú\nprincipal',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    fontSize: 9,
+                    height: 1.1,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     if ((_pestana == _pIntro || _pestana == _pProgreso) && _monedas != null)
       Padding(
@@ -2375,19 +2404,21 @@ class _PestanaConfiguracionState extends ConsumerState<_PestanaConfiguracion> {
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Column(
             children: [
-              SwitchListTile(
-                secondary: Icon(
-                  musica.silenciada
-                      ? Icons.music_off_rounded
-                      : Icons.music_note_rounded,
+              // En el navegador no suena la música del menú.
+              if (!kIsWeb)
+                SwitchListTile(
+                  secondary: Icon(
+                    musica.silenciada
+                        ? Icons.music_off_rounded
+                        : Icons.music_note_rounded,
+                  ),
+                  title: const Text('Música del menú'),
+                  value: !musica.silenciada,
+                  onChanged: (_) async {
+                    await musica.alternarSilencio();
+                    if (mounted) setState(() {});
+                  },
                 ),
-                title: const Text('Música del menú'),
-                value: !musica.silenciada,
-                onChanged: (_) async {
-                  await musica.alternarSilencio();
-                  if (mounted) setState(() {});
-                },
-              ),
               SwitchListTile(
                 secondary: Icon(
                   oscuro ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
@@ -3906,6 +3937,8 @@ class _AjustesLoginState extends ConsumerState<_AjustesLogin> {
             if (mounted) setState(() {});
           case 'instrucciones':
             if (context.mounted) await mostrarInstrucciones(context);
+          case 'informacion':
+            if (context.mounted) await mostrarInformacion(context);
         }
       },
       itemBuilder: (context) => [
@@ -3918,24 +3951,32 @@ class _AjustesLoginState extends ConsumerState<_AjustesLogin> {
             title: Text(oscuro ? 'Modo claro' : 'Modo oscuro'),
           ),
         ),
-        PopupMenuItem(
-          value: 'musica',
-          child: ListTile(
-            leading: Icon(
-              musica.silenciada
-                  ? Icons.music_note_rounded
-                  : Icons.music_off_rounded,
-            ),
-            title: Text(
-              musica.silenciada ? 'Activar música' : 'Silenciar música',
+        if (!kIsWeb)
+          PopupMenuItem(
+            value: 'musica',
+            child: ListTile(
+              leading: Icon(
+                musica.silenciada
+                    ? Icons.music_note_rounded
+                    : Icons.music_off_rounded,
+              ),
+              title: Text(
+                musica.silenciada ? 'Activar música' : 'Silenciar música',
+              ),
             ),
           ),
-        ),
         const PopupMenuItem(
           value: 'instrucciones',
           child: ListTile(
             leading: Icon(Icons.menu_book_rounded),
             title: Text('Instrucciones'),
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'informacion',
+          child: ListTile(
+            leading: Icon(Icons.info_outline_rounded),
+            title: Text('Información'),
           ),
         ),
       ],

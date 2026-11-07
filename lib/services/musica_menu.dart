@@ -3,11 +3,9 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/genero.dart';
 
@@ -16,32 +14,32 @@ class MusicaMenu with WidgetsBindingObserver {
   // volumen de cada una para que todas suenen parejo (intro.mp3 está grabada
   // más fuerte).
   static const _general = {
-    'lib/assets/audio/menu/general/pista1.mp3': 1.6,
-    'lib/assets/audio/menu/general/pista2.mp3': 1.2,
-    'lib/assets/audio/menu/general/pista3.mp3': 1.4,
-    'lib/assets/audio/menu/general/pista4.mp3': 1.3,
+    'lib/assets/audio/menu/general/pista1.mp3': 1.61,
+    'lib/assets/audio/menu/general/pista2.mp3': 1.16,
+    'lib/assets/audio/menu/general/pista3.mp3': 1.45,
+    'lib/assets/audio/menu/general/pista4.mp3': 1.22,
   };
   static const _porGenero = {
     Genero.vallenato: {
-      'lib/assets/audio/menu/vallenato/intro2.mp3': 1.0,
-      'lib/assets/audio/menu/vallenato/intro3.mp3': 1.0,
-      'lib/assets/audio/menu/vallenato/intro.mp3': 0.8,
+      'lib/assets/audio/menu/vallenato/intro2.mp3': 0.76,
+      'lib/assets/audio/menu/vallenato/intro3.mp3': 0.92,
+      'lib/assets/audio/menu/vallenato/intro.mp3': 1.14,
     },
     Genero.salsa: {
-      'lib/assets/audio/menu/salsa/pista1.mp3': 1.0,
-      'lib/assets/audio/menu/salsa/pista2.mp3': 0.95,
+      'lib/assets/audio/menu/salsa/pista1.mp3': 0.97,
+      'lib/assets/audio/menu/salsa/pista2.mp3': 0.78,
     },
     Genero.rockPop: {
-      'lib/assets/audio/menu/rock_pop/pista1.mp3': 0.72,
-      'lib/assets/audio/menu/rock_pop/pista2.mp3': 1.3,
+      'lib/assets/audio/menu/rock_pop/pista1.mp3': 0.64,
+      'lib/assets/audio/menu/rock_pop/pista2.mp3': 1.18,
     },
     Genero.reggaeton: {
-      'lib/assets/audio/menu/reggaeton/pista1.mp3': 0.9,
-      'lib/assets/audio/menu/reggaeton/pista2.mp3': 1.0,
+      'lib/assets/audio/menu/reggaeton/pista1.mp3': 0.78,
+      'lib/assets/audio/menu/reggaeton/pista2.mp3': 0.82,
     },
     Genero.popular: {
-      'lib/assets/audio/menu/popular/pista1.mp3': 1.2,
-      'lib/assets/audio/menu/popular/pista2.mp3': 1.5,
+      'lib/assets/audio/menu/popular/pista1.mp3': 1.01,
+      'lib/assets/audio/menu/popular/pista2.mp3': 1.36,
     },
   };
   static const _volumen = 0.009;
@@ -73,15 +71,13 @@ class MusicaMenu with WidgetsBindingObserver {
       !_silenciada && !_enSegundoPlano && _nivelesAbiertos == 0;
 
   Future<void> iniciar() async {
-    if (_player != null) return;
+    // En el navegador no suena la música del menú.
+    if (kIsWeb || _player != null) return;
     final player = AudioPlayer();
     _player = player;
     WidgetsBinding.instance.addObserver(this);
     try {
-      _silenciada = kIsWeb
-          ? (await SharedPreferences.getInstance()).getBool(_claveSilencio) ??
-                false
-          : await (await _archivoSilencio()).exists();
+      _silenciada = await (await _archivoSilencio()).exists();
       _actual = _azar.nextInt(_pistas.length);
       await player.setAsset(_pistas.keys.elementAt(_actual));
       await player.setLoopMode(LoopMode.off);
@@ -102,7 +98,6 @@ class MusicaMenu with WidgetsBindingObserver {
         if (estado == ProcessingState.completed && !_cambiando) _siguiente();
       });
       _actualizar();
-      if (kIsWeb) _esperarToque();
     } catch (error) {
       debugPrint('No se pudo cargar la música del menú: $error');
     }
@@ -136,13 +131,6 @@ class MusicaMenu with WidgetsBindingObserver {
     _silenciada = !_silenciada;
     _actualizar();
     try {
-      if (kIsWeb) {
-        await (await SharedPreferences.getInstance()).setBool(
-          _claveSilencio,
-          _silenciada,
-        );
-        return;
-      }
       final archivo = await _archivoSilencio();
       if (_silenciada) {
         await archivo.create(recursive: true);
@@ -169,20 +157,6 @@ class MusicaMenu with WidgetsBindingObserver {
     _player = null;
   }
 
-  /// Web: el navegador bloquea el audio hasta el primer toque; entonces arranca.
-  void _esperarToque() {
-    void alTocar(PointerEvent evento) {
-      if (evento is! PointerDownEvent) return;
-      GestureBinding.instance.pointerRouter.removeGlobalRoute(alTocar);
-      final player = _player;
-      if (player == null || !_debeSonar) return;
-      unawaited(player.play().catchError((_) {}));
-      _fundir(player, _volumenPista, _rapido);
-    }
-
-    GestureBinding.instance.pointerRouter.addGlobalRoute(alTocar);
-  }
-
   void _actualizar() {
     final player = _player;
     if (player == null || player.audioSource == null) return;
@@ -198,8 +172,7 @@ class MusicaMenu with WidgetsBindingObserver {
     } else {
       if (!player.playing) {
         unawaited(player.setVolume(0));
-        // Web: sin toque previo el navegador rechaza play(); _esperarToque reintenta.
-        unawaited(player.play().catchError((_) {}));
+        unawaited(player.play());
       }
       _fundir(player, _volumenPista, _rapido);
     }
@@ -265,7 +238,6 @@ class MusicaMenu with WidgetsBindingObserver {
     });
   }
 
-  static const _claveSilencio = 'musica_menu_silenciada';
 
   Future<File> _archivoSilencio() async {
     final directory = await getApplicationSupportDirectory();

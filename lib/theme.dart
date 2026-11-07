@@ -557,6 +557,15 @@ class _BandaCargando extends StatefulWidget {
 class _BandaCargandoState extends State<_BandaCargando> {
   // Reloj compartido de 30 cuadros: se ve igual y dibuja la mitad o menos.
   final _ciclo = CicloLento(periodo: const Duration(milliseconds: 1200));
+  // Tres instrumentos al azar de todos los géneros, distintos en cada carga.
+  final _instrumentos =
+      (Genero.reales
+            .expand((genero) => genero.instrumentos.characters)
+            .toSet()
+            .toList()
+          ..shuffle())
+          .take(3)
+          .toList();
 
   @override
   void didChangeDependencies() {
@@ -575,7 +584,7 @@ class _BandaCargandoState extends State<_BandaCargando> {
 
   @override
   Widget build(BuildContext context) {
-    final instrumentos = generoActivo.instrumentos.characters.toList();
+    final instrumentos = _instrumentos;
     final color = colorGenero(generoActivo);
     return ExcludeSemantics(
       child: AnimatedBuilder(
