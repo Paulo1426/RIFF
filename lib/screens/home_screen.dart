@@ -437,7 +437,7 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
                 semanticLabel: 'RIFF',
               ),
               const SizedBox(width: 12),
-              Text('Inicio', style: text.titleLarge),
+              Text('Inicio', style: text.headlineSmall),
             ],
           ),
           actions: [

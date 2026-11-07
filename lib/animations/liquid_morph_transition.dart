@@ -22,7 +22,13 @@ class LiquidMorphPageTransitionsBuilder extends PageTransitionsBuilder {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
     Widget child,
-  ) => LiquidMorphTransition(animation: animation, child: child);
+  ) => FadeTransition(
+    // La pantalla de atrás se apaga un poco mientras entra la nueva.
+    opacity: Tween(begin: 1.0, end: 0.85).animate(
+      CurvedAnimation(parent: secondaryAnimation, curve: Curves.easeOut),
+    ),
+    child: LiquidMorphTransition(animation: animation, child: child),
+  );
 }
 
 class LiquidMorphTransition extends StatelessWidget {
@@ -37,18 +43,24 @@ class LiquidMorphTransition extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Empieza al instante (sin espera) y frena suave al final.
     final entrada = CurvedAnimation(
       parent: animation,
-      curve: const Interval(0.35, 1, curve: Curves.easeOutCubic),
+      curve: Curves.easeOutQuart,
+      reverseCurve: Curves.easeInCubic,
     );
+    final quieto = MediaQuery.disableAnimationsOf(context);
     return FadeTransition(
       opacity: entrada,
-      child: SlideTransition(
-        position: Tween(
-          begin: const Offset(0, TransicionMusical.subida),
-          end: Offset.zero,
-        ).animate(entrada),
-        child: child,
+      child: ScaleTransition(
+        scale: Tween(begin: quieto ? 1.0 : 0.97, end: 1.0).animate(entrada),
+        child: SlideTransition(
+          position: Tween(
+            begin: Offset(0, quieto ? 0 : TransicionMusical.subida / 2),
+            end: Offset.zero,
+          ).animate(entrada),
+          child: child,
+        ),
       ),
     );
   }
