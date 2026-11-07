@@ -42,7 +42,7 @@ class MusicaMenu with WidgetsBindingObserver {
       'lib/assets/audio/menu/popular/pista2.mp3': 1.49,
     },
   };
-  static const _volumen = 0.009;
+  static const _volumen = 0.0054;
 
   static const _cruce = Duration(milliseconds: 2500);
   static const _rapido = Duration(milliseconds: 800);

@@ -427,12 +427,18 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
         backgroundColor: Colors.transparent,
         appBar: LiquidGlassAppBar(
           centerTitle: false,
-          title: // Solo el logo, a la izquierda; ya dice RIFF.
-          Image.asset(
-            'lib/assets/images/logo/riff_logo.png',
-            height: 56,
-            cacheHeight: 192,
-            semanticLabel: 'RIFF',
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'lib/assets/images/logo/riff_logo.png',
+                height: 56,
+                cacheHeight: 192,
+                semanticLabel: 'RIFF',
+              ),
+              const SizedBox(width: 12),
+              Text('Inicio', style: text.titleLarge),
+            ],
           ),
           actions: [
             IconButton(
