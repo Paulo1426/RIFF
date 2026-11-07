@@ -110,8 +110,8 @@ const seccionesTerminos = <(String, List<String>)>[
       'Qué datos tratamos:',
       '• Datos de la cuenta: correo electrónico, nombre y foto de perfil si entras con Google, y un identificador único de usuario.',
       '• Datos de juego: progreso, niveles completados, intros descubiertas, monedas, fichas, insignias, estadísticas y partidas en salas.',
-      '• Datos técnicos mínimos: registros de errores y de uso necesarios para que la Aplicación funcione, y archivos guardados en tu dispositivo (memoria caché de audio, copias para jugar sin conexión y tus preferencias, como silenciar la música o el modo oscuro).',
-      'Para qué los usamos (finalidades): crear y mantener tu cuenta, guardar tu progreso, mostrar estadísticas e insignias, hacer funcionar las salas multijugador, ofrecer el modo sin conexión, mejorar la estabilidad y seguridad de la Aplicación, y prevenir fraudes y trampas.',
+      '• Datos técnicos mínimos: registros de errores y de uso necesarios para que la Aplicación funcione, y archivos guardados en tu dispositivo (memoria caché de las canciones que vas desbloqueando y tus preferencias, como silenciar la música o el modo oscuro). En la versión web no se guarda ningún archivo de audio.',
+      'Para qué los usamos (finalidades): crear y mantener tu cuenta, guardar tu progreso, mostrar estadísticas e insignias, hacer funcionar las salas multijugador, mejorar la estabilidad y seguridad de la Aplicación, y prevenir fraudes y trampas.',
       'Con quién se comparten: usamos proveedores tecnológicos que alojan y procesan los datos por cuenta del Responsable: Google (Firebase: autenticación y base de datos) y Supabase (almacenamiento y funciones del servidor). Pueden estar fuera de Colombia, lo que implica una transferencia o transmisión internacional de datos con las medidas de seguridad que ofrecen esos proveedores. No vendemos tus datos ni los usamos para publicidad.',
       'Tus derechos como titular: conocer, actualizar y rectificar tus datos; pedir prueba de esta autorización; ser informado del uso que se les da; presentar quejas ante la Superintendencia de Industria y Comercio; revocar la autorización y solicitar la supresión de tus datos cuando no se respeten las normas; y acceder gratuitamente a ellos. Puedes ejercerlos escribiendo a jpaulogutierrez@unicesar.edu.co.',
       'Conservación: guardamos tus datos mientras tengas cuenta o mientras sean necesarios para las finalidades descritas. La sesión de invitado y su progreso se eliminan al cerrar la sesión.',
@@ -120,9 +120,9 @@ const seccionesTerminos = <(String, List<String>)>[
     ],
   ),
   (
-    '13. Disponibilidad, caché y modo sin conexión',
+    '13. Disponibilidad y caché de audio',
     [
-      'Para jugar necesitas conexión a internet. Algunos audios que ya reproduciste pueden quedar guardados en tu dispositivo y el progreso local puede sincronizarse cuando vuelvas a tener conexión. Esos archivos son temporales y solo para uso dentro de la Aplicación; puedes borrarlos desinstalando RIFF.',
+      'RIFF necesita conexión a internet para funcionar: tu progreso y el contenido se consultan siempre en nuestros servidores. Las canciones que vas desbloqueando se guardan en la memoria caché de tu teléfono para que se escuchen más rápido al repetir un nivel o una intro; en la versión web no se guarda nada y la página pide la canción al servidor cada vez, si ya la desbloqueaste. Esos archivos son temporales y solo para uso dentro de la Aplicación; puedes borrarlos desinstalando RIFF.',
       'No garantizamos que la Aplicación esté disponible de forma continua ni libre de errores. Puede haber interrupciones por mantenimiento, fallas de internet, cambios en los servicios de terceros o causas fuera de nuestro control.',
     ],
   ),

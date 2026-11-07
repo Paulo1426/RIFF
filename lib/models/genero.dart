@@ -48,12 +48,12 @@ enum Genero {
   int get nivelesPorDificultad => esPopurri ? 15 : 5;
   int get totalIntros => esPopurri ? 75 : 30;
 
-  /// Prefijo para lo guardado en el teléfono (caché de audio, copias
-  /// offline). Vallenato va sin prefijo para conservar lo ya descargado.
+  /// Prefijo para lo guardado en el teléfono (caché de audio).
+  /// Vallenato va sin prefijo para conservar lo ya descargado.
   String get prefijo => this == vallenato ? '' : '$id:';
 }
 
 /// Género que se está jugando; lo cambia el selector. Lo leen el repositorio
-/// (lo manda al servidor), la caché de audio y las copias offline. Las tareas
+/// (lo manda al servidor), y la caché de audio. Las tareas
 /// en segundo plano lo capturan al empezar y paran si cambia.
 Genero generoActivo = Genero.vallenato;

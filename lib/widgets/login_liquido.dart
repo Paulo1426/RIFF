@@ -45,6 +45,7 @@ class LogoCircular extends StatelessWidget {
         child: Image.asset(
           'lib/assets/images/logo/riff_logo.png',
           fit: BoxFit.contain,
+          cacheWidth: 384,
           semanticLabel: 'Riff',
         ),
       ),

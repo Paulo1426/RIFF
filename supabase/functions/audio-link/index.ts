@@ -1,5 +1,8 @@
 import { createRemoteJWKSet, jwtVerify } from "https://esm.sh/jose@5.9.6";
 import { objectVersion } from "../_shared/storage_version.ts";
+import { appCheckPermite } from "../_shared/app_check.ts";
+import { conCors, respuestaCorsPrevia } from "../_shared/cors.ts";
+import { LimiteTasa } from "../_shared/rate_limit.ts";
 import {
   coleccion,
   esGenero,
@@ -7,12 +10,10 @@ import {
   ubicacion,
 } from "../_shared/genero.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Content-Type": "application/json",
-};
+// Las cabeceras CORS las añade Deno.serve (ver _shared/cors.ts).
+const jsonHeaders = { "Content-Type": "application/json" };
+// Cada partida pide varios audios (stems, instrumental, original, portada).
+const limiteAudio = new LimiteTasa(120);
 
 const firebaseJwks = createRemoteJWKSet(
   new URL(
@@ -33,6 +34,7 @@ class HttpError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly retryAfter?: number,
   ) {
     super(message);
   }
@@ -50,10 +52,14 @@ interface FirestoreDocument {
 
 let cachedAccessToken: { value: string; expiresAt: number } | undefined;
 
-function jsonResponse(status: number, body: JsonObject): Response {
+function jsonResponse(
+  status: number,
+  body: JsonObject,
+  extra: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: corsHeaders,
+    headers: { ...jsonHeaders, ...extra },
   });
 }
 
@@ -227,7 +233,7 @@ function safeObjectPath(path: unknown): string {
       segment.length === 0 || segment === "." || segment === ".."
     )
   ) {
-    throw new HttpError(400, "La ruta de audio guardada no es válida");
+    throw new HttpError(500, "La ruta de audio guardada no es válida");
   }
   return path;
 }
@@ -268,10 +274,7 @@ async function signedStorageUrl(
       error: errorBody,
     });
     if (missingObject) {
-      throw new HttpError(
-        404,
-        `No existe ${objectPath} en el bucket ${bucket}`,
-      );
+      throw new HttpError(404, "El audio solicitado no está disponible");
     }
     throw new HttpError(502, "No se pudo generar el enlace temporal del audio");
   }
@@ -309,14 +312,14 @@ function validId(value: unknown): value is string {
 }
 
 async function handleRequest(request: Request): Promise<Response> {
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
-  }
   if (request.method !== "POST") {
     return jsonResponse(405, { error: "Método no permitido" });
   }
 
   try {
+    if (!(await appCheckPermite(request))) {
+      throw new HttpError(401, "No se pudo verificar la aplicación");
+    }
     const projectId = requiredEnv("FIREBASE_PROJECT_ID");
     const authHeader = request.headers.get("Authorization");
     const match = authHeader?.match(/^Bearer\s+(.+)$/i);
@@ -341,6 +344,14 @@ async function handleRequest(request: Request): Promise<Response> {
     const uid = verifiedToken.payload.sub;
     if (typeof uid !== "string" || uid.length === 0) {
       throw new HttpError(401, "El token de Firebase no identifica al usuario");
+    }
+    const espera = limiteAudio.consumir(uid);
+    if (espera > 0) {
+      throw new HttpError(
+        429,
+        "Demasiadas solicitudes; espera un momento antes de volver a intentarlo",
+        espera,
+      );
     }
 
     let rawBody: unknown;
@@ -590,11 +601,27 @@ async function handleRequest(request: Request): Promise<Response> {
     return jsonResponse(200, { url, expiresIn, version });
   } catch (error) {
     if (error instanceof HttpError) {
-      return jsonResponse(error.status, { error: error.message });
+      // Los errores del servidor (5xx) no cuentan detalles internos.
+      if (error.status >= 500) {
+        console.error("audio-link server error", error.status, error.message);
+        return jsonResponse(error.status, {
+          error: error.status === 500
+            ? "Error interno al autorizar el audio"
+            : "El servicio no está disponible; inténtalo de nuevo",
+        });
+      }
+      return jsonResponse(
+        error.status,
+        { error: error.message },
+        error.retryAfter ? { "Retry-After": String(error.retryAfter) } : {},
+      );
     }
     console.error("Unexpected audio-link function failure", error);
     return jsonResponse(500, { error: "Error interno al autorizar el audio" });
   }
 }
 
-Deno.serve(handleRequest);
+Deno.serve(async (request) =>
+  respuestaCorsPrevia(request) ??
+    conCors(request, await handleRequest(request))
+);

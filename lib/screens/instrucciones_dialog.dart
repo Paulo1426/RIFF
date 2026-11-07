@@ -180,7 +180,7 @@ class InstruccionesDialog extends StatelessWidget {
                                 'Tras 3 fallos seguidos debes esperar 30 segundos.',
                               ),
                               _Vineta(
-                                'Las intros que ya tienes se pueden jugar sin conexión.',
+                                'Las intros que ya adivinaste puedes volver a escucharlas cuando quieras.',
                               ),
                             ],
                           ),

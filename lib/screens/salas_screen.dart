@@ -42,10 +42,10 @@ String _nombreModo(ModoSala modo) => switch (modo) {
 String _qrDeSala(String codigo) => 'riff:sala:$codigo';
 final _patronQr = RegExp(r'^riff:sala:([A-Z0-9]{6})$');
 
-Color _colorDe(Sala sala) =>
-    sala.tipo == TipoSala.intros ? celesteLogin : _colorCancion;
+Color _colorDe(TipoSala tipo) =>
+    tipo == TipoSala.intros ? celesteLogin : _colorCancion;
 
-String _descripcion(Sala sala) =>
+String _descripcion(SalaPublica sala) =>
     '${sala.aleatoria ? '🎲 ' : ''}${sala.genero.nombre} · '
     '${sala.tipo == TipoSala.intros ? '🎧 Intros' : '🥁 Adivina la canción'}'
     ' · ${_nombreModo(sala.modo)}';
@@ -73,9 +73,9 @@ class _SalasPanelState extends ConsumerState<SalasPanel> {
   bool _ocupado = false;
   int _fichas = 0;
   // null mientras carga la lista de salas públicas.
-  List<Sala>? _publicas;
+  List<SalaPublica>? _publicas;
   StreamSubscription<SaldoSalas>? _suscripcionFichas;
-  StreamSubscription<List<Sala>>? _suscripcionSalas;
+  StreamSubscription<List<SalaPublica>>? _suscripcionSalas;
   final _claveCarrusel = GlobalKey();
   // Tipo de sala al frente del carrusel: sus salas abiertas van debajo.
   // null con la tarjeta de Historial al frente.
@@ -848,21 +848,21 @@ class _EscanerQrState extends State<_EscanerQr> {
 class _TarjetaSalaPublica extends StatelessWidget {
   const _TarjetaSalaPublica({required this.sala, required this.onUnirse});
 
-  final Sala sala;
+  final SalaPublica sala;
   final VoidCallback onUnirse;
 
   @override
   Widget build(BuildContext context) {
     return LiquidGlassCard(
       borderRadius: 18,
-      tintColor: _colorDe(sala),
+      tintColor: _colorDe(sala.tipo),
       child: ListTile(
         onTap: onUnirse,
         leading: const Text('🏆', style: TextStyle(fontSize: 28)),
         title: Text(sala.nombre),
         subtitle: Text(_descripcion(sala)),
         trailing: Text(
-          '${sala.jugadores.length}/${sala.maxJugadores}'
+          '${sala.jugadores}/${sala.maxJugadores}'
           '${sala.tipo == TipoSala.intros ? '\n🎟️ $precioEntrarSalaIntros' : ''}',
           textAlign: TextAlign.end,
           style: Theme.of(context).textTheme.titleMedium,
@@ -1301,7 +1301,7 @@ class _SalaScreenState extends ConsumerState<SalaScreen> {
         if (!didPop) _salir();
       },
       child: LiquidBackground(
-        acento: sala == null ? _colorSalas : _colorDe(sala),
+        acento: sala == null ? _colorSalas : _colorDe(sala.tipo),
         child: Scaffold(
           backgroundColor: Colors.transparent,
           appBar: LiquidGlassAppBar(
@@ -1449,7 +1449,7 @@ class _Resumen extends StatelessWidget {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     return LiquidGlassCard(
-      tintColor: _colorDe(sala),
+      tintColor: _colorDe(sala.tipo),
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
@@ -1543,7 +1543,7 @@ class _Clasificacion extends StatelessWidget {
             ListTile(
               dense: true,
               leading: CircleAvatar(
-                backgroundColor: _colorDe(sala).withValues(alpha: 0.25),
+                backgroundColor: _colorDe(sala.tipo).withValues(alpha: 0.25),
                 child: Text(
                   sala.estado == EstadoSala.esperando
                       ? jugador.nombre.characters.first.toUpperCase()

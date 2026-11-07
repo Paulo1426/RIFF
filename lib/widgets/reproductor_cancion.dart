@@ -30,8 +30,6 @@ class ReproductorCancion extends StatelessWidget {
     required this.onBuscar,
     required this.confeti,
     required this.botones,
-    this.nota,
-    this.sinConexion = false,
   });
 
   final Color color;
@@ -47,50 +45,12 @@ class ReproductorCancion extends StatelessWidget {
   // reconstruir la pantalla entera para moverla.
   final ValueGetter<Duration> posicion;
   final ValueGetter<Duration> duracion;
-  // null deshabilita el botón (p. ej. sin conexión).
   final VoidCallback? onReproducirPausar;
   final VoidCallback? onDesdeInicio;
   final VoidCallback? onDetener;
   final ValueChanged<Duration>? onBuscar;
   final ConfettiController confeti;
   final Widget botones;
-  // Aviso bajo los controles, p. ej. que falta conexión.
-  final String? nota;
-  // Acierto sin internet: no hay canción que sonar; en lugar de la portada
-  // y los controles, la banda animada y el aviso.
-  final bool sinConexion;
-
-  Widget _sinConexion(BuildContext context, double lado) => ColoredBox(
-    color: color.withValues(alpha: 0.18),
-    child: Stack(
-      children: [
-        Positioned.fill(child: BandaMusical(color: color)),
-        Align(
-          alignment: const Alignment(0, -0.75),
-          // Con letra grande se encoge en vez de salirse del cuadro.
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: context.paleta.superficie.withValues(alpha: 0.85),
-                borderRadius: BorderRadius.circular(99),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.wifi_off_rounded, size: lado * 0.08),
-                  const SizedBox(width: 6),
-                  const Text('Sin conexión'),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-
   Widget _portada(double lado) {
     final disco = ColoredBox(
       color: color.withValues(alpha: 0.18),
@@ -146,9 +106,7 @@ class ReproductorCancion extends StatelessWidget {
                       borderRadius: BorderRadius.circular(18),
                       child: SizedBox.square(
                         dimension: lado,
-                        child: sinConexion
-                            ? _sinConexion(context, lado)
-                            : _portada(lado),
+                        child: _portada(lado),
                       ),
                     ),
                   ),
@@ -221,7 +179,7 @@ class ReproductorCancion extends StatelessWidget {
                   ),
                 ),
               ),
-              if (!sinConexion) ...[
+              ...[
                 Refresco(
                   activo: reproduciendo && !enPausa,
                   builder: (context) {
@@ -308,16 +266,6 @@ class ReproductorCancion extends StatelessWidget {
                   ],
                 ),
               ],
-              if (nota != null)
-                Padding(
-                  padding: EdgeInsets.only(top: sinConexion ? 16 : 8),
-                  child: Text(
-                    nota!,
-                    textAlign: TextAlign.center,
-                    style: (sinConexion ? text.bodyLarge : text.bodySmall)
-                        ?.copyWith(color: context.paleta.tintaSuave),
-                  ),
-                ),
               const SizedBox(height: 28),
               botones,
             ],

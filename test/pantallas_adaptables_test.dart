@@ -1,3 +1,4 @@
+import 'package:confetti/confetti.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,7 +8,7 @@ import 'package:riff/models/nivel.dart';
 import 'package:riff/screens/game_screen.dart';
 import 'package:riff/screens/home_screen.dart';
 import 'package:riff/screens/instrucciones_dialog.dart';
-import 'package:riff/services/offline_game_store.dart';
+import 'package:riff/widgets/reproductor_cancion.dart';
 
 void main() {
   final nivel = Nivel.generar(
@@ -99,53 +100,40 @@ void main() {
       tester.view.physicalSize = tamano;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
+      final confeti = ConfettiController();
+      addTearDown(confeti.dispose);
       await tester.pumpWidget(
-        ProviderScope(
-          child: MaterialApp(
-            home: MediaQuery(
-              data: MediaQueryData(
-                size: tamano,
-                textScaler: TextScaler.linear(escalaTexto),
-              ),
-              // Offline valida la respuesta en el dispositivo, sin backend.
-              child: GameScreen(
-                nivel: nivel,
-                gameId: 'offline-1',
-                offlineMode: true,
-                onSiguiente: () {},
-                offlineLevel: OfflineLevelData(
-                  nivel: nivel,
-                  completado: false,
-                  puedeIniciar: true,
-                  respuestaHash: OfflineGameStore.huella(nivel.id, 'cancion'),
-                  audioPaths: const {},
-                ),
-                onOfflineCompleted: (_, _) async {},
+        MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(
+              size: tamano,
+              textScaler: TextScaler.linear(escalaTexto),
+            ),
+            child: Scaffold(
+              body: ReproductorCancion(
+                color: Colors.orange,
+                titulo: 'Cancion',
+                artista: 'Artista',
+                insignia: '¡ADIVINASTE! · NIVEL 1',
+                portada: null,
+                reproduciendo: false,
+                enPausa: false,
+                posicion: () => Duration.zero,
+                duracion: () => Duration.zero,
+                onReproducirPausar: () {},
+                onDesdeInicio: () {},
+                onDetener: null,
+                onBuscar: null,
+                confeti: confeti,
+                botones: const Text('Terminar nivel'),
               ),
             ),
           ),
         ),
       );
       await tester.pump();
-      await tester.scrollUntilVisible(
-        find.text('Comprobar respuesta'),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
-      await tester.enterText(find.byType(TextField), 'Cancion');
-      await tester.tap(find.text('Comprobar respuesta'));
-      await tester.pump();
-      await tester.pump();
-      expect(tester.takeException(), isNull);
-      await tester.scrollUntilVisible(
-        find.text('Terminar nivel'),
-        200,
-        scrollable: find.byType(Scrollable).first,
-      );
       expect(find.text('Cancion'), findsOneWidget);
-      // Sin conexión: banda animada en lugar de portada y controles.
-      expect(find.text('Sin conexión'), findsOneWidget);
-      expect(find.byTooltip('Reproducir'), findsNothing);
+      expect(find.byTooltip('Reproducir'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }

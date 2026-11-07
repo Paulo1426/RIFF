@@ -53,8 +53,19 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // shortcut: sin key.properties cae a la llave debug para compilar localmente; no publicar así.
-            signingConfig = if (claves.isEmpty) signingConfigs.getByName("debug") else signingConfigs.getByName("release")
+            signingConfig = signingConfigs.getByName(if (claves.isEmpty) "debug" else "release")
+        }
+    }
+
+    // Un release sin android/key.properties saldría firmado con la llave debug: mejor que falle.
+    gradle.taskGraph.whenReady {
+        val esRelease = allTasks.any { tarea ->
+            tarea.project == project &&
+                listOf("assemble", "bundle", "package").any { tarea.name.startsWith(it) } &&
+                tarea.name.endsWith("Release")
+        }
+        if (esRelease && claves.isEmpty) {
+            throw GradleException("Falta android/key.properties: un release no puede firmarse con la llave debug.")
         }
     }
 }

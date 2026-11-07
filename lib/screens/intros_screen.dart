@@ -16,7 +16,6 @@ import '../models/genero.dart';
 import '../services/audio_service.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/musica_menu.dart';
-import '../services/offline_intro_store.dart';
 import '../theme.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
 import '../widgets/liquid_glass/liquid_glass_appbar.dart';
@@ -45,9 +44,6 @@ class IntrosScreen extends ConsumerStatefulWidget {
 
 class _IntrosScreenState extends ConsumerState<IntrosScreen> {
   EstadoIntros? _estado;
-  // Copia descargada para jugar sin conexión.
-  OfflineIntroSnapshot? _offline;
-  bool _sinConexion = false;
   // Portadas guardadas en la caché de las intros adivinadas.
   Map<String, File> _portadas = const {};
   Object? _error;
@@ -88,56 +84,19 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
     ),
   ];
 
-  OfflineIntroStore get _store => ref.read(offlineIntroStoreProvider);
-
   Future<void> _cargar() async {
     setState(() => _error = null);
-    final uid = ref.read(firebaseGameRepositoryProvider).uid;
-    _offline ??= uid == null ? null : await _store.load(uid);
     try {
-      // Los aciertos sin conexión se envían antes, para que cuenten.
-      if (uid != null && (_offline?.pendientes.isNotEmpty ?? false)) {
-        _offline = await _store.actualizar(uid);
-      }
       final estado = await ref
           .read(firebaseGameRepositoryProvider)
           .cargarIntros();
       if (!mounted) return;
-      setState(() {
-        _estado = estado;
-        _sinConexion = false;
-      });
+      setState(() => _estado = estado);
       widget.onEstado?.call(estado);
       unawaited(_cargarPortadas(estado));
-      // Copia del estado para ver la colección sin conexión.
-      if (uid != null) {
-        final copia = OfflineIntroSnapshot(
-          uid: uid,
-          estadoJson: estado.toJson(),
-          intros: _offline?.intros ?? const {},
-          pendientes: _offline?.pendientes ?? const [],
-        );
-        _offline = copia;
-        unawaited(
-          _store
-              .save(copia)
-              .catchError(
-                (Object error) => debugPrint('No se guardó la copia: $error'),
-              ),
-        );
-      }
     } catch (error) {
       if (!mounted) return;
-      final offline = _offline;
-      setState(() {
-        if (offline == null) {
-          _error = error;
-        } else {
-          _estado = offline.estado;
-          _sinConexion = true;
-        }
-      });
-      if (offline != null) unawaited(_cargarPortadas(offline.estado));
+      setState(() => _error = error);
     }
   }
 
@@ -153,43 +112,14 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
   }
 
   Future<void> _abrir(IntroAsignada intro, {bool reproducir = false}) async {
-    // Sin conexión solo se escuchan las ya adivinadas (lo que sonó quedó en
-    // la caché); las demás se juegan con internet.
-    if (_sinConexion && intro.estado != EstadoIntro.completada) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Sin conexión solo puedes escuchar las intros que ya adivinaste.',
-          ),
-        ),
-      );
-      return;
-    }
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => IntroGameScreen(
-          intro: intro,
-          reproducirAlAbrir: reproducir,
-          sinConexion: _sinConexion,
-          offline: _offline?.intros[intro.id],
-          onOfflineCompletada: (answer) async {
-            final snapshot = _offline;
-            if (snapshot == null) {
-              throw StateError('No hay intros descargadas en este teléfono');
-            }
-            final actualizado = snapshot.completadaLocalmente(intro.id, answer);
-            await _store.save(actualizado);
-            _offline = actualizado;
-          },
-        ),
+        builder: (_) =>
+            IntroGameScreen(intro: intro, reproducirAlAbrir: reproducir),
       ),
     );
     if (!mounted) return;
-    if (_sinConexion) {
-      setState(() => _estado = _offline?.estado ?? _estado);
-    } else {
-      await _cargar();
-    }
+    await _cargar();
   }
 
   Future<void> _sacarCarta() async {
@@ -226,11 +156,7 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
       children: [
         LiquidGlassButton(
           key: _claveSacar,
-          onPressed:
-              _sacando ||
-                  _sinConexion ||
-                  !estado.puedeSacar ||
-                  estado.restantes == 0
+          onPressed: _sacando || !estado.puedeSacar || estado.restantes == 0
               ? null
               : _sacarCarta,
           icon: Icons.style_rounded,
@@ -240,10 +166,7 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          _sinConexion
-              ? 'Sin conexión: juega las intros descargadas. Para sacar '
-                    'cartas necesitas internet.'
-              : estado.restantes == 0
+          estado.restantes == 0
               ? 'Descubriste las ${estado.intros.length} intros.'
               : !estado.puedeSacar
               ? 'Gana monedas completando niveles del género correspondiente.'
@@ -335,7 +258,12 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('$_error', textAlign: TextAlign.center),
+                Text(
+                  esErrorDeRed(_error!)
+                      ? 'Necesitas conexión a internet.'
+                      : '$_error',
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 16),
                 LiquidGlassButton(onPressed: _cargar, label: 'Reintentar'),
               ],
@@ -773,9 +701,6 @@ class IntroGameScreen extends ConsumerStatefulWidget {
   const IntroGameScreen({
     super.key,
     required this.intro,
-    this.sinConexion = false,
-    this.offline,
-    this.onOfflineCompletada,
     this.sala,
     this.reproducirAlAbrir = false,
   });
@@ -784,10 +709,6 @@ class IntroGameScreen extends ConsumerStatefulWidget {
   // Recién sacada de la ruleta: la intro empieza a sonar al entrar.
   final bool reproducirAlAbrir;
   final IntroEnSala? sala;
-  final bool sinConexion;
-  // Datos descargados; permiten validar la respuesta sin internet.
-  final OfflineIntroData? offline;
-  final Future<void> Function(String answer)? onOfflineCompletada;
 
   @override
   ConsumerState<IntroGameScreen> createState() => _IntroGameScreenState();
@@ -800,8 +721,6 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
   late final MusicaMenu _musicaMenu;
   bool _playing = false;
   bool _paused = false;
-  // Adivinada sin internet: no suena la original, solo las felicitaciones.
-  bool _ganadaSinConexion = false;
   bool _sending = false;
   String? _message;
   bool? _correct;
@@ -869,16 +788,6 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       // que se guarda por el género del menú.
       final enCache = widget.sala == null;
       final guardado = enCache ? await _audioService.cachedFile(clave) : null;
-      // La original solo se descarga después de adivinarla con conexión.
-      if (guardado == null && tipo == 'fullSong' && widget.sinConexion) {
-        if (mounted) {
-          setState(
-            () => _message =
-                'La canción original sonará cuando tengas conexión a internet.',
-          );
-        }
-        return;
-      }
       final url = guardado != null
           ? Uri.file(guardado.path).toString()
           : await _urlRemota(tipo);
@@ -886,16 +795,17 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       await _audioService.reproducir(
         urls: [url],
         cacheKeys: [guardado == null && enCache ? clave : null],
-        duracion: tipo == 'intro'
-            ? const Duration(seconds: 30)
-            : null,
+        duracion: tipo == 'intro' ? const Duration(seconds: 30) : null,
         fundidoSalida: tipo == 'intro'
             ? const Duration(seconds: 2)
             : Duration.zero,
       );
     } catch (error) {
       if (mounted) {
-        setState(() => _message = 'No se pudo reproducir el audio: $error');
+        setState(
+          () =>
+              _message = textoDeFallo('No se pudo reproducir el audio', error),
+        );
       }
     } finally {
       if (mounted && generation == _playbackGeneration) {
@@ -924,7 +834,6 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       _portada = FileImage(guardada);
       return;
     }
-    if (widget.sinConexion) return;
     try {
       final url = await _urlRemota('cover').timeout(const Duration(seconds: 4));
       if (!mounted) return;
@@ -958,30 +867,16 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       _correct = null;
     });
     try {
-      if (widget.sinConexion) {
-        await _comprobarSinConexion(answer);
-        return;
-      }
-      final ResultadoRespuesta resultado;
-      try {
-        final sala = widget.sala;
-        resultado = sala == null
-            ? await _repo.enviarRespuestaIntro(
-                introId: widget.intro.id,
-                respuesta: answer,
-              )
-            : await _repo.responderIntroSala(
-                codigo: sala.codigo,
-                respuesta: answer,
-              );
-      } catch (error) {
-        // Se cayó la conexión: si la intro está descargada se valida aquí.
-        if (widget.offline == null || error is GameRepositoryException) {
-          rethrow;
-        }
-        await _comprobarSinConexion(answer);
-        return;
-      }
+      final sala = widget.sala;
+      final resultado = sala == null
+          ? await _repo.enviarRespuestaIntro(
+              introId: widget.intro.id,
+              respuesta: answer,
+            )
+          : await _repo.responderIntroSala(
+              codigo: sala.codigo,
+              respuesta: answer,
+            );
       if (!mounted) return;
       if (!resultado.correcta) {
         _fallo();
@@ -999,7 +894,7 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
           () => _message =
               error is GameRepositoryException && error.statusCode == 429
               ? error.message
-              : 'No se pudo validar la respuesta: $error',
+              : textoDeFallo('No se pudo validar la respuesta', error),
         );
       }
     } finally {
@@ -1012,33 +907,13 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     _message = 'Esa no es la canción. Intenta de nuevo.';
   });
 
-  /// El acierto queda guardado en el teléfono y se envía al reconectar.
-  Future<void> _comprobarSinConexion(String answer) async {
-    final offline = widget.offline;
-    if (offline == null) {
-      throw StateError(
-        'Esta intro aún no está descargada; conéctate a internet para jugarla.',
-      );
-    }
-    if (!offline.acierta(answer)) {
-      _fallo();
-      return;
-    }
-    await widget.onOfflineCompletada?.call(answer);
-    _ganadaSinConexion = true;
-    await _ganar(offline.titulo ?? answer, offline.artista);
-  }
-
   Future<void> _ganar(String titulo, String? artista) async {
     _playbackGeneration++;
     await _audioService.detener();
     if (!mounted) return;
-    // Sin conexión la original no está descargada: solo las felicitaciones.
-    if (!_ganadaSinConexion) {
-      // Canción y portada a la vez; así salen juntas.
-      unawaited(_play('fullSong'));
-      await _cargarPortada();
-    }
+    // Canción y portada a la vez; así salen juntas.
+    unawaited(_play('fullSong'));
+    await _cargarPortada();
     if (!mounted) return;
     setState(() {
       _won = true;
@@ -1066,11 +941,6 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     onDetener: _playing ? () => _audioService.detener() : null,
     onBuscar: _playing ? _audioService.buscar : null,
     confeti: _confeti,
-    sinConexion: _ganadaSinConexion,
-    nota: _ganadaSinConexion
-        ? '¡Felicitaciones! La canción original sonará cuando tengas '
-              'conexión a internet.'
-        : null,
     botones: Row(
       children: [
         Expanded(

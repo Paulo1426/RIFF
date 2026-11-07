@@ -48,7 +48,9 @@ import {
   pickRandomHint,
   titleLetter,
 } from "./hints.ts";
-import { objectVersion } from "../_shared/storage_version.ts";
+import { appCheckPermite } from "../_shared/app_check.ts";
+import { conCors, respuestaCorsPrevia } from "../_shared/cors.ts";
+import { LimiteTasa } from "../_shared/rate_limit.ts";
 import {
   coleccion,
   coleccionJugador,
@@ -67,12 +69,24 @@ import {
   vecino,
 } from "../_shared/genero.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Content-Type": "application/json",
-};
+// Las cabeceras CORS las añade Deno.serve (ver _shared/cors.ts).
+const jsonHeaders = { "Content-Type": "application/json" };
+// 60 peticiones/min por usuario y 20/min en las acciones que cuestan caras.
+const limiteGeneral = new LimiteTasa(60);
+const limiteCaro = new LimiteTasa(20);
+const accionesCaras = new Set([
+  "startLevel",
+  "purchaseInstrument",
+  "requestHint",
+  "submitAnswer",
+  "drawIntro",
+  "submitIntroAnswer",
+  "crearSala",
+  "unirseSala",
+  "responderIntroSala",
+  "reiniciarProgreso",
+  "borrarCuenta",
+]);
 const projectId = Deno.env.get("FIREBASE_PROJECT_ID") ?? "";
 const firebaseJwks = createRemoteJWKSet(
   new URL(
@@ -102,15 +116,26 @@ interface ServiceAccount {
 }
 
 class HttpError extends Error {
-  constructor(readonly status: number, message: string) {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly retryAfter?: number,
+  ) {
     super(message);
   }
 }
 
 let cachedServiceToken: { token: string; expiresAt: number } | undefined;
 
-function response(status: number, data: JsonObject): Response {
-  return new Response(JSON.stringify(data), { status, headers: corsHeaders });
+function response(
+  status: number,
+  data: JsonObject,
+  extra: Record<string, string> = {},
+): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...jsonHeaders, ...extra },
+  });
 }
 
 function requiredEnv(name: string): string {
@@ -352,6 +377,90 @@ async function listCollection(
   return documents;
 }
 
+/// Consulta en `games`/`salas`...: documentos de [coleccion] que cumplen todos
+/// los [filtros] (solo igualdad o array-contains, sin índices compuestos).
+async function queryDocuments(
+  token: string,
+  coleccion: string,
+  filtros: { campo: string; valor: unknown; op?: "EQUAL" | "ARRAY_CONTAINS" }[],
+  limit = 500,
+): Promise<FirestoreDocument[]> {
+  const filters = filtros.map((filtro) => ({
+    fieldFilter: {
+      field: { fieldPath: filtro.campo },
+      op: filtro.op ?? "EQUAL",
+      value: toValue(filtro.valor),
+    },
+  }));
+  const result = await fetch(
+    `https://firestore.googleapis.com/v1/projects/${
+      encodeURIComponent(projectId)
+    }/databases/(default)/documents:runQuery`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        structuredQuery: {
+          from: [{ collectionId: coleccion }],
+          where: filters.length === 1
+            ? filters[0]
+            : { compositeFilter: { op: "AND", filters } },
+          limit,
+        },
+      }),
+    },
+  );
+  if (!result.ok) {
+    console.error(
+      "Firestore query failed",
+      result.status,
+      coleccion,
+      (await result.text()).slice(0, 2000),
+    );
+    throw new HttpError(502, "No se pudieron consultar los datos del juego");
+  }
+  const rows = await result.json() as { document?: FirestoreDocument }[];
+  return rows.flatMap((row) => row.document ? [row.document] : []);
+}
+
+/// Ids de todas las subcolecciones del documento [path].
+async function listCollectionIds(
+  token: string,
+  path: string,
+): Promise<string[]> {
+  const ids: string[] = [];
+  let pageToken: string | undefined;
+  do {
+    const result = await fetch(`${documentUrl(path)}:listCollectionIds`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ pageSize: 100, pageToken }),
+    });
+    if (!result.ok) {
+      console.error(
+        "Firestore listCollectionIds failed",
+        result.status,
+        path,
+        (await result.text()).slice(0, 2000),
+      );
+      throw new HttpError(502, "No se pudieron consultar los datos del juego");
+    }
+    const data = await result.json() as {
+      collectionIds?: string[];
+      nextPageToken?: string;
+    };
+    ids.push(...(data.collectionIds ?? []));
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+  return ids;
+}
+
 async function commitWrites(
   token: string,
   writes: JsonObject[],
@@ -402,24 +511,55 @@ async function clearDocuments(
 
 async function clearGuestSession(token: string, uid: string): Promise<void> {
   // El invitado se limpia en todos los géneros.
-  const collections = [
-    "games",
-    ...generos.flatMap((genero) =>
-      ["progress", "difficultyOrders", "introProgress"].map((nombre) =>
-        `guestSessions/${uid}/${coleccionJugador(nombre, genero)}`
-      )
-    ),
-  ];
+  const collections = generos.flatMap((genero) =>
+    ["progress", "difficultyOrders", "introProgress", "intentos"].map((
+      nombre,
+    ) => `guestSessions/${uid}/${coleccionJugador(nombre, genero)}`)
+  );
   for (const collection of collections) {
     const documents = await listCollection(token, collection);
-    const paths = documents
-      .filter((document) =>
-        collection === "games" ? document.fields?.uid === uid : true
-      )
-      .map((document) => document.name)
-      .filter((name): name is string => typeof name === "string");
-    await clearDocuments(token, paths);
+    await clearDocuments(
+      token,
+      documents
+        .map((document) => document.name)
+        .filter((name): name is string => typeof name === "string"),
+    );
   }
+  await borrarPartidas(token, uid);
+}
+
+/// Borra todas las partidas (`games`) del usuario.
+async function borrarPartidas(token: string, uid: string): Promise<void> {
+  for (let vuelta = 0; vuelta < 50; vuelta++) {
+    const partidas = await queryDocuments(token, "games", [
+      { campo: "uid", valor: uid },
+    ]);
+    if (partidas.length === 0) return;
+    await clearDocuments(
+      token,
+      partidas
+        .map((document) => document.name)
+        .filter((name): name is string => typeof name === "string"),
+    );
+    if (partidas.length < 500) return;
+  }
+}
+
+/// Partidas sin terminar del usuario que no son de una sala.
+async function partidasAbiertasSinSala(
+  token: string,
+  uid: string,
+): Promise<string[]> {
+  const abiertas = await queryDocuments(token, "games", [
+    { campo: "uid", valor: uid },
+    { campo: "ganada", valor: false },
+  ], 100);
+  return abiertas
+    .filter((document) =>
+      typeof document.fields?.salaId === "undefined" &&
+      typeof document.name === "string"
+    )
+    .map((document) => document.name!);
 }
 
 /// Empezar desde cero: borra progreso, orden de niveles, intros, fichas y
@@ -428,9 +568,9 @@ async function resetUserProgress(token: string, uid: string): Promise<void> {
   for (
     const coleccion of [
       ...generos.flatMap((genero) =>
-        ["progress", "difficultyOrders", "introProgress"].map((nombre) =>
-          coleccionJugador(nombre, genero)
-        )
+        ["progress", "difficultyOrders", "introProgress", "intentos"].map((
+          nombre,
+        ) => coleccionJugador(nombre, genero))
       ),
       "fichas",
     ]
@@ -499,19 +639,6 @@ function normalizeAnswer(value: string): string {
     .replace(/\s+/g, " ");
 }
 
-/// Huella de la respuesta para los paquetes offline: el teléfono comprueba
-/// el acierto sin recibir el texto. El id evita comparar huellas entre
-/// canciones; el servidor vuelve a validar el acierto al sincronizar.
-async function answerHash(id: string, answer: string): Promise<string> {
-  const bytes = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(`${id}:${normalizeAnswer(answer)}`),
-  );
-  return [...new Uint8Array(bytes)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
-
 function shuffled<T>(items: T[]): T[] {
   const result = [...items];
   for (let index = result.length - 1; index > 0; index--) {
@@ -531,6 +658,13 @@ function userPath(
 ) {
   const root = guest ? `guestSessions/${uid}` : `users/${uid}`;
   return `${root}/${coleccionJugador(collection)}/${difficulty}`;
+}
+
+/// Fallos del usuario en un nivel (cuenta y espera por uid + nivel, no por
+/// partida: empezar otra partida no los reinicia).
+function intentosPath(uid: string, levelId: string, guest: boolean): string {
+  const root = guest ? `guestSessions/${uid}` : `users/${uid}`;
+  return `${root}/${coleccionJugador("intentos")}/${levelId}`;
 }
 
 /// Documentos de [nombre] del catálogo. En Medley, los de los cinco géneros
@@ -884,7 +1018,8 @@ async function getProgress(
   };
 }
 
-async function createOfflineAudioUrl(
+/// URL firmada de corta duración (15 min) de un archivo de Storage.
+async function createAudioUrl(
   tipo: TipoAudio,
   path: string,
   // Género del archivo; en Medley, el de la canción (no "aleatorio").
@@ -915,16 +1050,13 @@ async function createOfflineAudioUrl(
         Authorization: `Bearer ${serviceRoleKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ expiresIn: 604800 }),
+      body: JSON.stringify({ expiresIn: 900 }),
     },
   );
   if (!result.ok) {
     const details = (await result.text()).slice(0, 1000);
-    console.error("Offline audio URL signing failed", result.status, details);
-    throw new HttpError(
-      502,
-      "No se pudo preparar la descarga offline de audio",
-    );
+    console.error("Audio URL signing failed", result.status, details);
+    throw new HttpError(502, "No se pudo preparar el audio");
   }
   const data = await result.json() as {
     signedURL?: string;
@@ -939,124 +1071,6 @@ async function createOfflineAudioUrl(
     ? signedUrl
     : `/storage/v1${signedUrl.startsWith("/") ? signedUrl : `/${signedUrl}`}`;
   return `${supabaseUrl}${pathWithPrefix}`;
-}
-
-/// Con [levelId] trae solo ese nivel: la app baja cada nivel al ganarlo, no
-/// todo el catálogo.
-async function createOfflineBundle(
-  token: string,
-  uid: string,
-  guest: boolean,
-  levelId?: string,
-): Promise<JsonObject> {
-  const state = await getProgress(token, uid, guest);
-  const entries = [
-    ...(state.niveles as JsonObject[]),
-    ...(state.niveles_repetibles as JsonObject[]),
-  ];
-  const eligible = [...new Map(
-    entries
-      // Solo niveles ya jugables: los que aún no se pueden iniciar no
-      // viajan al teléfono (ni sus audios ni su respuesta).
-      .filter((entry) => {
-        const nivel = entry.nivel as JsonObject;
-        return (entry.completado === true || entry.puede_iniciar === true) &&
-          (!guest || nivel.dificultad === "facil") &&
-          (levelId === undefined || nivel.id === levelId);
-      })
-      .map((entry) => {
-        const nivel = entry.nivel as JsonObject;
-        return [nivel.id as string, entry] as const;
-      }),
-  ).values()];
-
-  const levels = await Promise.all(eligible.map(async (entry) => {
-    const nivel = entry.nivel as JsonObject;
-    const levelId = nivel.id as string;
-    const [level, answer] = await Promise.all([
-      getDocument(token, enCatalogo("levels", levelId)),
-      getDocument(token, enCatalogo("privateLevelAnswers", levelId)),
-    ]);
-    if (
-      !level || !answer ||
-      answer.fields.respuestaCancionNormalizada === undefined
-    ) {
-      throw new HttpError(404, `Faltan datos offline para ${levelId}`);
-    }
-    const instruments = level.fields.instrumentos;
-    if (!instruments || typeof instruments !== "object") {
-      throw new HttpError(500, `El nivel ${levelId} no tiene instrumentos`);
-    }
-    const songId = nivel.cancion_id;
-    if (typeof songId !== "string" || !validId(songId)) {
-      throw new HttpError(
-        500,
-        `El nivel ${levelId} no tiene una canción válida`,
-      );
-    }
-    const song = await getDocument(
-      token,
-      enCatalogo("songs", vecino(levelId, songId)),
-    );
-    const instrumentalPath = song?.fields.instrumentalAudioPath;
-    if (
-      !song ||
-      song.fields.published !== true ||
-      typeof instrumentalPath !== "string" ||
-      !instrumentalPath
-    ) {
-      throw new HttpError(404, `Falta la pista instrumental de ${levelId}`);
-    }
-    const audioUrls: JsonObject = {};
-    const audioVersions: JsonObject = {};
-    const versionOf = (tipo: TipoAudio, path: string) => {
-      const { bucket, ruta } = ubicacion(tipo, path, generoDe(levelId));
-      return objectVersion(
-        requiredEnv("SUPABASE_URL").replace(/\/+$/, ""),
-        requiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
-        bucket,
-        ruta,
-      );
-    };
-    for (
-      const [instrument, value] of Object.entries(instruments as JsonObject)
-    ) {
-      if (
-        !instrumentTypes.has(instrument) || !value || typeof value !== "object"
-      ) {
-        throw new HttpError(500, `Instrumentos inválidos en ${levelId}`);
-      }
-      const storagePath = (value as JsonObject).storagePath;
-      if (typeof storagePath !== "string" || !storagePath) {
-        throw new HttpError(500, `Falta la ruta del instrumento ${instrument}`);
-      }
-      audioUrls[instrument] = await createOfflineAudioUrl(
-        "instrumentos",
-        storagePath,
-        generoDe(levelId),
-      );
-      audioVersions[instrument] = await versionOf("instrumentos", storagePath);
-    }
-    audioVersions.instrumental = await versionOf(
-      "canciones-instrumentales",
-      instrumentalPath,
-    );
-    return {
-      entry,
-      respuestaHash: await answerHash(
-        levelId,
-        String(answer.fields.respuestaCancionNormalizada),
-      ),
-      audioUrls,
-      audioVersions,
-      instrumentalAudioUrl: await createOfflineAudioUrl(
-        "canciones-instrumentales",
-        instrumentalPath,
-        generoDe(levelId),
-      ),
-    };
-  }));
-  return { estado: state, levels };
 }
 
 async function purchaseInstrument(
@@ -1254,7 +1268,10 @@ async function startLevel(
     })),
   };
   const { gameId, write } = newGame(uid, levelId, nivel);
-  await commitWrites(token, [write]);
+  // Una sola partida abierta por usuario: al empezar otra se cierran las
+  // viejas, así no se acumulan documentos `games` sin tope.
+  const viejas = await partidasAbiertasSinSala(token, uid);
+  await commitWrites(token, [...viejas.map((name) => ({ delete: name })), write]);
   return { gameId, nivel: gameLevel };
 }
 
@@ -1333,13 +1350,6 @@ async function submitAnswer(
   }
   mismoGenero(game.fields);
   if (game.fields.ganada === true) return { correct: true };
-  const nextAnswerAt = game.fields.nextAnswerAt;
-  if (
-    typeof nextAnswerAt === "string" &&
-    Date.parse(nextAnswerAt) > Date.now()
-  ) {
-    throw new HttpError(429, "Espera 30 segundos antes de volver a intentarlo");
-  }
   const levelId = game.fields.levelId;
   const difficulty = game.fields.dificultad;
   if (
@@ -1353,6 +1363,22 @@ async function submitAnswer(
   // Las partidas de una sala no tocan el orden ni el progreso del jugador.
   const salaId = game.fields.salaId;
   const enSala = typeof salaId === "string";
+  // Fuera de las salas los fallos cuentan por usuario + nivel; en las salas,
+  // por partida (cada jugador solo tiene una por canción).
+  const intentos = enSala
+    ? null
+    : await getDocument(token, intentosPath(uid, levelId, guest));
+  const nextAnswerAt = (enSala ? game.fields : intentos?.fields)?.nextAnswerAt;
+  if (
+    typeof nextAnswerAt === "string" &&
+    Date.parse(nextAnswerAt) > Date.now()
+  ) {
+    throw new HttpError(
+      429,
+      "Espera 30 segundos antes de volver a intentarlo",
+      Math.ceil((Date.parse(nextAnswerAt) - Date.now()) / 1000),
+    );
+  }
   const [level, answerDoc, order, progress] = await Promise.all([
     getDocument(token, enCatalogo("levels", levelId)),
     getDocument(token, enCatalogo("privateLevelAnswers", levelId)),
@@ -1373,23 +1399,25 @@ async function submitAnswer(
     throw new HttpError(500, "El nivel no tiene una respuesta configurada");
   }
   if (normalizeAnswer(answer) !== normalizeAnswer(correctAnswer)) {
-    const failedAttempts = typeof game.fields.failedAnswerAttempts === "number"
-      ? game.fields.failedAnswerAttempts
-      : 0;
+    const previos = (enSala ? game.fields : intentos?.fields)
+      ?.failedAnswerAttempts;
+    const failedAttempts = typeof previos === "number" ? previos : 0;
     const rateLimited = failedAttempts >= 2;
     const now = new Date().toISOString();
+    const fallo = {
+      failedAnswerAttempts: rateLimited ? 0 : failedAttempts + 1,
+      nextAnswerAt: rateLimited
+        ? new Date(Date.now() + 30_000).toISOString()
+        : null,
+      updatedAt: now,
+    };
+    const rutaIntentos = intentosPath(uid, levelId, guest);
     await commitWrites(token, [
-      updateWrite(
-        gamePath,
-        {
-          failedAnswerAttempts: rateLimited ? 0 : failedAttempts + 1,
-          nextAnswerAt: rateLimited
-            ? new Date(Date.now() + 30_000).toISOString()
-            : null,
-          updatedAt: now,
-        },
-        game.updateTime!,
-      ),
+      enSala
+        ? updateWrite(gamePath, fallo, game.updateTime!)
+        : intentos
+        ? updateWrite(rutaIntentos, fallo, intentos.updateTime!)
+        : createWrite(rutaIntentos, { ...fallo, createdAt: now }),
     ]);
     return { correct: false };
   }
@@ -1470,6 +1498,14 @@ async function submitAnswer(
         ? updateWrite(progressPath, progressFields, progress.updateTime!)
         : createWrite(progressPath, progressFields),
     ]),
+    // Acertar borra los fallos del nivel.
+    ...(intentos
+      ? [updateWrite(
+        intentosPath(uid, levelId, guest),
+        { failedAnswerAttempts: 0, nextAnswerAt: null, updatedAt: now },
+        intentos.updateTime!,
+      )]
+      : []),
   ];
   await commitWrites(token, writes);
   return {
@@ -1731,6 +1767,8 @@ interface Jugador extends JsonObject {
   indiceIniciado?: number | null;
   failedAnswerAttempts?: number;
   nextAnswerAt?: string | null;
+  // Su cuenta se borró: sigue en la tabla sin nombre y sin escribirle datos.
+  cuentaBorrada?: boolean;
 }
 
 function newPlayer(nombre: string, pagado = 0): Jugador {
@@ -1984,6 +2022,8 @@ async function updateRoom<T>(
       const creador = roomPlayers(final)[final.creadorUid as string];
       const terminadaEn = new Date().toISOString();
       for (const [puesto, jugador] of ranking.entries()) {
+        // Una cuenta borrada no recupera datos al cerrarse la sala.
+        if (jugador.cuentaBorrada === true) continue;
         // Historial del jugador: users/{uid}/historialSalas/{codigo}.
         writes.push({
           update: {
@@ -2969,57 +3009,6 @@ async function drawIntro(
   };
 }
 
-/// Paquete para jugar sin conexión las intros ya obtenidas: enlace de la
-/// intro y la huella de la respuesta. Título, artista, original y portada
-/// revelan la canción: solo van de las intros ya adivinadas.
-async function introOfflineBundle(
-  token: string,
-  uid: string,
-  guest: boolean,
-): Promise<JsonObject> {
-  const state = await loadIntroState(token, uid, guest);
-  const intros = await Promise.all(
-    state.unlocked.filter((id) => state.intros.has(id)).map(async (id) => {
-      const fields = state.intros.get(id)!;
-      const pathOf = (type: keyof typeof introAudioTypes) => {
-        const { field, file } = introAudioTypes[type];
-        const custom = fields[field];
-        return typeof custom === "string" && custom
-          ? custom
-          : `${idReal(id)}/${file}`;
-      };
-      const expected = fields.respuestaCancionNormalizada ?? fields.titulo;
-      if (typeof expected !== "string") {
-        throw new HttpError(500, `La intro ${id} no tiene respuesta`);
-      }
-      const done = state.completed.has(id);
-      const [intro, fullSong, cover] = await Promise.all([
-        createOfflineAudioUrl("intro", pathOf("intro"), generoDe(id)),
-        done
-          ? createOfflineAudioUrl("intro", pathOf("fullSong"), generoDe(id))
-          : null,
-        // Sin portada subida se juega igual: el reproductor muestra el disco.
-        done
-          ? createOfflineAudioUrl("intro", pathOf("cover"), generoDe(id))
-            .catch(() => null)
-          : null,
-      ]);
-      return {
-        id,
-        titulo: done && typeof fields.titulo === "string"
-          ? fields.titulo
-          : null,
-        artista: done && typeof fields.artista === "string"
-          ? fields.artista
-          : null,
-        respuestaHash: await answerHash(id, expected),
-        urls: { intro, fullSong, cover },
-      };
-    }),
-  );
-  return { estado: introSummary(state), intros };
-}
-
 async function loadIntroAccess(
   token: string,
   uid: string,
@@ -3081,7 +3070,7 @@ async function signedIntroUrl(
   ) {
     throw new HttpError(500, `La ruta ${field} de ${introId} no es válida`);
   }
-  return await createOfflineAudioUrl("intro", path, generoDe(introId));
+  return await createAudioUrl("intro", path, generoDe(introId));
 }
 
 async function submitIntroAnswer(
@@ -3150,14 +3139,99 @@ async function submitIntroAnswer(
   return { correct: true, ...reveal };
 }
 
-async function handle(request: Request): Promise<Response> {
-  if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
+/// Vista reducida de las salas públicas en espera: sin uids ni nombres
+/// completos (del creador, solo la inicial).
+async function listarSalasPublicas(token: string): Promise<JsonObject> {
+  const documentos = await queryDocuments(token, "salas", [
+    { campo: "publica", valor: true },
+    { campo: "estado", valor: "esperando" },
+  ], 50);
+  const salas = documentos
+    .map((documento) => fromFields(documento.fields ?? {}))
+    .flatMap((sala) => {
+      const jugadores = roomPlayers(sala);
+      const capacidad = typeof sala.maxJugadores === "number"
+        ? sala.maxJugadores
+        : maxJugadoresSala;
+      const nombre = jugadores[sala.creadorUid as string]?.nombre;
+      const inicial = typeof nombre === "string"
+        ? Array.from(nombre.trim())[0]
+        : undefined;
+      return codigoValido(sala.codigo) &&
+          Object.keys(jugadores).length < capacidad
+        ? [{
+          codigo: sala.codigo,
+          modo: sala.modo ?? null,
+          tipo: sala.tipo ?? "instrumentos",
+          genero: sala.genero ?? "vallenato",
+          aleatoria: sala.aleatoria === true,
+          jugadores: Object.keys(jugadores).length,
+          capacidad,
+          creador: inicial ? `${inicial.toUpperCase()}…` : "Jugador",
+        }]
+        : [];
+    });
+  return { salas };
+}
+
+/// Borra los datos del usuario en Firestore: lo saca de sus salas, borra sus
+/// partidas y users/{uid} con todas sus subcolecciones. El cliente borra
+/// después la cuenta de Firebase Auth.
+async function borrarCuenta(token: string, uid: string): Promise<void> {
+  // Primero las salas: al salir pueden escribirse fichas o historial del
+  // usuario, que se borran después.
+  const salas = await queryDocuments(token, "salas", [
+    { campo: "orden", valor: uid, op: "ARRAY_CONTAINS" },
+  ], 200);
+  for (const documento of salas) {
+    const codigo = documento.name?.split("/").at(-1);
+    const fields = fromFields(documento.fields ?? {});
+    if (!codigoValido(codigo)) continue;
+    await conGenero(fields.genero ?? "vallenato", async () => {
+      if (fields.estado !== "esperando") {
+        // En juego o terminada se queda en la tabla, pero sin su nombre.
+        await updateRoom<null>(token, codigo, (sala) => {
+          const jugadores = roomPlayers(sala);
+          if (!jugadores[uid]) return { resultado: null };
+          jugadores[uid] = {
+            ...jugadores[uid],
+            nombre: "Jugador eliminado",
+            cuentaBorrada: true,
+          };
+          return { campos: { jugadores }, resultado: null };
+        });
+      }
+      if (fields.estado !== "terminada") await leaveRoom(token, uid, codigo);
+    });
   }
+  await borrarPartidas(token, uid);
+  for (const coleccion of await listCollectionIds(token, `users/${uid}`)) {
+    const documentos = await listCollection(token, `users/${uid}/${coleccion}`);
+    await clearDocuments(
+      token,
+      documentos
+        .map((documento) => documento.name)
+        .filter((name): name is string => typeof name === "string"),
+    );
+  }
+  await clearDocuments(token, [documentName(`users/${uid}`)]);
+}
+
+/// Exige haber confirmado la contraseña (o Google) hace menos de 5 minutos.
+function exigirReautenticacion(authTime: unknown, mensaje: string): void {
+  if (typeof authTime !== "number" || Date.now() / 1000 - authTime > 300) {
+    throw new HttpError(401, mensaje);
+  }
+}
+
+async function handle(request: Request): Promise<Response> {
   if (request.method !== "POST") {
     return response(405, { error: "Método no permitido" });
   }
   try {
+    if (!(await appCheckPermite(request))) {
+      throw new HttpError(401, "No se pudo verificar la aplicación");
+    }
     if (!projectId) {
       throw new HttpError(500, "Falta configurar FIREBASE_PROJECT_ID");
     }
@@ -3180,6 +3254,7 @@ async function handle(request: Request): Promise<Response> {
     }
     const uid = verified.payload.sub;
     if (!uid) throw new HttpError(401, "El token no identifica al usuario");
+    limitarTasa(limiteGeneral, uid);
     const firebaseClaim = verified.payload.firebase;
     const guest = firebaseClaim !== null &&
       typeof firebaseClaim === "object" &&
@@ -3204,6 +3279,9 @@ async function handle(request: Request): Promise<Response> {
       throw new HttpError(400, "El género no es válido");
     }
     const action = body.action;
+    if (typeof action === "string" && accionesCaras.has(action)) {
+      limitarTasa(limiteCaro, uid);
+    }
     const token = await firestoreToken();
     if (action === "startGuestSession") {
       if (!guest) {
@@ -3219,48 +3297,6 @@ async function handle(request: Request): Promise<Response> {
       // Al abrir el juego: las fichas de bienvenida para las salas.
       if (!guest) await darFichasIniciales(token, uid);
       return response(200, { estado: await getProgress(token, uid, guest) });
-    }
-    if (action === "offlineBundle") {
-      if (body.levelId !== undefined && !validId(body.levelId)) {
-        throw new HttpError(400, "levelId no es válido");
-      }
-      return response(
-        200,
-        {
-          bundle: await createOfflineBundle(
-            token,
-            uid,
-            guest,
-            body.levelId as string | undefined,
-          ),
-        },
-      );
-    }
-    if (action === "completeOfflineLevel") {
-      if (
-        !validId(body.levelId) ||
-        typeof body.answer !== "string" ||
-        body.answer.trim().length === 0 ||
-        body.answer.length > 200
-      ) {
-        throw new HttpError(400, "levelId o respuesta no son válidos");
-      }
-      const started = await startLevel(token, uid, body.levelId, guest);
-      const gameId = started.gameId;
-      if (typeof gameId !== "string") {
-        throw new HttpError(500, "No se pudo crear la partida offline");
-      }
-      const result = await submitAnswer(
-        token,
-        uid,
-        gameId,
-        body.answer,
-        guest,
-      );
-      if (result.correct !== true) {
-        throw new HttpError(400, "La respuesta offline no coincide");
-      }
-      return response(200, result);
     }
     if (action === "startLevel") {
       if (!validId(body.levelId)) {
@@ -3343,6 +3379,12 @@ async function handle(request: Request): Promise<Response> {
         ),
       );
     }
+    if (action === "listarSalasPublicas") {
+      if (guest) {
+        throw new HttpError(403, "Crea una cuenta para jugar con amigos");
+      }
+      return response(200, await listarSalasPublicas(token));
+    }
     if (action === "introState") {
       return response(
         200,
@@ -3351,30 +3393,6 @@ async function handle(request: Request): Promise<Response> {
     }
     if (action === "drawIntro") {
       return response(200, await drawIntro(token, uid, guest));
-    }
-    if (action === "introOfflineBundle") {
-      return response(200, await introOfflineBundle(token, uid, guest));
-    }
-    if (action === "completeOfflineIntro") {
-      if (
-        !validId(body.introId) ||
-        typeof body.answer !== "string" ||
-        body.answer.trim().length === 0 ||
-        body.answer.length > 200
-      ) {
-        throw new HttpError(400, "introId o respuesta no son válidos");
-      }
-      const result = await submitIntroAnswer(
-        token,
-        uid,
-        body.introId,
-        body.answer,
-        guest,
-      );
-      if (result.correct !== true) {
-        throw new HttpError(400, "La respuesta offline no coincide");
-      }
-      return response(200, result);
     }
     if (action === "introAudio") {
       if (
@@ -3451,18 +3469,26 @@ async function handle(request: Request): Promise<Response> {
           "Solo una cuenta registrada puede reiniciarse",
         );
       }
-      // Hace falta haber confirmado la contraseña (o Google) hace poco.
-      const authTime = verified.payload.auth_time;
-      if (
-        typeof authTime !== "number" || Date.now() / 1000 - authTime > 300
-      ) {
-        throw new HttpError(
-          401,
-          "Vuelve a confirmar tu cuenta para reiniciar el progreso",
-        );
-      }
+      exigirReautenticacion(
+        verified.payload.auth_time,
+        "Vuelve a confirmar tu cuenta para reiniciar el progreso",
+      );
       await resetUserProgress(token, uid);
       return response(200, { reiniciado: true });
+    }
+    if (action === "borrarCuenta") {
+      if (guest) {
+        throw new HttpError(
+          403,
+          "Solo una cuenta registrada puede borrarse",
+        );
+      }
+      exigirReautenticacion(
+        verified.payload.auth_time,
+        "Vuelve a confirmar tu cuenta para borrarla",
+      );
+      await borrarCuenta(token, uid);
+      return response(200, { ok: true });
     }
     if (action === "endGuestSession") {
       if (!guest) {
@@ -3477,18 +3503,44 @@ async function handle(request: Request): Promise<Response> {
     throw new HttpError(400, "Acción no válida");
   } catch (error) {
     if (error instanceof HttpError) {
-      return response(error.status, { error: error.message });
+      // Los errores del servidor (5xx) no cuentan detalles internos.
+      if (error.status >= 500) {
+        console.error("game-progress server error", error.status, error.message);
+        return response(error.status, {
+          error: error.status === 500
+            ? "Error interno al procesar el progreso"
+            : "El servicio no está disponible; inténtalo de nuevo",
+        });
+      }
+      return response(
+        error.status,
+        { error: error.message },
+        error.retryAfter ? { "Retry-After": String(error.retryAfter) } : {},
+      );
     }
     console.error("Unexpected game-progress function failure", error);
     return response(500, { error: "Error interno al procesar el progreso" });
   }
 }
 
+function limitarTasa(limite: LimiteTasa, uid: string): void {
+  const espera = limite.consumir(uid);
+  if (espera > 0) {
+    throw new HttpError(
+      429,
+      "Demasiadas solicitudes; espera un momento antes de volver a intentarlo",
+      espera,
+    );
+  }
+}
+
 // El género del cuerpo vale para toda la petición (ver _shared/genero.ts);
 // handle vuelve a leer el cuerpo y rechaza un género inválido.
 Deno.serve(async (request) => {
+  const previa = respuestaCorsPrevia(request);
+  if (previa) return previa;
   const genero = await request.clone().json()
     .then((body) => body?.genero)
     .catch(() => undefined);
-  return conGenero(genero, () => handle(request));
+  return conCors(request, await conGenero(genero, () => handle(request)));
 });

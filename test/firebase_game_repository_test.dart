@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:riff/models/genero.dart';
 import 'package:riff/models/nivel.dart';
@@ -5,6 +7,14 @@ import 'package:riff/models/pista.dart';
 import 'package:riff/services/firebase_game_repository.dart';
 
 void main() {
+  test('un fallo de red pide conexión; otro error conserva su detalle', () {
+    expect(
+      textoDeFallo('No se pudo', const SocketException('x')),
+      'Necesitas conexión a internet.',
+    );
+    expect(textoDeFallo('No se pudo', 'boom'), 'No se pudo: boom');
+  });
+
   test('cada género tiene un símbolo de moneda distinto', () {
     expect(
       Genero.values.map((genero) => genero.simboloMoneda).toSet(),

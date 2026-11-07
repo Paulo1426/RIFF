@@ -13,7 +13,6 @@ import '../services/firebase_game_repository.dart';
 import '../services/game_service.dart';
 import '../services/musica_menu.dart';
 import '../services/nivel_repository.dart';
-import '../services/offline_intro_store.dart';
 import '../services/validation_service.dart';
 
 final gameServiceProvider = Provider((ref) => GameService());
@@ -28,10 +27,6 @@ final modoTemaProvider = StateNotifierProvider<ModoTema, ThemeMode>(
 );
 final firebaseGameRepositoryProvider = Provider(
   (ref) => FirebaseGameRepository(),
-);
-
-final offlineIntroStoreProvider = Provider(
-  (ref) => OfflineIntroStore(ref.read(firebaseGameRepositoryProvider)),
 );
 
 final nivelRepositoryProvider = Provider<NivelRepository>(

@@ -18,7 +18,7 @@
     {
       "label": "Publicar web",
       "type": "shell",
-      "command": "flutter build web --release --dart-define=SUPABASE_URL=https://btfoclgtqhokqkgbpxmp.supabase.co --dart-define=SUPABASE_ANON_KEY=sb_publishable_bdGU9q84AizSHnqrFglH-g_nngqbut0; if ($?) { firebase deploy --only hosting --non-interactive }",
+      "command": "flutter build web --release --dart-define=SUPABASE_URL=https://btfoclgtqhokqkgbpxmp.supabase.co --dart-define=SUPABASE_ANON_KEY=sb_publishable_bdGU9q84AizSHnqrFglH-g_nngqbut0; if ($?) { firebase deploy --only hosting,firestore:rules --non-interactive }",
       "options": { "shell": { "executable": "powershell.exe", "args": ["-NoProfile", "-Command"] } },
       "problemMatcher": []
     },

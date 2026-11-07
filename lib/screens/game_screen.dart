@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:confetti/confetti.dart';
@@ -9,13 +8,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/genero.dart';
 import '../models/instrumento.dart';
 import '../models/nivel.dart';
-import '../models/partida.dart';
 import '../models/pista.dart';
 import '../providers/providers.dart';
 import '../services/audio_service.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/musica_menu.dart';
-import '../services/offline_game_store.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
 import '../animations/liquid_ripple_effect.dart';
 import '../animations/sound_wave_animation.dart';
@@ -34,10 +31,6 @@ class GameScreen extends ConsumerStatefulWidget {
   final int? numeroVisible;
   // Abre el siguiente nivel en lugar de este; null si no hay siguiente.
   final VoidCallback? onSiguiente;
-  final bool offlineMode;
-  final OfflineLevelData? offlineLevel;
-  final Future<void> Function(String levelId, String answer)?
-  onOfflineCompleted;
   // Partidas de sala: título propio ("Canción 3"), aviso arriba (reloj o
   // ronda), botón para saltar y compras hechas antes de salir y volver.
   final String? titulo;
@@ -54,9 +47,6 @@ class GameScreen extends ConsumerStatefulWidget {
     required this.gameId,
     this.numeroVisible,
     this.onSiguiente,
-    this.offlineMode = false,
-    this.offlineLevel,
-    this.onOfflineCompleted,
     this.titulo,
     this.cabecera,
     this.onSaltar,
@@ -103,9 +93,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     duration: const Duration(milliseconds: 1500),
   );
   int _celebracion = 0;
-  late bool _playingOffline;
   int _playbackGeneration = 0;
-  late final Partida? _offlinePartida;
   int _monedasDisponibles = 0;
   Map<String, int> _monedasPorGenero = const {};
   final Map<TipoPista, String> _pistasDesbloqueadas = {};
@@ -119,17 +107,10 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     _audioService = ref.read(audioServiceProvider);
     // La música del menú se pausa mientras se juega y vuelve al salir.
     _musicaMenu = ref.read(musicaMenuProvider)..entrarNivel();
-    _playingOffline = widget.offlineMode;
     _purchased.addAll(widget.comprasPrevias.keys);
     _prices.addAll(widget.comprasPrevias);
     _balance -= widget.comprasPrevias.values.fold(0, (a, b) => a + b);
     _melodyFound = widget.melodiaDescubierta;
-    _offlinePartida = widget.offlineLevel != null
-        ? Partida(
-            instrumentos: widget.nivel.instrumentos,
-            random: Random.secure(),
-          )
-        : null;
     unawaited(_cargarMonedas());
   }
 
@@ -183,10 +164,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       _buying = true;
       _message = null;
     });
-    if (_playingOffline) {
-      await _buyOfflineInstrument(instrumento);
-      return;
-    }
     try {
       final repository = ref.read(firebaseGameRepositoryProvider);
       final result = await repository.comprarInstrumento(
@@ -218,58 +195,12 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         );
       }
     } catch (error) {
-      if (widget.offlineLevel != null && mounted) {
-        debugPrint('No se pudo comprar online; continuará offline: $error');
-        setState(() => _playingOffline = true);
-        await _buyOfflineInstrument(instrumento);
-        return;
-      }
-      if (mounted) {
-        setState(() => _message = 'No se pudo comprar el instrumento: $error');
-      }
-    } finally {
-      if (mounted) setState(() => _buying = false);
-    }
-  }
-
-  Future<void> _buyOfflineInstrument(Instrumento instrumento) async {
-    try {
-      final partida = _offlinePartida!;
-      if (!partida.comprarTipo(instrumento.tipo)) {
-        throw StateError('No se pudo comprar el instrumento offline');
-      }
-      final price = partida.precioDe(instrumento.tipo)!;
-      var melodyFound = false;
-      if (partida.comprados.length == Partida.maxInstrumentosComprados) {
-        final random = Random.secure();
-        final unpurchased = widget.nivel.instrumentos
-            .where((item) => !partida.comprados.contains(item.tipo))
-            .toList(growable: false);
-        final melody = unpurchased.isNotEmpty && random.nextBool()
-            ? unpurchased.first.tipo
-            : partida.comprados[random.nextInt(partida.comprados.length)];
-        partida.descubrirMelodia(melody);
-        melodyFound = partida.melodiaDescubierta;
-      }
-      if (!mounted) return;
-      final descubierta = melodyFound && !_melodyFound;
-      setState(() {
-        _prices[instrumento.id] = price;
-        _setBalance(partida.presupuestoRestante);
-        _purchased
-          ..clear()
-          ..addAll(partida.comprados.map((item) => item.id));
-        _melodyFound = melodyFound;
-        _message = melodyFound
-            ? '¡Encontraste la melodía! Se desbloquearon todos los instrumentos.'
-            : null;
-      });
-      if (descubierta) _celebrarMelodia();
-      await _playStems([instrumento]);
-    } catch (error) {
       if (mounted) {
         setState(
-          () => _message = 'No se pudo comprar el instrumento offline: $error',
+          () => _message = textoDeFallo(
+            'No se pudo comprar el instrumento',
+            error,
+          ),
         );
       }
     } finally {
@@ -279,27 +210,15 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
   Future<void> _cargarMonedas() async {
     try {
-      if (!_playingOffline) {
-        final estado = await ref
-            .read(firebaseGameRepositoryProvider)
-            .cargarIntros();
-        if (mounted) {
-          setState(() {
-            _monedasPorGenero = estado.monedasPorGenero;
-            _monedasDisponibles =
-                _monedasPorGenero[_generoMoneda.id] ?? estado.monedas;
-          });
-        }
-      } else {
-        final uid = ref.read(usuarioProvider).id;
-        final store = await ref.read(offlineIntroStoreProvider).load(uid);
-        if (mounted && store != null) {
-          setState(() {
-            _monedasPorGenero = store.estado.monedasPorGenero;
-            _monedasDisponibles =
-                _monedasPorGenero[_generoMoneda.id] ?? store.estado.monedas;
-          });
-        }
+      final estado = await ref
+          .read(firebaseGameRepositoryProvider)
+          .cargarIntros();
+      if (mounted) {
+        setState(() {
+          _monedasPorGenero = estado.monedasPorGenero;
+          _monedasDisponibles =
+              _monedasPorGenero[_generoMoneda.id] ?? estado.monedas;
+        });
       }
     } catch (e) {
       debugPrint('No se pudieron cargar las monedas del usuario: $e');
@@ -552,15 +471,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       final repository = ref.read(firebaseGameRepositoryProvider);
       final audio = await Future.wait(
         instruments.map((instrument) async {
-          final offlinePath = widget.offlineLevel?.audioPaths[instrument.id];
-          if (offlinePath != null && await File(offlinePath).exists()) {
-            return (Uri.file(offlinePath).toString(), null);
-          }
-          if (_playingOffline) {
-            throw StateError(
-              'El audio ${instrument.nombre} no está descargado en este dispositivo',
-            );
-          }
           final audio = await repository.obtenerAudio(
             gameId: widget.gameId,
             tipo: 'stem',
@@ -592,13 +502,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
   Future<void> _playSong(String type, {bool replaceCurrent = false}) async {
     if (_playing && !replaceCurrent) return;
-    if (_playingOffline && type == 'fullSong') {
-      setState(
-        () => _message =
-            'La canción completa se reproducirá cuando tengas conexión a internet.',
-      );
-      return;
-    }
     final playbackGeneration = ++_playbackGeneration;
     setState(() {
       _playing = true;
@@ -610,21 +513,12 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       String url;
       String? cacheKey;
       if (type == 'instrumentalSong') {
-        final offlinePath = widget.offlineLevel?.instrumentalAudioPath;
-        if (offlinePath != null && await File(offlinePath).exists()) {
-          url = Uri.file(offlinePath).toString();
-        } else if (_playingOffline) {
-          throw StateError(
-            'La pista instrumental no está descargada en este dispositivo',
-          );
-        } else {
-          final audio = await ref
-              .read(firebaseGameRepositoryProvider)
-              .obtenerAudio(gameId: widget.gameId, tipo: type);
-          url = audio.url;
-          cacheKey =
-              'song:${widget.nivel.cancionId}:instrumentalSong:${audio.version}';
-        }
+        final audio = await ref
+            .read(firebaseGameRepositoryProvider)
+            .obtenerAudio(gameId: widget.gameId, tipo: type);
+        url = audio.url;
+        cacheKey =
+            'song:${widget.nivel.cancionId}:instrumentalSong:${audio.version}';
       } else {
         url =
             (await ref
@@ -640,18 +534,13 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       );
     } catch (error) {
       if (mounted) {
-        if (widget.offlineLevel != null && type == 'fullSong') {
-          setState(() {
-            _playingOffline = true;
-            _message =
-                'La canción completa se reproducirá cuando tengas conexión a internet.';
-          });
-          return;
-        }
         setState(
-          () => _message = type == 'instrumentalSong'
-              ? 'No se pudo reproducir la pista instrumental: $error'
-              : 'No se pudo reproducir la canción: $error',
+          () => _message = textoDeFallo(
+            type == 'instrumentalSong'
+                ? 'No se pudo reproducir la pista instrumental'
+                : 'No se pudo reproducir la canción',
+            error,
+          ),
         );
       }
     } finally {
@@ -742,10 +631,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       _correct = null;
     });
     try {
-      if (_playingOffline) {
-        await _checkOfflineAnswer(answer);
-        return;
-      }
       final resultado = await ref
           .read(firebaseGameRepositoryProvider)
           .enviarRespuesta(gameId: widget.gameId, respuesta: answer);
@@ -796,62 +681,17 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       }
     } catch (error) {
       if (mounted) {
-        if (widget.offlineLevel != null &&
-            !_playingOffline &&
-            error is! GameRepositoryException) {
-          debugPrint('No se pudo validar online; comprobando offline: $error');
-          setState(() => _playingOffline = true);
-          try {
-            await _checkOfflineAnswer(answer);
-          } catch (offlineError) {
-            if (mounted) {
-              setState(
-                () => _message =
-                    'No se pudo guardar el progreso offline: $offlineError',
-              );
-            }
+        setState(() {
+          if (error is GameRepositoryException && error.statusCode == 429) {
+            _message = error.message;
+          } else {
+            _message = textoDeFallo('No se pudo validar la respuesta', error);
           }
-        } else {
-          setState(() {
-            if (error is GameRepositoryException && error.statusCode == 429) {
-              _message = error.message;
-            } else {
-              _message = _playingOffline
-                  ? 'No se pudo guardar el progreso offline: $error'
-                  : 'No se pudo validar la respuesta: $error';
-            }
-          });
-        }
+        });
       }
     } finally {
       if (mounted) setState(() => _sending = false);
     }
-  }
-
-  Future<void> _checkOfflineAnswer(String answer) async {
-    final offlineLevel = widget.offlineLevel;
-    if (offlineLevel == null) {
-      throw StateError('El nivel no está guardado para jugar offline');
-    }
-    final correct = offlineLevel.acierta(answer);
-    if (!mounted) return;
-    if (!correct) {
-      setState(() {
-        _correct = false;
-        _message = 'Esa no es la canción. Intenta de nuevo.';
-      });
-      return;
-    }
-    await widget.onOfflineCompleted?.call(widget.nivel.id, answer);
-    if (!mounted) return;
-    _playbackGeneration++;
-    setState(() {
-      _ganar(titulo: answer);
-      _correct = true;
-      _message =
-          '¡Correcto! La canción completa se reproducirá cuando tengas conexión a internet.';
-    });
-    await _audioService.detener();
   }
 
   // Llamar dentro de setState.
@@ -889,7 +729,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   Future<void> _playPauseFinal() async {
     if (_playing) {
       await _togglePause();
-    } else if (!_playingOffline) {
+    } else {
       await _playSong('fullSong');
     }
   }
@@ -978,20 +818,12 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     posicion: () => _playing ? _audioService.posicion : Duration.zero,
     duracion: () =>
         _playing ? (_audioService.duracion ?? Duration.zero) : Duration.zero,
-    onReproducirPausar: _playingOffline ? null : _playPauseFinal,
-    onDesdeInicio: _playingOffline
-        ? null
-        : () => _playing
-              ? _audioService.buscar(Duration.zero)
-              : _playSong('fullSong'),
+    onReproducirPausar: _playPauseFinal,
+    onDesdeInicio: () =>
+        _playing ? _audioService.buscar(Duration.zero) : _playSong('fullSong'),
     onDetener: _playing ? () => _audioService.detener() : null,
     onBuscar: _playing ? _audioService.buscar : null,
     confeti: _confeti,
-    sinConexion: _playingOffline,
-    nota: _playingOffline
-        ? '¡Felicitaciones! La canción original sonará cuando tengas '
-              'conexión a internet.'
-        : null,
     botones: _botonesFinales(),
   );
 
@@ -1129,16 +961,15 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           actions: [
             if (!_won && widget.pistas)
               IconButton(
-                tooltip: _playingOffline
-                    ? 'Las pistas necesitan conexión a internet'
-                    : 'Pistas y comodines (${_generoMoneda.simboloMoneda} $_monedasDisponibles)',
+                tooltip:
+                    'Pistas y comodines (${_generoMoneda.simboloMoneda} $_monedasDisponibles)',
                 icon: Badge(
                   label: Text('$_monedasDisponibles'),
                   isLabelVisible: _monedasDisponibles > 0,
                   backgroundColor: AppColors.signalOrange,
                   child: const Icon(Icons.lightbulb_rounded),
                 ),
-                onPressed: _playingOffline ? null : _abrirDialogoPistas,
+                onPressed: _abrirDialogoPistas,
               ),
             if (_premio case (final emoji, final cantidad, final nombre))
               _Premio(emoji: emoji, cantidad: cantidad, nombre: nombre),

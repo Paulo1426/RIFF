@@ -45,14 +45,13 @@ service cloud.firestore {
     }
 
     // Salas de "Desafía a tus amigos": solo la función game-progress escribe.
-    // Los jugadores leen su sala en tiempo real; las públicas en espera se
-    // pueden listar para unirse (la consulta debe filtrar por publica y estado).
+    // Un jugador solo lee la sala donde ya está (tiempo real). No se pueden
+    // listar: las salas públicas las ofrece la acción listarSalasPublicas
+    // (vista reducida) y se entra por código con unirseSala.
     match /salas/{codigo} {
       allow get: if request.auth != null
         && request.auth.uid in resource.data.jugadores;
-      allow list: if request.auth != null
-        && resource.data.publica == true
-        && resource.data.estado == 'esperando';
+      allow list: if false;
       allow write: if false;
     }
 

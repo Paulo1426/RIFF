@@ -110,6 +110,44 @@ class JugadorSala {
 }
 
 /// Documento `salas/{codigo}` de Firestore; solo el servidor lo modifica.
+/// Vista reducida de una sala pública en espera (acción `listarSalasPublicas`):
+/// sin uids ni nombres completos de los jugadores.
+class SalaPublica {
+  const SalaPublica({
+    required this.codigo,
+    required this.tipo,
+    required this.modo,
+    required this.genero,
+    required this.aleatoria,
+    required this.jugadores,
+    required this.maxJugadores,
+    required this.creador,
+  });
+
+  final String codigo;
+  final TipoSala tipo;
+  final ModoSala modo;
+  final Genero genero;
+  final bool aleatoria;
+  final int jugadores;
+  final int maxJugadores;
+  // Inicial del creador seguida de "…".
+  final String creador;
+
+  String get nombre => 'Sala de $creador';
+
+  factory SalaPublica.fromJson(Map<String, dynamic> json) => SalaPublica(
+    codigo: json['codigo'] as String,
+    tipo: TipoSala.values.byName(json['tipo'] as String? ?? 'instrumentos'),
+    modo: ModoSala.values.byName(json['modo'] as String),
+    genero: Genero.deId(json['genero']),
+    aleatoria: json['aleatoria'] as bool? ?? false,
+    jugadores: (json['jugadores'] as num?)?.toInt() ?? 0,
+    maxJugadores: (json['capacidad'] as num?)?.toInt() ?? 5,
+    creador: json['creador'] as String? ?? 'Jugador',
+  );
+}
+
 class Sala {
   const Sala({
     required this.codigo,

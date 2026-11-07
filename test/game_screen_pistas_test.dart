@@ -20,23 +20,14 @@ void main() {
     ],
   );
 
-  Future<void> abrir(
-    WidgetTester tester, {
-    bool offline = false,
-    bool pistas = true,
-  }) async {
+  Future<void> abrir(WidgetTester tester, {bool pistas = true}) async {
     tester.view.physicalSize = const Size(393, 851);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
-          home: GameScreen(
-            nivel: nivel,
-            gameId: 'partida-1',
-            offlineMode: offline,
-            pistas: pistas,
-          ),
+          home: GameScreen(nivel: nivel, gameId: 'partida-1', pistas: pistas),
         ),
       ),
     );
@@ -56,14 +47,6 @@ void main() {
       expect(find.text(tipo.titulo), findsOneWidget);
     }
     expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('sin conexión las pistas no se pueden pedir', (tester) async {
-    await abrir(tester, offline: true);
-    await tester.tap(find.byIcon(Icons.lightbulb_rounded));
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(find.byType(PistasDialog), findsNothing);
   });
 
   testWidgets('en las salas no hay botón de pistas', (tester) async {

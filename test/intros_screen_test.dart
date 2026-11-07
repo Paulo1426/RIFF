@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,10 +16,6 @@ class _AuthFalsa implements FirebaseAuth {
 
 class _RepositorioFalso extends FirebaseGameRepository {
   _RepositorioFalso() : super(auth: _AuthFalsa());
-
-  // Sin usuario no se toca la copia offline (no hay disco en los tests).
-  @override
-  String? get uid => null;
 
   @override
   Future<EstadoIntros> cargarIntros({
@@ -47,7 +45,32 @@ class _RepositorioFalso extends FirebaseGameRepository {
   });
 }
 
+class _RepositorioSinRed extends _RepositorioFalso {
+  @override
+  Future<EstadoIntros> cargarIntros({Genero? genero}) async =>
+      throw const SocketException('sin red');
+}
+
 void main() {
+  testWidgets('sin red las intros piden conexión y dejan reintentar', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          firebaseGameRepositoryProvider.overrideWithValue(
+            _RepositorioSinRed(),
+          ),
+        ],
+        child: const MaterialApp(home: IntrosScreen()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Necesitas conexión a internet.'), findsOneWidget);
+    expect(find.text('Reintentar'), findsOneWidget);
+  });
+
   test('el color depende del artista principal', () {
     expect(
       colorArtista('Martín Elías y Rolando Ochoa'),

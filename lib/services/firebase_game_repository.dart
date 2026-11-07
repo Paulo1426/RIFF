@@ -1,13 +1,26 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:http/http.dart' as http;
 
 import '../models/genero.dart';
 import '../models/nivel.dart';
 import '../models/pista.dart';
 import '../models/sala.dart';
+
+/// Sin red o sin respuesta del servidor (la app solo funciona conectada).
+bool esErrorDeRed(Object error) =>
+    error is SocketException ||
+    error is http.ClientException ||
+    error is TimeoutException;
+
+/// Texto para el jugador: pide conexión si el fallo fue de red.
+String textoDeFallo(String que, Object error) =>
+    esErrorDeRed(error) ? 'Necesitas conexión a internet.' : '$que: $error';
 
 class GameRepositoryException implements Exception {
   const GameRepositoryException({
@@ -168,30 +181,6 @@ class FirebaseGameRepository {
     );
   }
 
-  /// Datos y enlaces de [levelId] para repetirlo sin conexión.
-  Future<Map<String, dynamic>> descargarPaqueteOffline(String levelId) async {
-    final response = await _post({
-      'action': 'offlineBundle',
-      'levelId': levelId,
-    });
-    final bundle = response['bundle'];
-    if (bundle is! Map<String, dynamic>) {
-      throw const FormatException('El servicio no devolvió el paquete offline');
-    }
-    return bundle;
-  }
-
-  Future<void> sincronizarNivelOffline({
-    required String levelId,
-    required String respuesta,
-  }) async {
-    await _post({
-      'action': 'completeOfflineLevel',
-      'levelId': levelId,
-      'answer': respuesta,
-    });
-  }
-
   Future<PartidaIniciada> iniciarNivel(String nivelId) async {
     final response = await _post({'action': 'startLevel', 'levelId': nivelId});
     return PartidaIniciada(
@@ -232,6 +221,13 @@ class FirebaseGameRepository {
   Future<void> reiniciarProgreso() async {
     await _auth.currentUser?.getIdToken(true);
     await _post({'action': 'reiniciarProgreso'});
+  }
+
+  /// Borra en el servidor los datos de la cuenta; después hay que borrar el
+  /// usuario de Firebase Auth. Pide haber confirmado la cuenta hace poco.
+  Future<void> borrarCuenta() async {
+    await _auth.currentUser?.getIdToken(true);
+    await _post({'action': 'borrarCuenta'});
   }
 
   // --- Salas de "Desafía a tus amigos" ---
@@ -345,18 +341,23 @@ class FirebaseGameRepository {
         );
   }
 
-  /// Salas públicas que aún esperan jugadores.
-  Stream<List<Sala>> salasPublicas() => FirebaseFirestore.instance
-      .collection('salas')
-      .where('publica', isEqualTo: true)
-      .where('estado', isEqualTo: 'esperando')
-      .limit(20)
-      .snapshots()
-      .map(
-        (query) => [
-          for (final doc in query.docs) Sala.fromMap(doc.data()),
-        ].where((sala) => !sala.llena).toList(),
-      );
+  /// Salas públicas que aún esperan jugadores. El servidor devuelve una vista
+  /// reducida (sin uids); se consulta cada pocos segundos mientras se escucha.
+  Stream<List<SalaPublica>> salasPublicas() async* {
+    while (true) {
+      try {
+        final respuesta = await _post({'action': 'listarSalasPublicas'});
+        yield [
+          for (final sala in respuesta['salas'] as List<dynamic>? ?? const [])
+            SalaPublica.fromJson(Map<String, dynamic>.from(sala as Map)),
+        ];
+      } catch (error) {
+        debugPrint('No se pudieron listar salas: $error');
+        yield const <SalaPublica>[];
+      }
+      await Future<void>.delayed(const Duration(seconds: 8));
+    }
+  }
 
   Future<ResultadoCompraInstrumento> comprarInstrumento({
     required String gameId,
@@ -426,17 +427,6 @@ class FirebaseGameRepository {
       titulo: response['titulo'] as String?,
       artista: response['artista'] as String?,
     );
-  }
-
-  Future<void> sincronizarIntroOffline({
-    required String introId,
-    required String respuesta,
-  }) async {
-    await _post({
-      'action': 'completeOfflineIntro',
-      'introId': introId,
-      'answer': respuesta,
-    });
   }
 
   /// [tipo]: 'intro', 'fullSong' o 'cover'.
@@ -581,7 +571,7 @@ class EstadoIntros {
   // Id de la intro recién sacada.
   final String? nueva;
 
-  /// Lo que se guarda para ver la colección sin conexión.
+  /// Inverso de [EstadoIntros.fromJson] (lo usan las pruebas).
   Map<String, dynamic> toJson() => {
     'monedas': monedas,
     'monedas_ganadas': monedasGanadas,
@@ -596,8 +586,7 @@ class EstadoIntros {
     monedas: (json['monedas'] as num).toInt(),
     monedasGanadas: (json['monedas_ganadas'] as num).toInt(),
     monedasPorGenero: {
-      for (final entry
-          in (json['monedas_por_genero'] as Map? ?? {}).entries)
+      for (final entry in (json['monedas_por_genero'] as Map? ?? {}).entries)
         entry.key as String: (entry.value as num).toInt(),
     },
     puedeSacar: json['puede_sacar'] as bool? ?? true,

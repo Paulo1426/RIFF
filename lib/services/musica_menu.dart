@@ -14,32 +14,32 @@ class MusicaMenu with WidgetsBindingObserver {
   // volumen de cada una para que todas suenen parejo (intro.mp3 está grabada
   // más fuerte).
   static const _general = {
-    'lib/assets/audio/menu/general/pista1.mp3': 1.61,
-    'lib/assets/audio/menu/general/pista2.mp3': 1.16,
-    'lib/assets/audio/menu/general/pista3.mp3': 1.45,
-    'lib/assets/audio/menu/general/pista4.mp3': 1.22,
+    'lib/assets/audio/menu/general/pista1.mp3': 1.71,
+    'lib/assets/audio/menu/general/pista2.mp3': 1.34,
+    'lib/assets/audio/menu/general/pista3.mp3': 1.54,
+    'lib/assets/audio/menu/general/pista4.mp3': 1.37,
   };
   static const _porGenero = {
     Genero.vallenato: {
-      'lib/assets/audio/menu/vallenato/intro2.mp3': 0.76,
-      'lib/assets/audio/menu/vallenato/intro3.mp3': 0.92,
-      'lib/assets/audio/menu/vallenato/intro.mp3': 1.14,
+      'lib/assets/audio/menu/vallenato/intro2.mp3': 0.81,
+      'lib/assets/audio/menu/vallenato/intro3.mp3': 1.02,
+      'lib/assets/audio/menu/vallenato/intro.mp3': 1.31,
     },
     Genero.salsa: {
-      'lib/assets/audio/menu/salsa/pista1.mp3': 0.97,
-      'lib/assets/audio/menu/salsa/pista2.mp3': 0.78,
+      'lib/assets/audio/menu/salsa/pista1.mp3': 1.02,
+      'lib/assets/audio/menu/salsa/pista2.mp3': 0.86,
     },
     Genero.rockPop: {
-      'lib/assets/audio/menu/rock_pop/pista1.mp3': 0.64,
-      'lib/assets/audio/menu/rock_pop/pista2.mp3': 1.18,
+      'lib/assets/audio/menu/rock_pop/pista1.mp3': 0.7,
+      'lib/assets/audio/menu/rock_pop/pista2.mp3': 1.31,
     },
     Genero.reggaeton: {
-      'lib/assets/audio/menu/reggaeton/pista1.mp3': 0.78,
-      'lib/assets/audio/menu/reggaeton/pista2.mp3': 0.82,
+      'lib/assets/audio/menu/reggaeton/pista1.mp3': 0.9,
+      'lib/assets/audio/menu/reggaeton/pista2.mp3': 0.95,
     },
     Genero.popular: {
-      'lib/assets/audio/menu/popular/pista1.mp3': 1.01,
-      'lib/assets/audio/menu/popular/pista2.mp3': 1.36,
+      'lib/assets/audio/menu/popular/pista1.mp3': 1.09,
+      'lib/assets/audio/menu/popular/pista2.mp3': 1.49,
     },
   };
   static const _volumen = 0.009;
