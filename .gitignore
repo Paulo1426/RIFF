@@ -85,3 +85,6 @@ TERMINOS_Y_CREDITOS.md
 
 # Caché local de firebase deploy.
 .firebase/
+
+# Lockfile generado por deno test.
+deno.lock
