@@ -69,7 +69,7 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
       texto:
           'Cada género tiene su moneda. Ganas 2, 3 o 4 al completar por '
           'primera vez un nivel y 1 por cada intro adivinada; las de Medley solo '
-          'se usan allí. Cada género tiene 3 pistas gratis para las intros.',
+          'se usan allí. Con la bombilla 💡 pides una pista al azar: 3 gratis por género y luego 1 moneda.',
     ),
     PasoRecorrido(
       clave: _claveSacar,
@@ -919,15 +919,10 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     final acepta = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('¿Usar una pista?'),
-        content: Text(
-          gratis
-              ? 'Te quedan $_gratis pistas gratis en ${genero.nombre}. '
-                    'Se revelará la inicial de una palabra al azar.'
-              : 'Se acabaron tus pistas gratis. Esta pista cuesta 1 moneda '
-                    '${genero.simboloMoneda} de ${genero.nombre} y revela la '
-                    'inicial de una palabra al azar.',
-        ),
+        title: const Text('¿Quieres usar una pista al azar?'),
+        content: gratis
+            ? null
+            : Text('Costará 1 moneda ${genero.simboloMoneda} de ${genero.nombre}.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -1039,9 +1034,10 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     final text = Theme.of(context).textTheme;
     final posicion = _playing ? _audioService.posicion : Duration.zero;
     final total = _playing ? const Duration(seconds: 30) : null;
-    final avance = total == null || total.inMilliseconds == 0
+    // La onda lo lee en cada cuadro, así que sigue la reproducción sin reconstruir.
+    double avanceActual() => !_playing
         ? 0.0
-        : (posicion.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
+        : (_audioService.posicion.inMilliseconds / 30000).clamp(0.0, 1.0);
     String tiempo(Duration d) =>
         '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
     return Semantics(
@@ -1052,13 +1048,14 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       excludeSemantics: true,
       child: Column(
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(99),
-            child: LinearProgressIndicator(
-              value: avance,
-              minHeight: 6,
+          LayoutBuilder(
+            builder: (context, caja) => SoundWaveAnimation(
+              activo: _playing && !_paused,
               color: _colorIntros,
-              backgroundColor: _colorIntros.withValues(alpha: 0.2),
+              width: caja.maxWidth,
+              height: 64,
+              barras: 40,
+              progreso: () => avanceActual(),
             ),
           ),
           const SizedBox(height: 4),
@@ -1094,6 +1091,12 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
               cabecera,
               const SizedBox(height: 12),
             ],
+            Text(
+              'Escucha la intro y escribe el nombre de la canción.',
+              textAlign: TextAlign.center,
+              style: text.bodyLarge,
+            ),
+            const SizedBox(height: 12),
             Center(
               child: LiquidGlassCard(
                 borderRadius: 26,
@@ -1107,12 +1110,6 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
             ),
             const SizedBox(height: 12),
             _lineaDeTiempo(),
-            const SizedBox(height: 12),
-            Text(
-              'Escucha la intro y escribe el nombre de la canción.',
-              textAlign: TextAlign.center,
-              style: text.bodyLarge,
-            ),
             const SizedBox(height: 16),
             if (_playing)
               Row(
@@ -1140,20 +1137,20 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
                 label: 'Escuchar intro',
               ),
             const Divider(height: 32),
-            if (_pista case final pista?) ...[
-              Text(
-                'Pista: ${pista.map((letra) => letra.isEmpty ? '_' : letra).join('  ')}',
-                textAlign: TextAlign.center,
-                style: text.titleMedium,
-              ),
-              const SizedBox(height: 12),
-            ],
             TextField(
               controller: _answerController,
               enabled: !_sending,
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => _submitAnswer(),
-              decoration: const InputDecoration(labelText: '¿Qué canción es?'),
+              decoration: InputDecoration(
+                labelText: '¿Qué canción es?',
+                // Las pistas van dentro del cuadro, donde se escribe la respuesta.
+                hintText: _pista?.map((p) => p.isEmpty ? '_' : p).join('   '),
+                hintStyle: text.titleMedium?.copyWith(letterSpacing: 2),
+                floatingLabelBehavior: _pista == null
+                    ? null
+                    : FloatingLabelBehavior.always,
+              ),
             ),
             if (_message != null) ...[
               const SizedBox(height: 8),
@@ -1171,18 +1168,7 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
               onPressed: _sending ? null : _submitAnswer,
               label: 'Comprobar respuesta',
             ),
-            if (_gratis != null && (_pista?.contains('') ?? true)) ...[
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: _sending || _pidiendoPista ? null : _pedirPista,
-                icon: const Icon(Icons.lightbulb_outline),
-                label: Text(
-                  (_gratis ?? 0) > 0
-                      ? 'Pista ($_gratis gratis)'
-                      : 'Pista (1 ${generoActivo.simboloMoneda})',
-                ),
-              ),
-            ],
+
             if (widget.sala?.onSaltar case final saltar?) ...[
               const SizedBox(height: 8),
               TextButton.icon(
@@ -1205,10 +1191,17 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       appBar: LiquidGlassAppBar(
         title: Text(_titulo0),
         actions: [
-          if (_playing)
-            Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: SoundWaveAnimation(activo: !_paused, color: _colorIntros),
+          if (!_won && _gratis != null && (_pista?.contains('') ?? true))
+            IconButton(
+              tooltip: (_gratis ?? 0) > 0
+                  ? 'Pista al azar ($_gratis gratis)'
+                  : 'Pista al azar (1 ${generoActivo.simboloMoneda})',
+              onPressed: _sending || _pidiendoPista ? null : _pedirPista,
+              icon: Badge(
+                isLabelVisible: (_gratis ?? 0) > 0,
+                label: Text('$_gratis'),
+                child: const Icon(Icons.lightbulb_outline),
+              ),
             ),
         ],
       ),

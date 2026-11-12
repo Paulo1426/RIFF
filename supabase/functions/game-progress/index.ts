@@ -47,9 +47,9 @@ import {
   hintTypes,
   introFreeHints,
   introHintPrice,
-  introInitials,
+  introHintView as vistaPistaIntro,
   maskInitials,
-  pickIntroHintWord,
+  pickIntroHint,
   pickRandomHint,
   titleLetter,
 } from "./hints.ts";
@@ -2988,20 +2988,19 @@ function introHintView(
 ): string[] | null {
   const given = introHintsGiven(state.state?.fields.pistasIntro, introId);
   if (given.length === 0) return null;
-  const initials = introInitials(String(state.intros.get(introId)?.titulo ?? ""));
-  return initials.map((letter, index) => given.includes(index) ? letter : "");
+  return vistaPistaIntro(String(state.intros.get(introId)?.titulo ?? ""), given);
 }
 
-function introHintsGiven(map: unknown, introId: string): number[] {
+function introHintsGiven(map: unknown, introId: string): string[] {
   const list = map && typeof map === "object"
     ? (map as JsonObject)[introId]
     : undefined;
   return Array.isArray(list)
-    ? list.filter((item): item is number => typeof item === "number")
+    ? list.filter((item): item is string => typeof item === "string")
     : [];
 }
 
-/// Revela la inicial de una palabra al azar de una intro desbloqueada y sin
+/// Revela al azar una palabra o inicial (o letra, si el título es una palabra) de una intro desbloqueada y sin
 /// adivinar. Las primeras 3 de cada cartera son gratis; luego cuestan 1 moneda.
 async function introHint(
   token: string,
@@ -3017,14 +3016,13 @@ async function introHint(
   if (state.completed.has(introId)) {
     throw new HttpError(409, "Ya adivinaste esta intro");
   }
-  const initials = introInitials(String(intro.titulo ?? ""));
   const given = introHintsGiven(state.state.fields.pistasIntro, introId);
-  const word = pickIntroHintWord(initials.length, given, (max) => {
+  const hint = pickIntroHint(String(intro.titulo ?? ""), given, (max) => {
     const random = new Uint32Array(1);
     crypto.getRandomValues(random);
     return random[0] % max;
   });
-  if (word === null) {
+  if (hint === null) {
     throw new HttpError(409, "Ya tienes todas las pistas de esta intro");
   }
   const wallet = generoActual();
@@ -3038,7 +3036,7 @@ async function introHint(
   const stored = state.state.fields.pistasIntro;
   const pistasIntro: JsonObject = {
     ...(stored && typeof stored === "object" ? stored as JsonObject : {}),
-    [introId]: [...given, word],
+    [introId]: [...given, hint],
   };
   const cost = free ? 0 : introHintPrice;
   await commitWrites(token, [

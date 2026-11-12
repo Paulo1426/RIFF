@@ -177,6 +177,15 @@ class InstruccionesDialog extends StatelessWidget {
                                 'La intro dura 30 segundos y termina con un fundido. Escribe la canción; si aciertas suena la original.',
                               ),
                               _Vineta(
+                                'Cada intro adivinada da 1 moneda del género (o de Medley) donde la adivinaste.',
+                              ),
+                              _Vineta(
+                                'Con la bombilla 💡 de arriba pides una pista al azar: y se escribe dentro del cuadro de respuesta. Si la respuesta tiene 3 o más palabras, revela una palabra entera o solo su inicial. Si tiene 1 o 2 palabras, la primera pista es siempre una inicial y las siguientes son la inicial de la otra palabra o letras al azar.',
+                              ),
+                              _Vineta(
+                                'Cada género y Medley tienen 3 pistas gratis en total; después cada pista cuesta 1 moneda.',
+                              ),
+                              _Vineta(
                                 'Tras 3 fallos seguidos debes esperar 30 segundos.',
                               ),
                               _Vineta(

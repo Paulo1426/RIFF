@@ -1,9 +1,10 @@
 import {
   hintCosts,
   hintTypes,
-  introInitials,
+  introHintTotal,
+  introHintView,
   maskInitials,
-  pickIntroHintWord,
+  pickIntroHint,
   pickRandomHint,
   titleLetter,
 } from "./hints.ts";
@@ -53,10 +54,36 @@ Deno.test("la sorpresa solo da pistas que el jugador aún no tiene", () => {
   );
 });
 
-Deno.test("pistas de intros: una inicial por palabra, sin repetir", () => {
-  assertEquals(introInitials("¡Ay, corazón! 90"), ["A", "C", "9"]);
-  assertEquals(introInitials("Lluvia"), ["L"]);
-  assertEquals(pickIntroHintWord(3, [], () => 0), 0);
-  assertEquals(pickIntroHintWord(3, [0, 2], () => 0), 1);
-  assertEquals(pickIntroHintWord(2, [0, 1], () => 0), null);
+Deno.test("pistas de intros: 3 o más palabras, palabra entera o inicial", () => {
+  const t = "Mayor que yo";
+  assertEquals(introHintTotal(t), 3);
+  assertEquals(pickIntroHint(t, [], () => 0), "0:p");
+  assertEquals(pickIntroHint(t, [], (max) => max - 1), "2:i");
+  assertEquals(pickIntroHint(t, ["0:p", "2:i"], () => 0), "1:p");
+  assertEquals(pickIntroHint(t, ["0:p", "1:i", "2:i"], () => 0), null);
+  assertEquals(introHintView(t, ["2:p", "0:i"]), ["M", "", "yo"]);
+});
+
+Deno.test("pistas de intros: una palabra, inicial y luego letras", () => {
+  assertEquals(introHintTotal("Lluvia"), 6);
+  assertEquals(pickIntroHint("Lluvia", [], (max) => max - 1), "0:l:0");
+  assertEquals(pickIntroHint("Lluvia", ["0:l:0"], () => 0), "0:l:1");
+  assertEquals(
+    introHintView("Lluvia", ["0:l:0", "0:l:3"]),
+    ["L", "", "", "V", "", ""],
+  );
+  assertEquals(pickIntroHint("Hi", ["0:l:0", "0:l:1"], () => 0), null);
+});
+
+Deno.test("pistas de intros: dos palabras, siempre una inicial primero", () => {
+  const t = "La Murga";
+  assertEquals(introHintTotal(t), 7);
+  assertEquals(pickIntroHint(t, [], (max) => max - 1), "1:l:0");
+  // Segunda pista: la inicial de la otra palabra o una letra al azar.
+  assertEquals(pickIntroHint(t, ["1:l:0"], () => 0), "0:l:0");
+  assertEquals(pickIntroHint(t, ["1:l:0"], (max) => max - 1), "1:l:4");
+  assertEquals(
+    introHintView(t, ["1:l:0", "0:l:0"]),
+    ["L", "", "/", "M", "", "", "", ""],
+  );
 });

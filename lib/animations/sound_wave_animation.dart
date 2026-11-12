@@ -15,12 +15,18 @@ class SoundWaveAnimation extends StatefulWidget {
     this.color = AppColors.verde,
     this.width = 64,
     this.height = 26,
+    this.barras = 7,
+    this.progreso,
   });
 
   final bool activo;
   final Color color;
   final double width;
   final double height;
+  final int barras;
+  // Avance de 0 a 1: las barras ya recorridas se ven con todo su color y el
+  // resto atenuadas. Sin él, todas se ven iguales.
+  final double Function()? progreso;
 
   @override
   State<SoundWaveAnimation> createState() => _SoundWaveAnimationState();
@@ -80,6 +86,8 @@ class _SoundWaveAnimationState extends State<SoundWaveAnimation>
           onda: _onda,
           energia: CurvedAnimation(parent: _energia, curve: Curves.easeOut),
           color: widget.color,
+          barras: widget.barras,
+          progreso: widget.progreso,
         ),
       ),
     ),
@@ -91,21 +99,24 @@ class _OndasPainter extends CustomPainter {
     required this.onda,
     required this.energia,
     required this.color,
+    required this.barras,
+    this.progreso,
   }) : super(repaint: Listenable.merge([onda, energia]));
 
   final Animation<double> onda;
   final Animation<double> energia;
   final Color color;
-
-  static const _barras = 7;
+  final int barras;
+  final double Function()? progreso;
 
   @override
   void paint(Canvas canvas, Size size) {
     final t = onda.value * 2 * pi;
     final e = energia.value;
     // Barras más anchas que los huecos.
-    final ancho = size.width / (_barras * 1.6);
-    final hueco = (size.width - ancho * _barras) / (_barras - 1);
+    final ancho = size.width / (barras * 1.6);
+    final hueco = (size.width - ancho * barras) / (barras - 1);
+    final avance = progreso?.call();
     final centroY = size.height / 2;
     final pincel = Paint()
       ..shader = LinearGradient(
@@ -114,9 +125,9 @@ class _OndasPainter extends CustomPainter {
         colors: [color, Color.lerp(color, Colors.white, 0.45)!],
       ).createShader(Offset.zero & size);
 
-    for (var i = 0; i < _barras; i++) {
+    for (var i = 0; i < barras; i++) {
       // Envolvente: las del centro llegan más alto que las de los bordes.
-      final posicion = (i - (_barras - 1) / 2) / ((_barras - 1) / 2);
+      final posicion = (i - (barras - 1) / 2) / ((barras - 1) / 2);
       final envolvente = 1 - 0.45 * posicion * posicion;
       // Dos ondas con velocidades enteras distintas: movimiento orgánico que
       // empalma sin saltos al repetir.
@@ -134,11 +145,14 @@ class _OndasPainter extends CustomPainter {
           Rect.fromLTWH(x, centroY - alto / 2, ancho, alto),
           Radius.circular(ancho / 2),
         ),
-        pincel,
+        avance != null && (i + 0.5) / barras > avance
+            ? (Paint()..color = color.withValues(alpha: 0.3))
+            : pincel,
       );
     }
   }
 
   @override
-  bool shouldRepaint(_OndasPainter oldDelegate) => oldDelegate.color != color;
+  bool shouldRepaint(_OndasPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.barras != barras;
 }
