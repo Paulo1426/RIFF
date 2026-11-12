@@ -104,8 +104,8 @@ Dependiendo del género, encontrarás diferentes instrumentos melódicos:
 - **Vallenato:** acordeón.
 - **Reggaetón:** sintetizador.
 - **Rock / Pop:** teclado.
-- **Salsa:** trompeta.
-- **Popular:** violín.
+- **Salsa:** metales.
+- **Popular:** trompeta.
 
 La batería, el bajo y la guitarra acompañan los diferentes géneros.
 

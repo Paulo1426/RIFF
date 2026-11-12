@@ -6,10 +6,14 @@
 //   <titulo>_instrumental.mp3       -> canciones-instrumentales/cancion-00N/
 //   acordeon|trompeta|violin|bajo|bateria|guitarra|otros -> instrumentos/cancion-00N/ (trompeta y violin como acordeon)
 // Cualquier otro archivo (p. ej. p1.MP3) se ignora. Sobrescribe lo que ya exista.
+// "N_<titulo>_(Instrumental).mp3" se sube como <titulo>_instrumental.mp3 (titulo = el mp3 completo).
+// Con SOLO_STEMS=1 sube únicamente instrumentos/ (acordeon, bajo, bateria, guitarra).
+// Todo se nivela de volumen al subir (nivelar_audio.mjs): canciones -16 LUFS, stems -22 LUFS.
 import { readdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { comprimir } from "./comprimir_audio.mjs";
+import { filtroNivel, objetivoCancion, objetivoStem } from "./nivelar_audio.mjs";
 import { genero } from "./cargar_niveles_firestore.mjs";
 
 const kbps = 112;
@@ -66,14 +70,24 @@ async function main() {
   for (const dificultad of (await readdir(base)).filter((d) => /^0\d /.test(d)).sort()) {
     for (const c of (await readdir(join(base, dificultad))).filter((d) => /^cancion_\d+$/.test(d)).sort()) {
       const id = `cancion-${c.split("_")[1].padStart(3, "0")}`;
-      for (const nombre of await readdir(join(base, dificultad, c))) {
-        const ruta = destino(nombre, id);
-        if (!ruta) continue;
+      const archivos = await readdir(join(base, dificultad, c));
+      const completa = archivos.find((a) => destino(a, id)?.startsWith("canciones-completas/") && a.endsWith(".mp3"));
+      for (const nombre of archivos) {
+        const ruta = /^\d+_.*\(Instrumental\)\.mp3$/i.test(nombre) && completa
+          ? `canciones-instrumentales/${id}/${completa.slice(0, -4)}_instrumental.mp3`
+          : destino(nombre, id);
+        if (!ruta || (process.env.SOLO_STEMS && !ruta.startsWith("instrumentos/"))) continue;
         let cuerpo = await readFile(join(base, dificultad, c, nombre));
         const tam = cuerpo.length;
-        if (ruta.endsWith(".mp3")) cuerpo = await comprimir(cuerpo, kbps);
+        let nivel = "";
+        if (ruta.endsWith(".mp3")) {
+          const esStem = ruta.startsWith("instrumentos/");
+          const { medido, ganancia, filtro } = await filtroNivel(cuerpo, esStem ? objetivoStem : objetivoCancion);
+          cuerpo = await comprimir(cuerpo, kbps, filtro);
+          nivel = ` ${medido.toFixed(1)} LUFS ${ganancia >= 0 ? "+" : ""}${ganancia.toFixed(1)} dB`;
+        }
         antes += tam; despues += cuerpo.length; n++;
-        console.log(`  ${bucket}/${ruta} ${Math.round(tam / 1024)} -> ${Math.round(cuerpo.length / 1024)} KB`);
+        console.log(`  ${bucket}/${ruta} ${Math.round(tam / 1024)} -> ${Math.round(cuerpo.length / 1024)} KB${nivel}`);
         if (apply) await subir(key, ruta, cuerpo, ruta.endsWith(".mp3") ? "audio/mpeg" : "image/jpeg");
       }
     }

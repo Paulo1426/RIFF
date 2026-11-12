@@ -9,11 +9,13 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 // Devuelve el mp3 recodificado a [kbps], o el original si no queda más pequeño
-// (p. ej. los stems, que ya vienen a poco bitrate).
-export function comprimir(buf, kbps) {
+// (p. ej. los stems, que ya vienen a poco bitrate). Con [filtro] (-af de ffmpeg, p. ej.
+// para nivelar el volumen) devuelve siempre el recodificado.
+export function comprimir(buf, kbps, filtro) {
   return new Promise((ok, fallo) => {
     const ff = spawn(process.env.FFMPEG ?? "ffmpeg", [
       "-v", "error", "-i", "pipe:0", "-map", "0:a", "-map_metadata", "-1",
+      ...(filtro ? ["-af", filtro] : []),
       "-c:a", "libmp3lame", "-b:a", `${kbps}k`, "-write_xing", "0", "-f", "mp3", "pipe:1",
     ]);
     const salida = [];
@@ -25,7 +27,7 @@ export function comprimir(buf, kbps) {
     ff.on("close", (code) => {
       const out = Buffer.concat(salida);
       if (code !== 0 || !out.length) return fallo(new Error(`ffmpeg falló: ${errores}`));
-      ok(out.length < buf.length ? out : buf);
+      ok(filtro || out.length < buf.length ? out : buf);
     });
     ff.stdin.end(buf);
   });

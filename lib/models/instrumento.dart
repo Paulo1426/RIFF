@@ -32,8 +32,8 @@ extension TipoInstrumentoExtension on TipoInstrumento {
     Genero.vallenato => ('🪗', 'Acordeón'),
     Genero.reggaeton => ('🎹', 'Sintetizador'),
     Genero.rockPop => ('🎹', 'Teclado'),
-    Genero.salsa => ('🎺', 'Trompeta'),
-    Genero.popular => ('🎻', 'Violín'),
+    Genero.salsa => ('🎺', 'Metales'),
+    Genero.popular => ('🎺', 'Trompeta'),
     // Cada nivel es de un género distinto: la pista melódica sin nombre fijo.
     Genero.aleatorio => ('🎼', 'Melodía'),
   };

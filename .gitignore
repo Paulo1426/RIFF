@@ -88,3 +88,6 @@ TERMINOS_Y_CREDITOS.md
 
 # Lockfile generado por deno test.
 deno.lock
+
+# Script local para separar stems con Demucs.
+/scripts/separar_stems.py
