@@ -842,7 +842,12 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       unawaited(navigator.push(route));
     }
     final resultado = await Future.any([route.popped, siguiente.future]);
-    if (resultado != null) {
+    if (resultado == ResultadoNivel.siguiente) {
+      // Sin avisos: el nivel ganado sigue en pantalla y un diálogo pendiente
+      // lo dejaría congelado. Desbloqueos y fin de juego solo ocurren en el
+      // último nivel, que no tiene "Siguiente nivel".
+      await _cargar();
+    } else if (resultado != null) {
       final antes = _desbloqueadas();
       final terminadoAntes = _juegoTerminado();
       // Las insignias esperan a que salgan estos avisos.

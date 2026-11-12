@@ -850,8 +850,16 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             variant: LiquidGlassButtonVariant.secondary,
             onPressed: _avanzando
                 ? null
-                : () {
+                : () async {
                     setState(() => _avanzando = true);
+                    // Se libera el audio antes de la transición: soltar el
+                    // reproductor de la canción completa durante el cambio de
+                    // pantalla bloqueaba la app (ANR).
+                    try {
+                      await _audioService.detener();
+                    } catch (error) {
+                      debugPrint('No se pudo detener el audio: $error');
+                    }
                     widget.onSiguiente!();
                   },
             label: 'Siguiente nivel',
