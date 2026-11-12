@@ -50,23 +50,24 @@ Color colorDificultad(Dificultad dificultad) => switch (dificultad) {
 
 /// Color de cada género en el selector y en su menú.
 Color colorGenero(Genero genero) => switch (genero) {
-  Genero.vallenato => const Color(0xFFFF6B6B),
+  Genero.vallenato => const Color(0xFFFF8C42),
   Genero.reggaeton => const Color(0xFF00827C),
   Genero.rockPop => const Color(0xFF007FFF),
-  Genero.salsa => const Color(0xFFF0E226),
-  Genero.popular => const Color(0xFF00B259),
+  Genero.salsa => const Color(0xFF9B30FF),
+  Genero.popular => const Color(0xFFD81B8F),
   Genero.aleatorio => colorAleatorio,
 };
 
 /// Colores del menú de cada género: tarjetas de Progreso e Intro, las dos
 /// manchas del fondo que no siguen al acento y la gota de la barra de abajo
-/// (en el menú y en las demás pestañas). Vallenato usa colores vivos y
-/// juguetones (coral, turquesa, azul cielo, amarillo sol y morado);
+/// (en el menú y en las demás pestañas). Ningún color de tarjeta se parece al
+/// verde, amarillo o rojo de las dificultades. Vallenato usa colores vivos y
+/// juguetones (mandarina, turquesa, azul cielo, amarillo sol y morado);
 /// reggaetón, abisal y bioluminiscente (verde azulado, alga profunda, aguamarina
 /// y lavanda);
-/// rock / pop, de cuento ilustrado (azul globo, rojo tejado, amarillo sol y
-/// tinta carbón); salsa, casete de neón (amarillo alta visibilidad sobre
-/// negro tinta y arena); popular, verde señal con azul medianoche y gris
+/// rock / pop, de cuento ilustrado (azul globo, cian cielo, amarillo sol y
+/// tinta carbón); salsa, casete de neón (violeta eléctrico sobre negro tinta y
+/// arena); popular, fucsia (rosa mexicano) con azul medianoche y gris
 /// niebla; Medley, turquesa con violeta, rosa y amarillo. Cada uno tiene la
 /// suya.
 ({
@@ -83,7 +84,7 @@ paletaGenero(Genero genero) => switch (genero) {
     intro: const Color(0xFF4D96FF),
     mancha1: const Color(0xFFFFD93D),
     mancha2: const Color(0xFF845EF7),
-    barraMenu: const Color(0xFFFF6B6B),
+    barraMenu: const Color(0xFFFF8C42),
     barraSecciones: const Color(0xFF845EF7),
   ),
   Genero.reggaeton => (
@@ -96,26 +97,26 @@ paletaGenero(Genero genero) => switch (genero) {
   ),
   Genero.rockPop => (
     progreso: const Color(0xFF333333),
-    intro: const Color(0xFFEF3B2C),
+    intro: const Color(0xFF00C8FF),
     mancha1: const Color(0xFFFFE600),
     mancha2: const Color(0xFF007FFF),
     barraMenu: const Color(0xFF007FFF),
-    barraSecciones: const Color(0xFFEF3B2C),
+    barraSecciones: const Color(0xFF00C8FF),
   ),
   Genero.salsa => (
     progreso: const Color(0xFFD9D7CE),
     intro: const Color(0xFF19181A),
-    mancha1: const Color(0xFFF0E226),
+    mancha1: const Color(0xFF9B30FF),
     mancha2: const Color(0xFF19181A),
-    barraMenu: const Color(0xFFF0E226),
+    barraMenu: const Color(0xFF9B30FF),
     barraSecciones: const Color(0xFF19181A),
   ),
   Genero.popular => (
     progreso: const Color(0xFF162136),
     intro: const Color(0xFF0073D3),
-    mancha1: const Color(0xFF00E05C),
+    mancha1: const Color(0xFFFF5CC0),
     mancha2: const Color(0xFFBFC7D9),
-    barraMenu: const Color(0xFF00B259),
+    barraMenu: const Color(0xFFD81B8F),
     barraSecciones: const Color(0xFF162136),
   ),
   Genero.aleatorio => (
@@ -560,10 +561,10 @@ class _BandaCargandoState extends State<_BandaCargando> {
   // Tres instrumentos al azar de todos los géneros, distintos en cada carga.
   final _instrumentos =
       (Genero.reales
-            .expand((genero) => genero.instrumentos.characters)
-            .toSet()
-            .toList()
-          ..shuffle())
+              .expand((genero) => genero.instrumentos.characters)
+              .toSet()
+              .toList()
+            ..shuffle())
           .take(3)
           .toList();
 
