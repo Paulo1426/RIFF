@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/genero.dart';
@@ -147,6 +148,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
   Future<void> _buyAndPlay(Instrumento instrumento) async {
     if (_buying || _playing || _won) return;
+    HapticFeedback.selectionClick();
     if (_melodyFound || _purchased.contains(instrumento.id)) {
       try {
         await _playStems([instrumento]);
@@ -591,9 +593,14 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                   // barra de arriba queda libre para el botón de pistas.
                   Semantics(
                     label: _paused ? 'En pausa' : 'Reproduciendo',
-                    child: SoundWaveAnimation(
-                      activo: !_paused,
-                      color: colorDificultad(widget.nivel.dificultad),
+                    child: LayoutBuilder(
+                      builder: (context, caja) => SoundWaveAnimation(
+                        activo: !_paused,
+                        color: colorDificultad(widget.nivel.dificultad),
+                        width: caja.maxWidth,
+                        height: 34,
+                        barras: 24,
+                      ),
                     ),
                   ),
                   if (_nowPlaying.isNotEmpty)
@@ -674,6 +681,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
               : null;
         });
       } else {
+        HapticFeedback.lightImpact();
         setState(() {
           _correct = false;
           _message = 'Esa no es la canción. Intenta de nuevo.';
@@ -699,6 +707,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     _won = true;
     _titulo = titulo;
     _artista = artista;
+    HapticFeedback.mediumImpact();
     _confeti.play();
   }
 
@@ -939,6 +948,58 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     );
   }
 
+  /// Respuesta fija abajo (zona del pulgar, sobre el teclado): campo,
+  /// mensaje y botón siempre a la vista mientras se escucha y se compra arriba.
+  Widget _panelRespuesta() => Padding(
+    padding: EdgeInsets.fromLTRB(
+      max(16, (MediaQuery.sizeOf(context).width - 680) / 2),
+      8,
+      max(16, (MediaQuery.sizeOf(context).width - 680) / 2),
+      12,
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _answerController,
+          enabled: !_sending,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _submitAnswer(),
+          decoration: InputDecoration(
+            labelText: '¿Qué canción es?',
+            hintText: _pistasDesbloqueadas[TipoPista.iniciales],
+          ),
+        ),
+        if (_message != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _message!,
+            style: TextStyle(
+              color: _correct == false
+                  ? Theme.of(context).colorScheme.error
+                  : null,
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+        if (!_won)
+          LiquidGlassButton(
+            onPressed: _sending ? null : _submitAnswer,
+            label: 'Comprobar respuesta',
+          ),
+        if (!_won && widget.onSaltar != null) ...[
+          const SizedBox(height: 8),
+          TextButton.icon(
+            onPressed: _sending ? null : widget.onSaltar,
+            icon: const Icon(Icons.skip_next_rounded),
+            label: const Text('Saltar canción (0 puntos)'),
+          ),
+        ],
+      ],
+    ),
+  );
+
   @override
   Widget build(BuildContext context) => PopScope<ResultadoNivel>(
     // Al ganar, volver atrás también avisa para recargar el progreso.
@@ -984,175 +1045,152 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           child: _won
               ? _vistaGanada()
               : _conCelebracion(
-                  LayoutBuilder(
-                    builder: (context, espacio) => ListView(
-                      // En tablets el contenido queda centrado con un ancho máximo.
-                      padding: EdgeInsets.symmetric(
-                        horizontal: max(
-                          16,
-                          (MediaQuery.sizeOf(context).width - 680) / 2,
-                        ),
-                        vertical: 16,
-                      ),
-                      children: [
-                        if (widget.cabecera case final cabecera?) ...[
-                          cabecera,
-                          const SizedBox(height: 12),
-                        ],
-                        Text(
-                          widget.nivel.modoPrueba
-                              ? 'Modo de prueba: ${widget.nivel.duracionFragmentoSegundos} segundos por escucha.'
-                              : 'Compra un instrumento para escuchar un fragmento de la canción.',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 12),
-                        LiquidGlassCard(
-                          borderRadius: 18,
-                          tintColor: colorDificultad(widget.nivel.dificultad),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                          child: _presupuesto(),
-                        ),
-                        const SizedBox(height: 8),
-                        GridView(
-                          shrinkWrap: true,
-                          // Sin el margen del sistema: la grilla va en medio de
-                          // la pantalla, no contra el borde.
-                          padding: EdgeInsets.zero,
-                          physics: const NeverScrollableScrollPhysics(),
-                          // 2 columnas en teléfonos, 3-4 en tablets. El alto sale
-                          // del espacio libre para que el nivel quepa sin
-                          // desplazar en teléfonos bajos.
-                          gridDelegate:
-                              SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: 240,
-                                mainAxisExtent: _altoCasilla(espacio.maxHeight),
-                                crossAxisSpacing: 12,
-                                mainAxisSpacing: 12,
+                  Column(
+                    children: [
+                      Expanded(
+                        child: LayoutBuilder(
+                          builder: (context, espacio) => ListView(
+                            // En tablets el contenido queda centrado con un ancho máximo.
+                            padding: EdgeInsets.symmetric(
+                              horizontal: max(
+                                16,
+                                (MediaQuery.sizeOf(context).width - 680) / 2,
                               ),
-                          children: [
-                            for (final instrumento in widget.nivel.instrumentos)
-                              _instrumentoTile(instrumento),
-                          ],
-                        ),
-                        if (_purchased.isNotEmpty && !_melodyFound) ...[
-                          const SizedBox(height: 8),
-                          LiquidGlassButton(
-                            variant: LiquidGlassButtonVariant.secondary,
-                            onPressed: _buying || _playing
-                                ? null
-                                : _playPurchased,
-                            icon: Icons.queue_music,
-                            label: 'Escuchar instrumentos comprados',
-                          ),
-                        ],
-                        // Al descubrir la melodía (comprando o con la pista
-                        // del instrumento faltante) se escucha sin voz.
-                        if (_melodyFound) ...[
-                          const SizedBox(height: 8),
-                          LiquidGlassButton(
-                            variant: LiquidGlassButtonVariant.secondary,
-                            onPressed: _playing
-                                ? null
-                                : () => _playSong('instrumentalSong'),
-                            icon: Icons.queue_music,
-                            label: 'Escuchar canción sin voz',
-                          ),
-                        ],
-                        AnimatedSize(
-                          duration: const Duration(milliseconds: 250),
-                          curve: Curves.easeOut,
-                          child: _playing
-                              ? Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: _reproductor(),
-                                )
-                              : const SizedBox(width: double.infinity),
-                        ),
-                        const Divider(height: 24),
-                        // Pistas compradas, en el orden del diálogo.
-                        for (final tipo in TipoPista.values)
-                          if (_pistasDesbloqueadas[tipo] case final valor?)
-                            Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
+                              vertical: 16,
+                            ),
+                            children: [
+                              if (widget.cabecera case final cabecera?) ...[
+                                cabecera,
+                                const SizedBox(height: 12),
+                              ],
+                              Text(
+                                widget.nivel.modoPrueba
+                                    ? 'Modo de prueba: ${widget.nivel.duracionFragmentoSegundos} segundos por escucha.'
+                                    : 'Compra un instrumento para escuchar un fragmento de la canción.',
+                                style: Theme.of(context).textTheme.titleMedium,
                               ),
-                              decoration: BoxDecoration(
-                                color: AppColors.signalOrange.withValues(
-                                  alpha: 0.12,
+                              const SizedBox(height: 12),
+                              LiquidGlassCard(
+                                borderRadius: 18,
+                                tintColor: colorDificultad(
+                                  widget.nivel.dificultad,
                                 ),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: AppColors.signalOrange.withValues(
-                                    alpha: 0.3,
-                                  ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
                                 ),
+                                child: _presupuesto(),
                               ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    tipo.icono,
-                                    size: 16,
-                                    color: AppColors.signalOrange,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      '${tipo.etiqueta}: $valor',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                        letterSpacing:
-                                            tipo == TipoPista.iniciales
-                                            ? 1.5
-                                            : null,
+                              const SizedBox(height: 8),
+                              GridView(
+                                shrinkWrap: true,
+                                // Sin el margen del sistema: la grilla va en medio de
+                                // la pantalla, no contra el borde.
+                                padding: EdgeInsets.zero,
+                                physics: const NeverScrollableScrollPhysics(),
+                                // 2 columnas en teléfonos, 3-4 en tablets. El alto sale
+                                // del espacio libre para que el nivel quepa sin
+                                // desplazar en teléfonos bajos.
+                                gridDelegate:
+                                    SliverGridDelegateWithMaxCrossAxisExtent(
+                                      maxCrossAxisExtent: 240,
+                                      mainAxisExtent: _altoCasilla(
+                                        espacio.maxHeight,
                                       ),
+                                      crossAxisSpacing: 12,
+                                      mainAxisSpacing: 12,
                                     ),
-                                  ),
+                                children: [
+                                  for (final instrumento
+                                      in widget.nivel.instrumentos)
+                                    _instrumentoTile(instrumento),
                                 ],
                               ),
-                            ),
-                        TextField(
-                          controller: _answerController,
-                          enabled: !_sending,
-                          textInputAction: TextInputAction.done,
-                          onSubmitted: (_) => _submitAnswer(),
-                          decoration: InputDecoration(
-                            labelText: '¿Qué canción es?',
-                            hintText: _pistasDesbloqueadas[TipoPista.iniciales],
+                              if (_purchased.isNotEmpty && !_melodyFound) ...[
+                                const SizedBox(height: 8),
+                                LiquidGlassButton(
+                                  variant: LiquidGlassButtonVariant.secondary,
+                                  onPressed: _buying || _playing
+                                      ? null
+                                      : _playPurchased,
+                                  icon: Icons.queue_music,
+                                  label: 'Escuchar instrumentos comprados',
+                                ),
+                              ],
+                              // Al descubrir la melodía (comprando o con la pista
+                              // del instrumento faltante) se escucha sin voz.
+                              if (_melodyFound) ...[
+                                const SizedBox(height: 8),
+                                LiquidGlassButton(
+                                  variant: LiquidGlassButtonVariant.secondary,
+                                  onPressed: _playing
+                                      ? null
+                                      : () => _playSong('instrumentalSong'),
+                                  icon: Icons.queue_music,
+                                  label: 'Escuchar canción sin voz',
+                                ),
+                              ],
+                              AnimatedSize(
+                                duration: const Duration(milliseconds: 250),
+                                curve: Curves.easeOut,
+                                child: _playing
+                                    ? Padding(
+                                        padding: const EdgeInsets.only(top: 8),
+                                        child: _reproductor(),
+                                      )
+                                    : const SizedBox(width: double.infinity),
+                              ),
+                              const Divider(height: 24),
+                              // Pistas compradas, en el orden del diálogo.
+                              for (final tipo in TipoPista.values)
+                                if (_pistasDesbloqueadas[tipo]
+                                    case final valor?)
+                                  Container(
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.signalOrange.withValues(
+                                        alpha: 0.12,
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: AppColors.signalOrange
+                                            .withValues(alpha: 0.3),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          tipo.icono,
+                                          size: 16,
+                                          color: AppColors.signalOrange,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            '${tipo.etiqueta}: $valor',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                              letterSpacing:
+                                                  tipo == TipoPista.iniciales
+                                                  ? 1.5
+                                                  : null,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                            ],
                           ),
                         ),
-                        if (_message != null) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            _message!,
-                            style: TextStyle(
-                              color: _correct == false
-                                  ? Theme.of(context).colorScheme.error
-                                  : null,
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 16),
-                        if (!_won)
-                          LiquidGlassButton(
-                            onPressed: _sending ? null : _submitAnswer,
-                            label: 'Comprobar respuesta',
-                          ),
-                        if (!_won && widget.onSaltar != null) ...[
-                          const SizedBox(height: 8),
-                          TextButton.icon(
-                            onPressed: _sending ? null : widget.onSaltar,
-                            icon: const Icon(Icons.skip_next_rounded),
-                            label: const Text('Saltar canción (0 puntos)'),
-                          ),
-                        ],
-                      ],
-                    ),
+                      ),
+                      _panelRespuesta(),
+                    ],
                   ),
                 ),
         ),

@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:confetti/confetti.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../animations/liquid_ripple_effect.dart';
@@ -922,7 +923,9 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
         title: const Text('¿Quieres usar una pista al azar?'),
         content: gratis
             ? null
-            : Text('Costará 1 moneda ${genero.simboloMoneda} de ${genero.nombre}.'),
+            : Text(
+                'Costará 1 moneda ${genero.simboloMoneda} de ${genero.nombre}.',
+              ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -936,6 +939,7 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       ),
     );
     if (acepta != true || !mounted) return;
+    HapticFeedback.selectionClick();
     setState(() {
       _pidiendoPista = true;
       _message = null;
@@ -962,10 +966,13 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     }
   }
 
-  void _fallo() => setState(() {
-    _correct = false;
-    _message = 'Esa no es la canción. Intenta de nuevo.';
-  });
+  void _fallo() {
+    HapticFeedback.lightImpact();
+    setState(() {
+      _correct = false;
+      _message = 'Esa no es la canción. Intenta de nuevo.';
+    });
+  }
 
   Future<void> _ganar(String titulo, String? artista) async {
     _playbackGeneration++;
@@ -981,6 +988,7 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       _titulo = titulo;
       _artista = artista;
     });
+    HapticFeedback.mediumImpact();
     _confeti.play();
   }
 
@@ -1054,7 +1062,7 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
               color: _colorIntros,
               width: caja.maxWidth,
               height: 64,
-              barras: 40,
+              barras: 32,
               progreso: () => avanceActual(),
             ),
           ),
@@ -1074,7 +1082,67 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     );
   }
 
-  Widget _vistaJuego() {
+  /// Escucha arriba y, fijo abajo (zona del pulgar, siempre sobre el teclado),
+  /// el campo de respuesta con su botón.
+  Widget _vistaJuego() => Column(
+    children: [
+      Expanded(child: _zonaJuego()),
+      _panelRespuesta(),
+    ],
+  );
+
+  Widget _panelRespuesta() {
+    final text = Theme.of(context).textTheme;
+    return LayoutBuilder(
+      builder: (context, espacio) => Padding(
+        padding: EdgeInsets.fromLTRB(
+          espacio.maxWidth > 568 ? (espacio.maxWidth - 520) / 2 : 24,
+          8,
+          espacio.maxWidth > 568 ? (espacio.maxWidth - 520) / 2 : 24,
+          12,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _answerController,
+              enabled: !_sending,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _submitAnswer(),
+              decoration: InputDecoration(
+                labelText: '¿Qué canción es?',
+                // Las pistas van dentro del cuadro, donde se escribe la respuesta.
+                hintText: _pista?.map((p) => p.isEmpty ? '_' : p).join('   '),
+                hintStyle: text.titleMedium?.copyWith(letterSpacing: 2),
+                floatingLabelBehavior: _pista == null
+                    ? null
+                    : FloatingLabelBehavior.always,
+              ),
+            ),
+            if (_message != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _message!,
+                style: TextStyle(
+                  color: _correct == false
+                      ? Theme.of(context).colorScheme.error
+                      : null,
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            LiquidGlassButton(
+              onPressed: _sending ? null : _submitAnswer,
+              label: 'Comprobar respuesta',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _zonaJuego() {
     final text = Theme.of(context).textTheme;
     return LayoutBuilder(
       builder: (context, espacio) => SingleChildScrollView(
@@ -1136,38 +1204,6 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
                 icon: Icons.headphones_rounded,
                 label: 'Escuchar intro',
               ),
-            const Divider(height: 32),
-            TextField(
-              controller: _answerController,
-              enabled: !_sending,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _submitAnswer(),
-              decoration: InputDecoration(
-                labelText: '¿Qué canción es?',
-                // Las pistas van dentro del cuadro, donde se escribe la respuesta.
-                hintText: _pista?.map((p) => p.isEmpty ? '_' : p).join('   '),
-                hintStyle: text.titleMedium?.copyWith(letterSpacing: 2),
-                floatingLabelBehavior: _pista == null
-                    ? null
-                    : FloatingLabelBehavior.always,
-              ),
-            ),
-            if (_message != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                _message!,
-                style: TextStyle(
-                  color: _correct == false
-                      ? Theme.of(context).colorScheme.error
-                      : null,
-                ),
-              ),
-            ],
-            const SizedBox(height: 16),
-            LiquidGlassButton(
-              onPressed: _sending ? null : _submitAnswer,
-              label: 'Comprobar respuesta',
-            ),
 
             if (widget.sala?.onSaltar case final saltar?) ...[
               const SizedBox(height: 8),

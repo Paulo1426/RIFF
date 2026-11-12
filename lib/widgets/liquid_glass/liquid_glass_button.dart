@@ -2,6 +2,7 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 
+import '../../animations/transicion_activa.dart';
 import '../../theme.dart';
 import '../../theme/liquid_glass_theme.dart';
 
@@ -89,12 +90,14 @@ class _LiquidGlassButtonState extends State<LiquidGlassButton> {
         child: ClipRRect(
           borderRadius: forma,
           child: TweenAnimationBuilder<double>(
-            tween: Tween(end: blur),
+            tween: Tween(end: TransicionActiva.de(context) ? 0.0 : blur),
             duration: const Duration(milliseconds: 120),
-            builder: (context, sigma, child) => BackdropFilter.grouped(
-              filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
-              child: child,
-            ),
+            builder: (context, sigma, child) => sigma <= 0
+                ? child!
+                : BackdropFilter.grouped(
+                    filter: ImageFilter.blur(sigmaX: sigma, sigmaY: sigma),
+                    child: child,
+                  ),
             child: Material(
               color: color,
               child: InkWell(

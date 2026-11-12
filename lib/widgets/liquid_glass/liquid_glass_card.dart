@@ -2,6 +2,7 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 
+import '../../animations/transicion_activa.dart';
 import '../../theme.dart';
 import '../../theme/liquid_glass_theme.dart';
 
@@ -72,7 +73,7 @@ class LiquidGlassCard extends StatelessWidget {
         ),
       ),
     );
-    if (blur > 0) {
+    if (blur > 0 && !TransicionActiva.de(context)) {
       contenido = BackdropFilter.grouped(
         filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
         child: contenido,
