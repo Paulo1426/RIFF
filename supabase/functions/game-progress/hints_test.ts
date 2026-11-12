@@ -1,7 +1,9 @@
 import {
   hintCosts,
   hintTypes,
+  introInitials,
   maskInitials,
+  pickIntroHintWord,
   pickRandomHint,
   titleLetter,
 } from "./hints.ts";
@@ -49,4 +51,12 @@ Deno.test("la sorpresa solo da pistas que el jugador aún no tiene", () => {
     pickRandomHint(["first_letter", "last_letter", "artist"], () => 0),
     null,
   );
+});
+
+Deno.test("pistas de intros: una inicial por palabra, sin repetir", () => {
+  assertEquals(introInitials("¡Ay, corazón! 90"), ["A", "C", "9"]);
+  assertEquals(introInitials("Lluvia"), ["L"]);
+  assertEquals(pickIntroHintWord(3, [], () => 0), 0);
+  assertEquals(pickIntroHintWord(3, [0, 2], () => 0), 1);
+  assertEquals(pickIntroHintWord(2, [0, 1], () => 0), null);
 });

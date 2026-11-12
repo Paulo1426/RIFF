@@ -413,6 +413,12 @@ class FirebaseGameRepository {
   Future<EstadoIntros> sacarIntro() async =>
       EstadoIntros.fromJson(await _post({'action': 'drawIntro'}));
 
+  /// Revela la inicial de otra palabra de la intro (gratis las 3 primeras).
+  Future<EstadoIntros> pedirPistaIntro(String introId) async =>
+      EstadoIntros.fromJson(
+        await _post({'action': 'introHint', 'introId': introId}),
+      );
+
   Future<ResultadoRespuesta> enviarRespuestaIntro({
     required String introId,
     required String respuesta,
@@ -524,6 +530,7 @@ class IntroAsignada {
     required this.estado,
     this.titulo,
     this.artista,
+    this.pista,
   });
 
   final String id;
@@ -532,6 +539,8 @@ class IntroAsignada {
   // Solo llegan cuando la intro ya fue adivinada.
   final String? titulo;
   final String? artista;
+  // Una casilla por palabra: su inicial si ya se reveló y '' si no. Null sin pistas.
+  final List<String>? pista;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -539,6 +548,7 @@ class IntroAsignada {
     'estado': estado.name,
     'titulo': titulo,
     'artista': artista,
+    'pista': pista,
   };
 
   factory IntroAsignada.fromJson(Map<String, dynamic> json) => IntroAsignada(
@@ -547,6 +557,7 @@ class IntroAsignada {
     estado: EstadoIntro.values.byName(json['estado'] as String),
     titulo: json['titulo'] as String?,
     artista: json['artista'] as String?,
+    pista: (json['pista'] as List<dynamic>?)?.cast<String>(),
   );
 }
 
@@ -558,6 +569,7 @@ class EstadoIntros {
     required this.intros,
     this.monedasPorGenero = const {},
     this.puedeSacar = true,
+    this.pistasGratis = 0,
     this.nueva,
   });
 
@@ -565,6 +577,8 @@ class EstadoIntros {
   final int monedasGanadas;
   final Map<String, int> monedasPorGenero;
   final bool puedeSacar;
+  // Pistas gratis que le quedan en este género (o Medley).
+  final int pistasGratis;
   // Intros que aún no salen.
   final int restantes;
   final List<IntroAsignada> intros;
@@ -577,6 +591,7 @@ class EstadoIntros {
     'monedas_ganadas': monedasGanadas,
     'monedas_por_genero': monedasPorGenero,
     'puede_sacar': puedeSacar,
+    'pistas_gratis': pistasGratis,
     'restantes': restantes,
     'nueva': nueva,
     'intros': [for (final intro in intros) intro.toJson()],
@@ -590,6 +605,7 @@ class EstadoIntros {
         entry.key as String: (entry.value as num).toInt(),
     },
     puedeSacar: json['puede_sacar'] as bool? ?? true,
+    pistasGratis: (json['pistas_gratis'] as num?)?.toInt() ?? 0,
     restantes: (json['restantes'] as num).toInt(),
     nueva: json['nueva'] as String?,
     intros: (json['intros'] as List<dynamic>)

@@ -34,6 +34,7 @@ import {
   coinsEarnedByGenre,
   coinWalletBalance,
   introCoinRewards,
+  introGuessReward,
   introPrice,
   introsInMedley,
   introsPerGenre,
@@ -44,7 +45,11 @@ import {
   hintCosts,
   type HintType,
   hintTypes,
+  introFreeHints,
+  introHintPrice,
+  introInitials,
   maskInitials,
+  pickIntroHintWord,
   pickRandomHint,
   titleLetter,
 } from "./hints.ts";
@@ -80,6 +85,7 @@ const accionesCaras = new Set([
   "requestHint",
   "submitAnswer",
   "drawIntro",
+  "introHint",
   "submitIntroAnswer",
   "crearSala",
   "unirseSala",
@@ -2797,6 +2803,12 @@ async function loadIntroState(token: string, uid: string, guest: boolean) {
       ]),
     ),
   ) as Record<Genero, number>;
+  // Cada intro adivinada da una moneda de la cartera donde se adivinó.
+  for (const genero of generos) {
+    earnedByGenre[genero] += new Set(
+      stringList(states[genero]?.fields.completedIds),
+    ).size * introGuessReward;
+  }
   const unlockedByGenre = Object.fromEntries(
     generos.map((genero) => [
       genero,
@@ -2848,6 +2860,13 @@ async function loadIntroState(token: string, uid: string, guest: boolean) {
         ? states[genero]!.fields.pistasMonedasGastadas as number
         : 0,
     ]),
+  ) as Record<Genero, number>;
+
+  const freeHintsUsedByGenre = Object.fromEntries(
+    generos.map((genero) => {
+      const used = states[genero]?.fields.pistasIntroGratisUsadas;
+      return [genero, typeof used === "number" ? used : 0];
+    }),
   ) as Record<Genero, number>;
 
   let welcome = 0;
@@ -2909,6 +2928,7 @@ async function loadIntroState(token: string, uid: string, guest: boolean) {
     earnedByGenre,
     introSpentByGenre,
     hintSpentByGenre,
+    freeHintsUsedByGenre,
     balances,
     unlocked,
     completed: new Set(stringList(state?.fields.completedIds)),
@@ -2929,6 +2949,10 @@ function introSummary(
     monedas: state.balances[generoActual()],
     monedas_por_genero: state.balances,
     monedas_ganadas: state.earnedByGenre[generoActual()],
+    pistas_gratis: Math.max(
+      0,
+      introFreeHints - state.freeHintsUsedByGenre[generoActual()],
+    ),
     puede_sacar: canBuy,
     restantes: Math.min(
       [...state.intros.keys()].filter((id) => !unlocked.has(id)).length,
@@ -2950,9 +2974,95 @@ function introSummary(
           artista: done && typeof fields.artista === "string"
             ? fields.artista
             : null,
+          pista: done ? null : introHintView(state, id),
         };
       }),
   };
+}
+
+/// Pistas de una intro: una casilla por palabra, con la inicial si ya se
+/// reveló y "" si no; null mientras no haya comprado ninguna.
+function introHintView(
+  state: Awaited<ReturnType<typeof loadIntroState>>,
+  introId: string,
+): string[] | null {
+  const given = introHintsGiven(state.state?.fields.pistasIntro, introId);
+  if (given.length === 0) return null;
+  const initials = introInitials(String(state.intros.get(introId)?.titulo ?? ""));
+  return initials.map((letter, index) => given.includes(index) ? letter : "");
+}
+
+function introHintsGiven(map: unknown, introId: string): number[] {
+  const list = map && typeof map === "object"
+    ? (map as JsonObject)[introId]
+    : undefined;
+  return Array.isArray(list)
+    ? list.filter((item): item is number => typeof item === "number")
+    : [];
+}
+
+/// Revela la inicial de una palabra al azar de una intro desbloqueada y sin
+/// adivinar. Las primeras 3 de cada cartera son gratis; luego cuestan 1 moneda.
+async function introHint(
+  token: string,
+  uid: string,
+  introId: string,
+  guest: boolean,
+): Promise<JsonObject> {
+  const state = await loadIntroState(token, uid, guest);
+  const intro = state.intros.get(introId);
+  if (!intro || !state.unlocked.includes(introId) || !state.state) {
+    throw new HttpError(403, "Desbloquea esta intro con una moneda primero");
+  }
+  if (state.completed.has(introId)) {
+    throw new HttpError(409, "Ya adivinaste esta intro");
+  }
+  const initials = introInitials(String(intro.titulo ?? ""));
+  const given = introHintsGiven(state.state.fields.pistasIntro, introId);
+  const word = pickIntroHintWord(initials.length, given, (max) => {
+    const random = new Uint32Array(1);
+    crypto.getRandomValues(random);
+    return random[0] % max;
+  });
+  if (word === null) {
+    throw new HttpError(409, "Ya tienes todas las pistas de esta intro");
+  }
+  const wallet = generoActual();
+  const free = introFreeHints - state.freeHintsUsedByGenre[wallet] > 0;
+  if (!free && state.balances[wallet] < introHintPrice) {
+    throw new HttpError(
+      409,
+      "No tienes monedas suficientes. Adivina intros o canciones para ganar más.",
+    );
+  }
+  const stored = state.state.fields.pistasIntro;
+  const pistasIntro: JsonObject = {
+    ...(stored && typeof stored === "object" ? stored as JsonObject : {}),
+    [introId]: [...given, word],
+  };
+  const cost = free ? 0 : introHintPrice;
+  await commitWrites(token, [
+    updateWrite(state.path, {
+      pistasIntro,
+      pistasIntroGratisUsadas: state.freeHintsUsedByGenre[wallet] +
+        (free ? 1 : 0),
+      pistasMonedasGastadas: state.hintSpentByGenre[wallet] + cost,
+      updatedAt: new Date().toISOString(),
+    }, state.state.updateTime!),
+  ]);
+  const updated = {
+    ...state,
+    balances: { ...state.balances, [wallet]: state.balances[wallet] - cost },
+    freeHintsUsedByGenre: {
+      ...state.freeHintsUsedByGenre,
+      [wallet]: state.freeHintsUsedByGenre[wallet] + (free ? 1 : 0),
+    },
+    state: {
+      ...state.state,
+      fields: { ...state.state.fields, pistasIntro },
+    },
+  };
+  return { ...introSummary(updated), gratis: free };
 }
 
 /// Gasta una moneda y saca al azar una intro que el jugador aún no tiene.
@@ -3393,6 +3503,12 @@ async function handle(request: Request): Promise<Response> {
     }
     if (action === "drawIntro") {
       return response(200, await drawIntro(token, uid, guest));
+    }
+    if (action === "introHint") {
+      if (!validId(body.introId)) {
+        throw new HttpError(400, "introId no es válido");
+      }
+      return response(200, await introHint(token, uid, body.introId, guest));
     }
     if (action === "introAudio") {
       if (

@@ -4,7 +4,7 @@
 // <carpeta> tiene "01 Facil", "02 Medio", "03 Difícil" con cancion_N/ dentro:
 //   <titulo>.mp3 + portada.jpg      -> canciones-completas/cancion-00N/
 //   <titulo>_instrumental.mp3       -> canciones-instrumentales/cancion-00N/
-//   acordeon|bajo|bateria|guitarra|otros -> instrumentos/cancion-00N/ (extensión en minúscula)
+//   acordeon|trompeta|violin|bajo|bateria|guitarra|otros -> instrumentos/cancion-00N/ (trompeta y violin como acordeon)
 // Cualquier otro archivo (p. ej. p1.MP3) se ignora. Sobrescribe lo que ya exista.
 import { readdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -16,6 +16,9 @@ const kbps = 112;
 const supabaseUrl = process.env.SUPABASE_URL ?? "https://btfoclgtqhokqkgbpxmp.supabase.co";
 const bucket = genero.replaceAll("_", "-");
 const stems = new Set(["acordeon", "bajo", "bateria", "guitarra", "otros"]);
+// El stem melódico se sube siempre como "acordeon" (id interno de la app, que
+// en cada género muestra su instrumento: Trompeta en salsa, Violín en popular).
+const melodico = new Set(["trompeta", "violin"]);
 
 // Destino en el bucket de un archivo de nivel, o null si se ignora.
 export function destino(nombre, id) {
@@ -24,6 +27,7 @@ export function destino(nombre, id) {
   if (lower === "portada.jpg") return `canciones-completas/${id}/portada.jpg`;
   if (!lower.endsWith(".mp3")) return null;
   const base = nombre.slice(0, -4);
+  if (melodico.has(base.toLowerCase())) return `instrumentos/${id}/acordeon.mp3`;
   if (stems.has(base.toLowerCase())) return `instrumentos/${id}/${lower}`;
   if (/_instrumental$/i.test(base)) return `canciones-instrumentales/${id}/${base}.mp3`;
   if (/^p\d+$/i.test(base)) return null;

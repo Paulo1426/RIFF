@@ -55,3 +55,26 @@ export function titleLetter(title: string, last = false): string {
   const letter = last ? letters.at(-1) : letters[0];
   return letter?.toLocaleUpperCase() ?? "";
 }
+
+/// Pistas de intros: las primeras [introFreeHints] de cada cartera (género o
+/// Medley) son gratis; después cada una cuesta [introHintPrice] moneda.
+export const introFreeHints = 3;
+export const introHintPrice = 1;
+
+/// Inicial de cada palabra del título (se omiten las que no tienen letra ni número).
+export function introInitials(title: string): string[] {
+  return title.split(/\s+/).map((word) => titleLetter(word)).filter(Boolean);
+}
+
+/// Índice de una palabra aún no revelada, o null si ya salieron todas.
+/// [azar] devuelve un entero en [0, max).
+export function pickIntroHintWord(
+  total: number,
+  given: readonly number[],
+  azar: (max: number) => number,
+): number | null {
+  const left = Array.from({ length: total }, (_, i) => i).filter((i) =>
+    !given.includes(i)
+  );
+  return left.length === 0 ? null : left[azar(left.length)];
+}

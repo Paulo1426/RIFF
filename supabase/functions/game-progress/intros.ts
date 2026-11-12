@@ -2,6 +2,8 @@
 // monedas según su dificultad y cada intro cuesta una moneda.
 export const introCoinRewards = { facil: 2, medio: 3, avanzado: 4 } as const;
 export const introPrice = 1;
+// Moneda del género (o Medley) por cada intro adivinada.
+export const introGuessReward = 1;
 export const introsPerGenre = 30;
 export const introsPerGenreInMedley = 15;
 export const introsInMedley = 75;

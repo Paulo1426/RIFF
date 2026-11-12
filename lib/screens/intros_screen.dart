@@ -68,7 +68,8 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
       titulo: 'Monedas de cada género',
       texto:
           'Cada género tiene su moneda. Ganas 2, 3 o 4 al completar por '
-          'primera vez un nivel; las monedas de Medley solo se usan allí.',
+          'primera vez un nivel y 1 por cada intro adivinada; las de Medley solo '
+          'se usan allí. Cada género tiene 3 pistas gratis para las intros.',
     ),
     PasoRecorrido(
       clave: _claveSacar,
@@ -114,8 +115,11 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
   Future<void> _abrir(IntroAsignada intro, {bool reproducir = false}) async {
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            IntroGameScreen(intro: intro, reproducirAlAbrir: reproducir),
+        builder: (_) => IntroGameScreen(
+          intro: intro,
+          reproducirAlAbrir: reproducir,
+          pistasGratis: _estado?.pistasGratis,
+        ),
       ),
     );
     if (!mounted) return;
@@ -703,9 +707,12 @@ class IntroGameScreen extends ConsumerStatefulWidget {
     required this.intro,
     this.sala,
     this.reproducirAlAbrir = false,
+    this.pistasGratis,
   });
 
   final IntroAsignada intro;
+  // Pistas gratis que le quedan al jugador; null en salas, donde no hay pistas.
+  final int? pistasGratis;
   // Recién sacada de la ruleta: la intro empieza a sonar al entrar.
   final bool reproducirAlAbrir;
   final IntroEnSala? sala;
@@ -729,6 +736,9 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
   late String? _artista = widget.intro.artista;
   ImageProvider? _portada;
   int _playbackGeneration = 0;
+  late List<String>? _pista = widget.intro.pista;
+  late int? _gratis = widget.pistasGratis;
+  bool _pidiendoPista = false;
 
   @override
   void initState() {
@@ -899,6 +909,61 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
       }
     } finally {
       if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  /// Avisa del coste y, si acepta, revela la inicial de otra palabra al azar.
+  Future<void> _pedirPista() async {
+    final gratis = (_gratis ?? 0) > 0;
+    final genero = generoActivo;
+    final acepta = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Usar una pista?'),
+        content: Text(
+          gratis
+              ? 'Te quedan $_gratis pistas gratis en ${genero.nombre}. '
+                    'Se revelará la inicial de una palabra al azar.'
+              : 'Se acabaron tus pistas gratis. Esta pista cuesta 1 moneda '
+                    '${genero.simboloMoneda} de ${genero.nombre} y revela la '
+                    'inicial de una palabra al azar.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Usar pista'),
+          ),
+        ],
+      ),
+    );
+    if (acepta != true || !mounted) return;
+    setState(() {
+      _pidiendoPista = true;
+      _message = null;
+    });
+    try {
+      final estado = await _repo.pedirPistaIntro(widget.intro.id);
+      final intro = estado.intros.firstWhere((i) => i.id == widget.intro.id);
+      if (mounted) {
+        setState(() {
+          _pista = intro.pista;
+          _gratis = estado.pistasGratis;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(
+          () => _message = error is GameRepositoryException
+              ? error.message
+              : textoDeFallo('No se pudo obtener la pista', error),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _pidiendoPista = false);
     }
   }
 
@@ -1075,6 +1140,14 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
                 label: 'Escuchar intro',
               ),
             const Divider(height: 32),
+            if (_pista case final pista?) ...[
+              Text(
+                'Pista: ${pista.map((letra) => letra.isEmpty ? '_' : letra).join('  ')}',
+                textAlign: TextAlign.center,
+                style: text.titleMedium,
+              ),
+              const SizedBox(height: 12),
+            ],
             TextField(
               controller: _answerController,
               enabled: !_sending,
@@ -1098,6 +1171,18 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
               onPressed: _sending ? null : _submitAnswer,
               label: 'Comprobar respuesta',
             ),
+            if (_gratis != null && (_pista?.contains('') ?? true)) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _sending || _pidiendoPista ? null : _pedirPista,
+                icon: const Icon(Icons.lightbulb_outline),
+                label: Text(
+                  (_gratis ?? 0) > 0
+                      ? 'Pista ($_gratis gratis)'
+                      : 'Pista (1 ${generoActivo.simboloMoneda})',
+                ),
+              ),
+            ],
             if (widget.sala?.onSaltar case final saltar?) ...[
               const SizedBox(height: 8),
               TextButton.icon(
