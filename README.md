@@ -222,7 +222,7 @@ Cuanto más juegues, más oportunidades tendrás de completar tu colección.
 - **Progreso guardado:** conserva tus niveles, canciones descubiertas y logros.
 - **Inicio de sesión:** accede con correo electrónico, Google o mediante el modo invitado.
 - **Requiere conexión a internet:** puedes repetir niveles completados y volver a escuchar las intros que ya desbloqueaste; las canciones desbloqueadas se guardan en la caché del teléfono para escucharlas más rápido (en la web no se guarda nada).
-- **Diseño moderno:** interfaz Liquid Glass, animaciones, transiciones y música de fondo en los menús.
+- **Diseño moderno:** interfaz Liquid Glass, iconos musicales, animaciones, transiciones y música de fondo en los menús.
 
 ---
 
@@ -251,9 +251,7 @@ Actualmente, RIFF está desarrollado para dispositivos **Android**.
 
 ## 🛠️ Para desarrolladores
 
-¿Quieres conocer cómo está construido RIFF, qué tecnologías utiliza o cómo ejecutar el proyecto?
-
-Consulta la documentación técnica: 📄 [DOCUMENTACION_TECNICA.md](DOCUMENTACION_TECNICA.md)
+¿Quieres conocer cómo está construido RIFF, qué tecnologías utiliza o cómo ejecutar el proyecto? La documentación técnica es un documento local del proyecto y no se publica en este repositorio.
 
 ---
 

@@ -91,3 +91,6 @@ deno.lock
 
 # Script local para separar stems con Demucs.
 /scripts/separar_stems.py
+
+# Documentación técnica (solo local).
+DOCUMENTACION_TECNICA.md
