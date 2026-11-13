@@ -1,4 +1,4 @@
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:riff/iconos_phosphor.dart';
 import 'dart:math';
 
 import 'package:confetti/confetti.dart';

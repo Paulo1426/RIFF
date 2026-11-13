@@ -1,4 +1,4 @@
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:riff/iconos_phosphor.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/pista.dart';

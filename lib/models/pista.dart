@@ -1,4 +1,4 @@
-import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:riff/iconos_phosphor.dart';
 import 'package:flutter/material.dart';
 
 /// Pistas que se compran con monedas de Adivina la intro. El servidor las
