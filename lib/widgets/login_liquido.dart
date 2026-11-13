@@ -42,11 +42,15 @@ class LogoCircular extends StatelessWidget {
     child: ClipOval(
       child: ColoredBox(
         color: context.paleta.superficie,
-        child: Image.asset(
-          'lib/assets/images/logo/riff_logo.png',
-          fit: BoxFit.contain,
-          cacheWidth: 384,
-          semanticLabel: 'Riff',
+        // El logo es apaisado: con margen no lo recorta el círculo.
+        child: Padding(
+          padding: EdgeInsets.all(tamano * 0.1),
+          child: Image.asset(
+            'lib/assets/images/logo/riff_logo.png',
+            fit: BoxFit.contain,
+            cacheWidth: 384,
+            semanticLabel: 'Riff',
+          ),
         ),
       ),
     ),
