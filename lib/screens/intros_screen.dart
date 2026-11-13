@@ -1,3 +1,4 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
@@ -372,7 +373,9 @@ class _TarjetaIntro extends StatelessWidget {
       color: Color.lerp(color, AppColors.paperWhite, 0.35)!,
       child: Center(
         child: Icon(
-          completada ? Icons.music_note_rounded : Icons.headphones_rounded,
+          completada
+              ? PhosphorIconsFill.musicNotes
+              : PhosphorIconsFill.headphones,
           size: 36,
           color: completada
               ? context.paleta.tonoTexto(color)
@@ -520,7 +523,7 @@ class _CartaReveladaState extends State<_CartaRevelada>
       child: dorso
           ? const Center(
               child: Icon(
-                Icons.music_note_rounded,
+                PhosphorIconsFill.musicNotes,
                 size: 72,
                 color: AppColors.paperWhite,
               ),
@@ -528,7 +531,11 @@ class _CartaReveladaState extends State<_CartaRevelada>
           : Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.headphones_rounded, size: 64, color: _colorIntros),
+                Icon(
+                  PhosphorIconsFill.headphones,
+                  size: 64,
+                  color: _colorIntros,
+                ),
                 const SizedBox(height: 12),
                 Text('¡Lista!', style: text.headlineSmall),
                 const SizedBox(height: 4),
@@ -588,7 +595,7 @@ class _CartaReveladaState extends State<_CartaRevelada>
           ),
           child: LiquidGlassButton(
             onPressed: () => Navigator.of(context).pop(true),
-            icon: Icons.play_arrow_rounded,
+            icon: PhosphorIconsFill.play,
             label: '¡Jugar ahora!',
           ),
         ),
@@ -613,12 +620,12 @@ class _Ruleta extends StatelessWidget {
   static int get cantidad => _notas.length;
 
   static const _notas = [
-    Icons.music_note_rounded,
-    Icons.headphones_rounded,
-    Icons.audiotrack_rounded,
+    PhosphorIconsFill.musicNotes,
+    PhosphorIconsFill.headphones,
+    PhosphorIconsFill.musicNote,
     Icons.album_rounded,
-    Icons.queue_music_rounded,
-    Icons.piano_rounded,
+    PhosphorIconsFill.playlist,
+    PhosphorIconsFill.pianoKeys,
     Icons.mic_rounded,
     Icons.library_music_rounded,
   ];
@@ -1186,14 +1193,16 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
                     child: LiquidGlassButton(
                       variant: LiquidGlassButtonVariant.secondary,
                       onPressed: _togglePause,
-                      icon: _paused ? Icons.play_arrow : Icons.pause,
+                      icon: _paused
+                          ? PhosphorIconsFill.play
+                          : PhosphorIconsFill.pause,
                       label: _paused ? 'Reanudar' : 'Pausar',
                     ),
                   ),
                   IconButton(
                     tooltip: 'Detener',
                     onPressed: () => _audioService.detener(),
-                    icon: const Icon(Icons.stop),
+                    icon: const Icon(PhosphorIconsFill.stop),
                   ),
                 ],
               )
@@ -1201,7 +1210,7 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
               LiquidGlassButton(
                 variant: LiquidGlassButtonVariant.secondary,
                 onPressed: () => _play('intro'),
-                icon: Icons.headphones_rounded,
+                icon: PhosphorIconsFill.headphones,
                 label: 'Escuchar intro',
               ),
 
@@ -1209,7 +1218,7 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
               const SizedBox(height: 8),
               TextButton.icon(
                 onPressed: _sending ? null : saltar,
-                icon: const Icon(Icons.skip_next_rounded),
+                icon: const Icon(PhosphorIconsFill.skipForward),
                 label: const Text('Saltar intro (0 puntos)'),
               ),
             ],

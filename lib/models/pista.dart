@@ -1,3 +1,4 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/material.dart';
 
 /// Pistas que se compran con monedas de Adivina la intro. El servidor las
@@ -124,7 +125,7 @@ extension TipoPistaExtension on TipoPista {
       case TipoPista.iniciales:
         return Icons.text_fields_rounded;
       case TipoPista.cuartoInstrumento:
-        return Icons.music_note_rounded;
+        return PhosphorIconsFill.musicNotes;
     }
   }
 
@@ -185,8 +186,7 @@ class ResultadoPista {
           const [],
       monedasRestantes: (json['monedasRestantes'] as num?)?.toInt() ?? 0,
       monedasPorGenero: {
-        for (final entry
-            in (json['monedasPorGenero'] as Map? ?? {}).entries)
+        for (final entry in (json['monedasPorGenero'] as Map? ?? {}).entries)
           entry.key as String: (entry.value as num).toInt(),
       },
       instrumentosComprados:

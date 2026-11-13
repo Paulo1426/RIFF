@@ -1,3 +1,4 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -761,7 +762,7 @@ class _BandaMusicalState extends State<BandaMusical> {
       child: Opacity(
         opacity: (1 - avance).clamp(0.0, 1.0) * 0.8,
         child: Icon(
-          i.isEven ? Icons.music_note_rounded : Icons.audiotrack_rounded,
+          i.isEven ? PhosphorIconsFill.musicNotes : PhosphorIconsFill.musicNote,
           size: tamano * 0.5,
           color: widget.color,
         ),

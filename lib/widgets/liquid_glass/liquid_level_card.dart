@@ -1,3 +1,4 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -100,7 +101,7 @@ class _LiquidLevelCardState extends State<LiquidLevelCard> {
         ),
         if (widget.estado == EstadoNivel.completado) ...[
           const LiquidShimmer(
-            child: Icon(Icons.check_circle_rounded, color: AppColors.verde),
+            child: Icon(PhosphorIconsFill.checkCircle, color: AppColors.verde),
           ),
           const SizedBox(width: 6),
         ],

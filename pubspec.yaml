@@ -54,6 +54,7 @@ dependencies:
   flutter_local_notifications: ^22.3.2
   timezone: ^0.11.2
   shared_preferences: ^2.5.6
+  phosphor_flutter: ^2.1.0
 
 dev_dependencies:
   flutter_test:
@@ -65,6 +66,7 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -119,3 +121,16 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+flutter_launcher_icons:
+  image_path: lib/assets/icon/icono.png
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: lib/assets/icon/icono_primer_plano.png
+  web:
+    generate: true
+    image_path: lib/assets/icon/icono.png
+    background_color: "#FFFFFF"
+    theme_color: "#FF8C42"

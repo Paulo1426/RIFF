@@ -450,7 +450,7 @@ class _EtiquetaInsignia extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 4),
-          Icon(Icons.check_circle_rounded, size: 16, color: tono),
+          Icon(PhosphorIconsFill.checkCircle, size: 16, color: tono),
         ],
       ),
     );

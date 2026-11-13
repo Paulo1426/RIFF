@@ -327,7 +327,7 @@ class _CuadroModo extends StatelessWidget {
                         children: [
                           if (bloqueado) ...[
                             Icon(
-                              Icons.lock_rounded,
+                              PhosphorIconsFill.lock,
                               size: 18,
                               color: context.paleta.tintaSuave,
                             ),
@@ -660,7 +660,7 @@ class _ResumenDificultad extends StatelessWidget {
                           Center(
                             child: bloqueada
                                 ? Icon(
-                                    Icons.lock_rounded,
+                                    PhosphorIconsFill.lock,
                                     color: context.paleta.tintaSuave,
                                   )
                                 : Text(
@@ -723,7 +723,7 @@ class _ResumenDificultad extends StatelessWidget {
                                   ),
                                   const SizedBox(width: 4),
                                   Icon(
-                                    Icons.check_circle_rounded,
+                                    PhosphorIconsFill.checkCircle,
                                     size: 16,
                                     color: tono,
                                   ),
@@ -813,7 +813,7 @@ class _TarjetaDificultad extends StatelessWidget {
                       Center(
                         child: bloqueada
                             ? Icon(
-                                Icons.lock_rounded,
+                                PhosphorIconsFill.lock,
                                 color: context.paleta.tintaSuave,
                               )
                             : Text(

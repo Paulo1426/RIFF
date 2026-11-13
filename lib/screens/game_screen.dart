@@ -1,3 +1,4 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:async';
 import 'dart:math';
 
@@ -616,12 +617,14 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             IconButton.filled(
               tooltip: _paused ? 'Reanudar' : 'Pausar',
               onPressed: _togglePause,
-              icon: Icon(_paused ? Icons.play_arrow : Icons.pause),
+              icon: Icon(
+                _paused ? PhosphorIconsFill.play : PhosphorIconsFill.pause,
+              ),
             ),
             IconButton(
               tooltip: 'Detener',
               onPressed: () => _audioService.detener(),
-              icon: const Icon(Icons.stop),
+              icon: const Icon(PhosphorIconsFill.stop),
             ),
           ],
         ),
@@ -938,7 +941,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                         ),
                       Icon(
                         comprado || _melodyFound
-                            ? Icons.play_arrow
+                            ? PhosphorIconsFill.play
                             : Icons.shopping_cart,
                         size: 26,
                       ),
@@ -976,17 +979,38 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             hintText: _pistasDesbloqueadas[TipoPista.iniciales],
           ),
         ),
-        if (_message != null) ...[
-          const SizedBox(height: 8),
-          Text(
-            _message!,
-            style: TextStyle(
-              color: _correct == false
-                  ? Theme.of(context).colorScheme.error
-                  : null,
+        // El aviso entra con fundido y deslizamiento, como AnimatedContent en Compose.
+        AnimatedSize(
+          duration: const Duration(milliseconds: 250),
+          alignment: Alignment.topCenter,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            transitionBuilder: (child, animacion) => FadeTransition(
+              opacity: animacion,
+              child: SlideTransition(
+                position: Tween(
+                  begin: const Offset(0, -0.4),
+                  end: Offset.zero,
+                ).animate(animacion),
+                child: child,
+              ),
             ),
+            child: _message == null
+                ? const SizedBox(width: double.infinity)
+                : Padding(
+                    key: ValueKey(_message),
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      _message!,
+                      style: TextStyle(
+                        color: _correct == false
+                            ? Theme.of(context).colorScheme.error
+                            : null,
+                      ),
+                    ),
+                  ),
           ),
-        ],
+        ),
         const SizedBox(height: 16),
         if (!_won)
           LiquidGlassButton(
@@ -997,7 +1021,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           const SizedBox(height: 8),
           TextButton.icon(
             onPressed: _sending ? null : widget.onSaltar,
-            icon: const Icon(Icons.skip_next_rounded),
+            icon: const Icon(PhosphorIconsFill.skipForward),
             label: const Text('Saltar canción (0 puntos)'),
           ),
         ],
@@ -1039,7 +1063,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                     label: Text('$_monedasDisponibles'),
                     isLabelVisible: _monedasDisponibles > 0,
                     backgroundColor: AppColors.signalOrange,
-                    child: const Icon(Icons.lightbulb_rounded),
+                    child: const Icon(PhosphorIconsFill.lightbulb),
                   ),
                   onPressed: _abrirDialogoPistas,
                 ),
@@ -1053,158 +1077,181 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             texto: _avanzando
                 ? 'Cargando siguiente nivel...'
                 : 'Comprobando respuesta...',
-            child: _won
-                ? _vistaGanada()
-                : _conCelebracion(
-                    Column(
-                      children: [
-                        Expanded(
-                          child: LayoutBuilder(
-                            builder: (context, espacio) => ListView(
-                              // En tablets el contenido queda centrado con un ancho máximo.
-                              padding: EdgeInsets.symmetric(
-                                horizontal: max(
-                                  16,
-                                  (MediaQuery.sizeOf(context).width - 680) / 2,
-                                ),
-                                vertical: 16,
-                              ),
-                              children: [
-                                if (widget.cabecera case final cabecera?) ...[
-                                  cabecera,
-                                  const SizedBox(height: 12),
-                                ],
-                                Text(
-                                  widget.nivel.modoPrueba
-                                      ? 'Modo de prueba: ${widget.nivel.duracionFragmentoSegundos} segundos por escucha.'
-                                      : 'Compra un instrumento para escuchar un fragmento de la canción.',
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
-                                ),
-                                const SizedBox(height: 12),
-                                LiquidGlassCard(
-                                  borderRadius: 18,
-                                  tintColor: _colorGenero,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 400),
+              child: KeyedSubtree(
+                key: ValueKey(_won),
+                child: _won
+                    ? _vistaGanada()
+                    : _conCelebracion(
+                        Column(
+                          children: [
+                            Expanded(
+                              child: LayoutBuilder(
+                                builder: (context, espacio) => ListView(
+                                  // En tablets el contenido queda centrado con un ancho máximo.
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: max(
+                                      16,
+                                      (MediaQuery.sizeOf(context).width - 680) /
+                                          2,
+                                    ),
+                                    vertical: 16,
                                   ),
-                                  child: _presupuesto(),
-                                ),
-                                const SizedBox(height: 8),
-                                GridView(
-                                  shrinkWrap: true,
-                                  // Sin el margen del sistema: la grilla va en medio de
-                                  // la pantalla, no contra el borde.
-                                  padding: EdgeInsets.zero,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  // 2 columnas en teléfonos, 3-4 en tablets. El alto sale
-                                  // del espacio libre para que el nivel quepa sin
-                                  // desplazar en teléfonos bajos.
-                                  gridDelegate:
-                                      SliverGridDelegateWithMaxCrossAxisExtent(
-                                        maxCrossAxisExtent: 240,
-                                        mainAxisExtent: _altoCasilla(
-                                          espacio.maxHeight,
-                                        ),
-                                        crossAxisSpacing: 12,
-                                        mainAxisSpacing: 12,
-                                      ),
                                   children: [
-                                    for (final instrumento
-                                        in widget.nivel.instrumentos)
-                                      _instrumentoTile(instrumento),
-                                  ],
-                                ),
-                                if (_purchased.isNotEmpty && !_melodyFound) ...[
-                                  const SizedBox(height: 8),
-                                  LiquidGlassButton(
-                                    variant: LiquidGlassButtonVariant.secondary,
-                                    onPressed: _buying || _playing
-                                        ? null
-                                        : _playPurchased,
-                                    icon: Icons.queue_music,
-                                    label: 'Escuchar instrumentos comprados',
-                                  ),
-                                ],
-                                // Al descubrir la melodía (comprando o con la pista
-                                // del instrumento faltante) se escucha sin voz.
-                                if (_melodyFound) ...[
-                                  const SizedBox(height: 8),
-                                  LiquidGlassButton(
-                                    variant: LiquidGlassButtonVariant.secondary,
-                                    onPressed: _playing
-                                        ? null
-                                        : () => _playSong('instrumentalSong'),
-                                    icon: Icons.queue_music,
-                                    label: 'Escuchar canción sin voz',
-                                  ),
-                                ],
-                                AnimatedSize(
-                                  duration: const Duration(milliseconds: 250),
-                                  curve: Curves.easeOut,
-                                  child: _playing
-                                      ? Padding(
-                                          padding: const EdgeInsets.only(
-                                            top: 8,
-                                          ),
-                                          child: _reproductor(),
-                                        )
-                                      : const SizedBox(width: double.infinity),
-                                ),
-                                const Divider(height: 24),
-                                // Pistas compradas, en el orden del diálogo.
-                                for (final tipo in TipoPista.values)
-                                  if (_pistasDesbloqueadas[tipo]
-                                      case final valor?)
-                                    Container(
-                                      margin: const EdgeInsets.only(bottom: 8),
+                                    if (widget.cabecera
+                                        case final cabecera?) ...[
+                                      cabecera,
+                                      const SizedBox(height: 12),
+                                    ],
+                                    Text(
+                                      widget.nivel.modoPrueba
+                                          ? 'Modo de prueba: ${widget.nivel.duracionFragmentoSegundos} segundos por escucha.'
+                                          : 'Compra un instrumento para escuchar un fragmento de la canción.',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.titleMedium,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    LiquidGlassCard(
+                                      borderRadius: 18,
+                                      tintColor: _colorGenero,
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 8,
+                                        horizontal: 16,
+                                        vertical: 12,
                                       ),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.signalOrange
-                                            .withValues(alpha: 0.12),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: AppColors.signalOrange
-                                              .withValues(alpha: 0.3),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            tipo.icono,
-                                            size: 16,
-                                            color: AppColors.signalOrange,
+                                      child: _presupuesto(),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    GridView(
+                                      shrinkWrap: true,
+                                      // Sin el margen del sistema: la grilla va en medio de
+                                      // la pantalla, no contra el borde.
+                                      padding: EdgeInsets.zero,
+                                      physics:
+                                          const NeverScrollableScrollPhysics(),
+                                      // 2 columnas en teléfonos, 3-4 en tablets. El alto sale
+                                      // del espacio libre para que el nivel quepa sin
+                                      // desplazar en teléfonos bajos.
+                                      gridDelegate:
+                                          SliverGridDelegateWithMaxCrossAxisExtent(
+                                            maxCrossAxisExtent: 240,
+                                            mainAxisExtent: _altoCasilla(
+                                              espacio.maxHeight,
+                                            ),
+                                            crossAxisSpacing: 12,
+                                            mainAxisSpacing: 12,
                                           ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              '${tipo.etiqueta}: $valor',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 13,
-                                                letterSpacing:
-                                                    tipo == TipoPista.iniciales
-                                                    ? 1.5
-                                                    : null,
+                                      children: [
+                                        for (final instrumento
+                                            in widget.nivel.instrumentos)
+                                          _instrumentoTile(instrumento),
+                                      ],
+                                    ),
+                                    if (_purchased.isNotEmpty &&
+                                        !_melodyFound) ...[
+                                      const SizedBox(height: 8),
+                                      LiquidGlassButton(
+                                        variant:
+                                            LiquidGlassButtonVariant.secondary,
+                                        onPressed: _buying || _playing
+                                            ? null
+                                            : _playPurchased,
+                                        icon: PhosphorIconsFill.playlist,
+                                        label:
+                                            'Escuchar instrumentos comprados',
+                                      ),
+                                    ],
+                                    // Al descubrir la melodía (comprando o con la pista
+                                    // del instrumento faltante) se escucha sin voz.
+                                    if (_melodyFound) ...[
+                                      const SizedBox(height: 8),
+                                      LiquidGlassButton(
+                                        variant:
+                                            LiquidGlassButtonVariant.secondary,
+                                        onPressed: _playing
+                                            ? null
+                                            : () =>
+                                                  _playSong('instrumentalSong'),
+                                        icon: PhosphorIconsFill.playlist,
+                                        label: 'Escuchar canción sin voz',
+                                      ),
+                                    ],
+                                    AnimatedSize(
+                                      duration: const Duration(
+                                        milliseconds: 250,
+                                      ),
+                                      curve: Curves.easeOut,
+                                      child: _playing
+                                          ? Padding(
+                                              padding: const EdgeInsets.only(
+                                                top: 8,
                                               ),
+                                              child: _reproductor(),
+                                            )
+                                          : const SizedBox(
+                                              width: double.infinity,
+                                            ),
+                                    ),
+                                    const Divider(height: 24),
+                                    // Pistas compradas, en el orden del diálogo.
+                                    for (final tipo in TipoPista.values)
+                                      if (_pistasDesbloqueadas[tipo]
+                                          case final valor?)
+                                        Container(
+                                          margin: const EdgeInsets.only(
+                                            bottom: 8,
+                                          ),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 8,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.signalOrange
+                                                .withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            border: Border.all(
+                                              color: AppColors.signalOrange
+                                                  .withValues(alpha: 0.3),
                                             ),
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                              ],
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                tipo.icono,
+                                                size: 16,
+                                                color: AppColors.signalOrange,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  '${tipo.etiqueta}: $valor',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 13,
+                                                    letterSpacing:
+                                                        tipo ==
+                                                            TipoPista.iniciales
+                                                        ? 1.5
+                                                        : null,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                  ],
+                                ),
+                              ),
                             ),
-                          ),
+                            _panelRespuesta(),
+                          ],
                         ),
-                        _panelRespuesta(),
-                      ],
-                    ),
-                  ),
+                      ),
+              ),
+            ),
           ),
         ),
       ),

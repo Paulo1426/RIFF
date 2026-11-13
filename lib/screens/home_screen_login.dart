@@ -461,8 +461,8 @@ class _AjustesLoginState extends ConsumerState<_AjustesLogin> {
             child: ListTile(
               leading: Icon(
                 musica.silenciada
-                    ? Icons.music_note_rounded
-                    : Icons.music_off_rounded,
+                    ? PhosphorIconsFill.musicNotes
+                    : PhosphorIconsFill.speakerSlash,
               ),
               title: Text(
                 musica.silenciada ? 'Activar música' : 'Silenciar música',

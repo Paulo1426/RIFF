@@ -1,3 +1,4 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:async';
 import 'dart:math';
 import 'dart:io';
@@ -290,18 +291,18 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
       index < Genero.values.length
       ? (
           icon: switch (Genero.values[index]) {
-            Genero.vallenato => Icons.music_note_rounded,
-            Genero.reggaeton => Icons.headphones_rounded,
+            Genero.vallenato => PhosphorIconsFill.musicNotes,
+            Genero.reggaeton => PhosphorIconsFill.headphones,
             Genero.rockPop => Icons.electric_bolt_rounded,
             Genero.salsa => Icons.nightlife_rounded,
             Genero.popular => Icons.mic_external_on_rounded,
-            Genero.aleatorio => Icons.shuffle_rounded,
+            Genero.aleatorio => PhosphorIconsFill.shuffle,
           },
           label: Genero.values[index].nombre,
         )
       : index == _iProgreso
       ? (icon: Icons.insights_rounded, label: 'Progreso')
-      : (icon: Icons.emoji_events_rounded, label: 'Salas');
+      : (icon: PhosphorIconsFill.trophy, label: 'Salas');
 
   Color _color(int index) => index < Genero.values.length
       ? colorGenero(Genero.values[index])
@@ -519,7 +520,11 @@ Future<void> _avisoAuriculares(BuildContext context) async {
   await showDialog<void>(
     context: context,
     builder: (context) => LiquidGlassDialog(
-      icon: const Icon(Icons.headphones_rounded, size: 64, color: azulLogin),
+      icon: const Icon(
+        PhosphorIconsFill.headphones,
+        size: 64,
+        color: azulLogin,
+      ),
       title: const Text('Usa auriculares', textAlign: TextAlign.center),
       content: const Text(
         'Se recomienda usar cascos (audífonos o auriculares) para '
@@ -887,7 +892,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   Future<void> _avisarJuegoTerminado() => showDialog<void>(
     context: context,
     builder: (context) => LiquidGlassDialog(
-      icon: const Icon(Icons.workspace_premium_rounded, size: 56),
+      icon: const Icon(PhosphorIconsFill.trophy, size: 56),
       title: const Text('¡Juego completado!', textAlign: TextAlign.center),
       content: const Text(
         'Superaste las tres dificultades: Fácil, Media y Avanzada. '
@@ -908,7 +913,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     return showDialog<void>(
       context: context,
       builder: (context) => LiquidGlassDialog(
-        icon: const Icon(Icons.emoji_events_rounded, size: 48),
+        icon: const Icon(PhosphorIconsFill.trophy, size: 48),
         title: Text(
           '¡Dificultad ${_nombreDificultad(completada)} completada!',
           textAlign: TextAlign.center,
@@ -1064,8 +1069,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
               onTap: _cambiarPestana,
               items: const [
                 (icon: Icons.home_rounded, label: 'Menú'),
-                (icon: Icons.music_note_rounded, label: 'Canción'),
-                (icon: Icons.headphones_rounded, label: 'Intro'),
+                (icon: PhosphorIconsFill.musicNotes, label: 'Canción'),
+                (icon: PhosphorIconsFill.headphones, label: 'Intro'),
                 (icon: Icons.insights_rounded, label: 'Progreso'),
                 (icon: Icons.settings_rounded, label: 'Ajustes'),
               ],

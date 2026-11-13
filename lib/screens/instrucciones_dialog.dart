@@ -1,3 +1,4 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/material.dart';
 
 import '../models/instrumento.dart';
@@ -69,7 +70,7 @@ class InstruccionesDialog extends StatelessWidget {
                           _Paso(
                             numero: 2,
                             titulo: 'Los niveles',
-                            icono: Icons.queue_music_rounded,
+                            icono: PhosphorIconsFill.playlist,
                             children: [
                               const Text(
                                 'Cada nivel tiene 4 instrumentos con fragmentos de 30 segundos:',
@@ -137,18 +138,18 @@ class InstruccionesDialog extends StatelessWidget {
                               SizedBox(height: 8),
                               _Vineta(
                                 'Al descubrirla se habilitan los demás instrumentos y la mezcla sin voz.',
-                                icono: Icons.check_circle_rounded,
+                                icono: PhosphorIconsFill.checkCircle,
                               ),
                               _Vineta(
                                 'Si adivinas la canción, escuchas la grabación original.',
-                                icono: Icons.check_circle_rounded,
+                                icono: PhosphorIconsFill.checkCircle,
                               ),
                             ],
                           ),
                           const _Paso(
                             numero: 5,
                             titulo: 'Monedas y Adivina la intro',
-                            icono: Icons.headphones_rounded,
+                            icono: PhosphorIconsFill.headphones,
                             children: [
                               Text(
                                 'Cada nivel ganado por primera vez da monedas a su género:',
@@ -230,7 +231,7 @@ class InstruccionesDialog extends StatelessWidget {
                           const _Paso(
                             numero: 7,
                             titulo: 'Retos de las salas',
-                            icono: Icons.emoji_events_rounded,
+                            icono: PhosphorIconsFill.trophy,
                             children: [
                               _Vineta(
                                 'Contrarreloj ⏱️: 10 minutos, desde que todos están listos, para adivinar todas las canciones que puedas. Cada acierto da 100 puntos, hasta 50 más por rapidez y 1 por cada \$10.000 sin gastar. Puedes saltar una canción sin puntos.',

@@ -1,3 +1,4 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/pista.dart';
@@ -41,7 +42,7 @@ class PistasDialog extends StatelessWidget {
       title: Row(
         children: [
           const Icon(
-            Icons.lightbulb_rounded,
+            PhosphorIconsFill.lightbulb,
             color: AppColors.signalOrange,
             size: 28,
           ),

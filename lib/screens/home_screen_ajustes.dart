@@ -236,8 +236,8 @@ class _PestanaConfiguracionState extends ConsumerState<_PestanaConfiguracion> {
                 SwitchListTile(
                   secondary: Icon(
                     musica.silenciada
-                        ? Icons.music_off_rounded
-                        : Icons.music_note_rounded,
+                        ? PhosphorIconsFill.speakerSlash
+                        : PhosphorIconsFill.musicNotes,
                   ),
                   title: const Text('Música del menú'),
                   value: !musica.silenciada,

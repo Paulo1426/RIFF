@@ -1,3 +1,4 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:math';
 
 import 'package:confetti/confetti.dart';
@@ -137,7 +138,7 @@ class ReproductorCancion extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Icon(Icons.check_circle_rounded, color: color, size: 32),
+                  Icon(PhosphorIconsFill.checkCircle, color: color, size: 32),
                 ],
               ),
               const SizedBox(height: 12),
@@ -159,7 +160,7 @@ class ReproductorCancion extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          Icons.music_note_rounded,
+                          PhosphorIconsFill.musicNotes,
                           color: context.paleta.tonoTexto(color),
                           size: 18,
                         ),
@@ -230,7 +231,7 @@ class ReproductorCancion extends StatelessWidget {
                       tooltip: 'Desde el inicio',
                       iconSize: 34,
                       onPressed: onDesdeInicio,
-                      icon: const Icon(Icons.skip_previous_rounded),
+                      icon: const Icon(PhosphorIconsFill.skipBack),
                     ),
                     const SizedBox(width: 16),
                     IconButton.filled(
@@ -253,7 +254,7 @@ class ReproductorCancion extends StatelessWidget {
                       icon: Icon(
                         reproduciendo && !enPausa
                             ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
+                            : PhosphorIconsFill.play,
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -261,7 +262,7 @@ class ReproductorCancion extends StatelessWidget {
                       tooltip: 'Detener',
                       iconSize: 34,
                       onPressed: onDetener,
-                      icon: const Icon(Icons.stop_rounded),
+                      icon: const Icon(PhosphorIconsFill.stop),
                     ),
                   ],
                 ),

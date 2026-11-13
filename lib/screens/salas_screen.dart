@@ -1,3 +1,4 @@
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'dart:async';
 import 'dart:math';
 
@@ -1391,7 +1392,7 @@ class _SalaScreenState extends ConsumerState<SalaScreen> {
           const SizedBox(height: 12),
           LiquidGlassButton(
             onPressed: yaAdivine ? null : _jugar,
-            icon: Icons.music_note_rounded,
+            icon: PhosphorIconsFill.musicNotes,
             label: yaAdivine
                 ? 'Esperando a que los demás adivinen...'
                 : 'Jugar canción',
