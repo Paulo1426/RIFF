@@ -26,6 +26,7 @@ import '../widgets/liquid_glass/liquid_glass_card.dart';
 import '../widgets/recorrido.dart';
 import '../widgets/reproductor_cancion.dart';
 import '../widgets/monedas_genero.dart';
+import '../widgets/sin_conexion.dart';
 
 // Color de las intros del género que se está jugando.
 // Del color del género; solo Medley conserva el suyo.
@@ -311,24 +312,29 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
   }
 
   Widget _cuerpo(EstadoIntros? estado) => _error != null
-      ? Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  esErrorDeRed(_error!)
-                      ? 'Necesitas conexión a internet.'
-                      : '$_error',
-                  textAlign: TextAlign.center,
+      ? esErrorDeRed(_error!)
+            ? SinConexion(onReintentar: _cargar)
+            : Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        esErrorDeRed(_error!)
+                            ? 'Necesitas conexión a internet.'
+                            : '$_error',
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      LiquidGlassButton(
+                        onPressed: _cargar,
+                        label: 'Reintentar',
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 16),
-                LiquidGlassButton(onPressed: _cargar, label: 'Reintentar'),
-              ],
-            ),
-          ),
-        )
+              )
       : estado == null
       ? const Cargando(texto: 'Cargando intros...')
       : Column(

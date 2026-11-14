@@ -39,6 +39,7 @@ import 'informacion_dialog.dart';
 import 'instrucciones_dialog.dart';
 import '../widgets/puerta_terminos.dart';
 import '../widgets/recorrido.dart';
+import '../widgets/sin_conexion.dart';
 import 'intros_screen.dart';
 import 'salas_screen.dart';
 

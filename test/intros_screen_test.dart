@@ -67,7 +67,7 @@ void main() {
     );
     await tester.pump();
     await tester.pump();
-    expect(find.text('Necesitas conexión a internet.'), findsOneWidget);
+    expect(find.text('No hay conexión a internet'), findsOneWidget);
     expect(find.text('Reintentar'), findsOneWidget);
   });
 

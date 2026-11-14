@@ -994,21 +994,25 @@ class _ErrorPanel extends StatelessWidget {
   final VoidCallback onRetry;
 
   @override
-  Widget build(BuildContext context) => Center(
-    child: Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'Necesitas conexión a internet.\n'
-            'No se pudo cargar el progreso:\n$error',
-            textAlign: TextAlign.center,
+  Widget build(BuildContext context) => esErrorDeRed(error)
+      ? SinConexion(onReintentar: onRetry)
+      : Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'No se pudo cargar el progreso.',
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: onRetry,
+                  child: const Text('Reintentar'),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-          FilledButton(onPressed: onRetry, child: const Text('Reintentar')),
-        ],
-      ),
-    ),
-  );
+        );
 }

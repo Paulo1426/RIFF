@@ -16,7 +16,13 @@ import '../models/sala.dart';
 bool esErrorDeRed(Object error) =>
     error is SocketException ||
     error is http.ClientException ||
-    error is TimeoutException;
+    error is TimeoutException ||
+    // Firestore y Firebase Auth reportan la falta de red con su propio error.
+    RegExp(
+      r'unavailable|network-request-failed|failed host lookup|'
+      r'unable to resolve host|socketexception|clientexception',
+      caseSensitive: false,
+    ).hasMatch('$error');
 
 /// Texto para el jugador: pide conexión si el fallo fue de red.
 String textoDeFallo(String que, Object error) =>
