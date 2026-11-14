@@ -78,9 +78,6 @@ class _SalasPanelState extends ConsumerState<SalasPanel> {
   StreamSubscription<SaldoSalas>? _suscripcionFichas;
   StreamSubscription<List<SalaPublica>>? _suscripcionSalas;
   final _claveCarrusel = GlobalKey();
-  // Tipo de sala al frente del carrusel: sus salas abiertas van debajo.
-  // null con la tarjeta de Historial al frente.
-  TipoSala? _frente = TipoSala.values.first;
   // null mientras carga el historial.
   List<HistorialSala>? _historial;
   StreamSubscription<List<HistorialSala>>? _suscripcionHistorial;
@@ -153,148 +150,80 @@ class _SalasPanelState extends ConsumerState<SalasPanel> {
     }
   }
 
-  Future<void> _crear(TipoSala tipo) async {
-    final opciones = await showDialog<(ModoSala, bool, Genero, bool)>(
-      context: context,
-      builder: (_) => _DialogoCrearSala(tipo: tipo, fichas: _fichas),
-    );
-    if (opciones == null) return;
-    final (modo, publica, genero, aleatoria) = opciones;
-    await _ejecutar(
-      () => _repo.crearSala(
-        tipo: tipo,
-        modo: modo,
-        publica: publica,
-        genero: genero,
-        aleatoria: aleatoria,
-      ),
-    );
-  }
-
   Future<void> _unirse(String codigo) => _ejecutar(() async {
     await _repo.unirseSala(codigo);
     return codigo;
   });
 
-  Future<void> _unirseConCodigo() async {
-    final codigo = await showDialog<String>(
-      context: context,
-      builder: (_) => const _DialogoCodigo(),
+  /// Abre las opciones de la tarjeta tocada: crear sala o unirse con código.
+  Future<void> _abrirDetalle(TipoSala tipo) async {
+    final peticion = await Navigator.of(context).push<_Peticion>(
+      MaterialPageRoute(
+        builder: (_) => _DetalleSala(tipo: tipo, fichas: _fichas),
+      ),
     );
-    if (codigo != null) await _unirse(codigo);
+    if (peticion == null || !mounted) return;
+    switch (peticion) {
+      case _PeticionCrear():
+        await _ejecutar(
+          () => _repo.crearSala(
+            tipo: tipo,
+            modo: peticion.modo,
+            publica: peticion.publica,
+            genero: peticion.genero,
+            aleatoria: peticion.aleatoria,
+          ),
+        );
+      case _PeticionUnirse():
+        await _unirse(peticion.codigo);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
-    final frente = _frente;
-    final color = frente == null ? _colorSalas : _colorTipo(frente);
-    final publicas = _publicas?.where((sala) => sala.tipo == frente).toList();
     return ConCarga(
       cargando: _ocupado,
       texto: 'Entrando a la sala...',
-      child: Column(
-        children: [
-          Expanded(
-            flex: 5,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: CarruselGiratorio(
-                key: _claveCarrusel,
-                // Los dos tipos de sala y el historial: con tres, detrás
-                // asoma una a cada lado, como en el menú.
-                itemCount: TipoSala.values.length + 1,
-                // Como el menú principal: compactas y con las
-                // otras asomando detrás.
-                compacto: true,
-                proporcion: 1.2,
-                colorDe: (index) => index < TipoSala.values.length
-                    ? _colorTipo(TipoSala.values[index])
-                    : _colorSalas,
-                onCambio: (index) => setState(
-                  () => _frente = index < TipoSala.values.length
-                      ? TipoSala.values[index]
-                      : null,
-                ),
-                itemBuilder: (context, index, alFrente) {
-                  if (index >= TipoSala.values.length) {
-                    Widget tarjeta(bool alFrente) => _TarjetaHistorial(
-                      alFrente: alFrente,
-                      historial: _historial,
-                      onVerTodas: _verHistorial,
-                    );
-                    return ConReflejo(
-                      color: _colorSalas,
-                      tarjeta: _SobreFondo(child: tarjeta(alFrente)),
-                    );
-                  }
-                  final tipo = TipoSala.values[index];
-                  Widget tarjeta(bool alFrente) => _TarjetaTipoSala(
-                    tipo: tipo,
-                    alFrente: alFrente,
-                    onCrear: () => _crear(tipo),
-                    onUnirseConCodigo: _unirseConCodigo,
-                  );
-                  return ConReflejo(
-                    color: _colorTipo(tipo),
-                    tarjeta: _SobreFondo(child: tarjeta(alFrente)),
-                  );
-                },
-              ),
-            ),
-          ),
-          Expanded(
-            flex: 3,
-            child: ListView(
-              padding: _margenLista(context).copyWith(top: 4),
-              children: [
-                if (frente == null)
-                  Text(
-                    'Toca la tarjeta Historial para ver todas tus partidas.',
-                    textAlign: TextAlign.center,
-                    style: text.bodyMedium?.copyWith(
-                      color: context.paleta.tintaSuave,
-                    ),
-                  )
-                else ...[
-                  Text(
-                    'Salas abiertas · '
-                    '${frente == TipoSala.intros ? 'Adivina la intro' : 'Adivina la canción'}',
-                    style: text.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  if (publicas == null)
-                    const Center(child: CircularProgressIndicator())
-                  else if (publicas.isEmpty) ...[
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Icon(
-                        Icons.meeting_room_rounded,
-                        size: 56,
-                        color: color.withValues(alpha: 0.7),
-                      ),
-                    ),
-                    Text(
-                      'No hay salas abiertas ahora. ¡Crea una!',
-                      textAlign: TextAlign.center,
-                      style: text.bodyMedium?.copyWith(
-                        color: context.paleta.tintaSuave,
-                      ),
-                    ),
-                  ] else
-                    for (final sala in publicas)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: _TarjetaSalaPublica(
-                          sala: sala,
-                          onUnirse: () => _unirse(sala.codigo),
-                        ),
-                      ),
-                ],
-              ],
-            ),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: CarruselGiratorio(
+          key: _claveCarrusel,
+          // Los dos tipos de sala y el historial.
+          itemCount: TipoSala.values.length + 1,
+          // Tarjetas altas: cubren casi toda la pantalla y las otras asoman
+          // detrás.
+          compacto: true,
+          proporcion: 3,
+          anchoRelativo: 0.88,
+          colorDe: (index) => index < TipoSala.values.length
+              ? _colorTipo(TipoSala.values[index])
+              : _colorSalas,
+          itemBuilder: (context, index, alFrente) {
+            if (index >= TipoSala.values.length) {
+              Widget tarjeta(bool alFrente) => _TarjetaHistorial(
+                alFrente: alFrente,
+                historial: _historial,
+                onVerTodas: _verHistorial,
+              );
+              return ConReflejo(
+                color: _colorSalas,
+                tarjeta: _SobreFondo(child: tarjeta(alFrente)),
+              );
+            }
+            final tipo = TipoSala.values[index];
+            Widget tarjeta(bool alFrente) => _TarjetaTipoSala(
+              tipo: tipo,
+              alFrente: alFrente,
+              salas: _publicas?.where((sala) => sala.tipo == tipo).toList(),
+              onAbrir: () => _abrirDetalle(tipo),
+              onUnirse: _unirse,
+            );
+            return ConReflejo(
+              color: _colorTipo(tipo),
+              tarjeta: _SobreFondo(child: tarjeta(alFrente)),
+            );
+          },
+        ),
       ),
     );
   }
@@ -366,25 +295,30 @@ Color _colorTipo(TipoSala tipo) =>
     tipo == TipoSala.intros ? celesteLogin : _colorCancion;
 
 /// Tarjeta de un tipo de sala dentro del carrusel de la pestaña Salas:
-/// título, premios o precios y los botones para crear o unirse.
+/// título, premios y las salas abiertas. Al tocarla se elige crear sala o
+/// unirse con código.
 class _TarjetaTipoSala extends StatelessWidget {
   const _TarjetaTipoSala({
     required this.tipo,
     required this.alFrente,
-    required this.onCrear,
-    required this.onUnirseConCodigo,
+    required this.salas,
+    required this.onAbrir,
+    required this.onUnirse,
   });
 
   final TipoSala tipo;
   final bool alFrente;
-  final VoidCallback onCrear;
-  final VoidCallback onUnirseConCodigo;
+  // null mientras carga.
+  final List<SalaPublica>? salas;
+  final VoidCallback onAbrir;
+  final ValueChanged<String> onUnirse;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final intros = tipo == TipoSala.intros;
     final color = _colorTipo(tipo);
+    final salas = this.salas;
     return LiquidGlassCard(
       borderRadius: 28,
       // Como en el menú: lo bastante opaca para que no se vea la de atrás.
@@ -393,48 +327,87 @@ class _TarjetaTipoSala extends StatelessWidget {
       borderColor: alFrente ? color : null,
       // Las laterales solo se ven al girar: sin desenfoque, que es caro.
       blur: alFrente ? LiquidGlass.glassBlur : 0,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Center(
-          // Con letra grande o pantallas bajas se encoge en vez de desbordarse.
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: SizedBox(
-              width: 300,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    intros ? 'Adivina la intro' : 'Adivina la canción',
+      child: LiquidRippleEffect(
+        onTap: onAbrir,
+        borderRadius: BorderRadius.circular(28),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                intros ? '🎧 Adivina la intro' : '🥁 Adivina la canción',
+                textAlign: TextAlign.center,
+                style: text.headlineSmall?.copyWith(
+                  color: context.paleta.tonoTexto(color),
+                ),
+              ),
+              if (intros)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Crear 🎟️ $precioCrearSalaIntros · '
+                    'Entrar 🎟️ $precioEntrarSalaIntros',
                     textAlign: TextAlign.center,
-                    style: text.headlineSmall?.copyWith(
-                      color: context.paleta.tonoTexto(color),
+                    style: text.bodySmall?.copyWith(
+                      color: context.paleta.tintaSuave,
                     ),
                   ),
-                  if (!intros) ...[
-                    const SizedBox(height: 10),
-                    Center(child: _Premios(color: color)),
-                  ],
-                  const SizedBox(height: 16),
-                  LiquidGlassButton(
-                    color: azulLogin,
-                    onPressed: onCrear,
-                    icon: Icons.add_rounded,
-                    label: 'Crear sala',
-                    precio: intros ? '🎟️ $precioCrearSalaIntros' : null,
+                ),
+              const SizedBox(height: 10),
+              Center(child: _Premios(color: color)),
+              const SizedBox(height: 12),
+              Text('Salas abiertas', style: text.titleMedium),
+              const SizedBox(height: 6),
+              Expanded(
+                child: salas == null
+                    ? const Center(child: CircularProgressIndicator())
+                    : salas.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No hay salas abiertas ahora. ¡Crea una!',
+                          textAlign: TextAlign.center,
+                          style: text.bodyMedium?.copyWith(
+                            color: context.paleta.tintaSuave,
+                          ),
+                        ),
+                      )
+                    : ListView(
+                        padding: EdgeInsets.zero,
+                        children: [
+                          for (final sala in salas)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: _TarjetaSalaPublica(
+                                sala: sala,
+                                onUnirse: () => onUnirse(sala.codigo),
+                              ),
+                            ),
+                        ],
+                      ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.touch_app_rounded,
+                    size: 18,
+                    color: context.paleta.tintaSuave,
                   ),
-                  const SizedBox(height: 8),
-                  LiquidGlassButton(
-                    color: _colorUnirse,
-                    onPressed: onUnirseConCodigo,
-                    icon: Icons.qr_code_rounded,
-                    label: 'Unirse con código o QR',
-                    precio: intros ? '🎟️ $precioEntrarSalaIntros' : null,
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      'Toca para crear una sala o unirte con código',
+                      textAlign: TextAlign.center,
+                      style: text.labelMedium?.copyWith(
+                        color: context.paleta.tintaSuave,
+                      ),
+                    ),
                   ),
                 ],
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -699,15 +672,20 @@ class _Premios extends StatelessWidget {
   }
 }
 
-/// Pide el código de 6 caracteres o lo lee de un QR; devuelve el código.
-class _DialogoCodigo extends StatefulWidget {
-  const _DialogoCodigo();
+/// Código de 6 caracteres o lectura de un QR; devuelve el código por
+/// [onUnirse].
+class _FormularioCodigo extends StatefulWidget {
+  const _FormularioCodigo({required this.onUnirse, this.fichas});
+
+  final ValueChanged<String> onUnirse;
+  // Costo de entrar (salas de intros); null si es gratis.
+  final int? fichas;
 
   @override
-  State<_DialogoCodigo> createState() => _DialogoCodigoState();
+  State<_FormularioCodigo> createState() => _FormularioCodigoState();
 }
 
-class _DialogoCodigoState extends State<_DialogoCodigo> {
+class _FormularioCodigoState extends State<_FormularioCodigo> {
   final _codigo = TextEditingController();
   String? _error;
 
@@ -723,61 +701,71 @@ class _DialogoCodigoState extends State<_DialogoCodigo> {
       setState(() => _error = 'El código tiene 6 caracteres.');
       return;
     }
-    Navigator.of(context).pop(codigo);
+    widget.onUnirse(codigo);
   }
 
   Future<void> _escanear() async {
     final codigo = await Navigator.of(
       context,
     ).push<String>(MaterialPageRoute(builder: (_) => const _EscanerQr()));
-    if (codigo != null && mounted) Navigator.of(context).pop(codigo);
+    if (codigo != null && mounted) widget.onUnirse(codigo);
   }
 
   @override
-  Widget build(BuildContext context) => LiquidGlassDialog(
-    title: const Text('Unirse a una sala'),
-    content: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TextField(
-          controller: _codigo,
-          autofocus: true,
-          maxLength: 6,
-          textCapitalization: TextCapitalization.characters,
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9]')),
-            TextInputFormatter.withFunction(
-              (_, nuevo) => nuevo.copyWith(text: nuevo.text.toUpperCase()),
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      TextField(
+        controller: _codigo,
+        maxLength: 6,
+        textCapitalization: TextCapitalization.characters,
+        inputFormatters: [
+          FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9]')),
+          TextInputFormatter.withFunction(
+            (_, nuevo) => nuevo.copyWith(text: nuevo.text.toUpperCase()),
+          ),
+        ],
+        decoration: InputDecoration(
+          labelText: 'Código de invitación',
+          counterText: '',
+          errorText: _error,
+        ),
+        onSubmitted: (_) => _unirse(),
+      ),
+      const SizedBox(height: 12),
+      Row(
+        children: [
+          Expanded(
+            child: LiquidGlassButton(
+              color: _colorUnirse,
+              onPressed: _unirse,
+              icon: Icons.login_rounded,
+              label: 'Unirse',
+            ),
+          ),
+          if (widget.fichas case final fichas?) ...[
+            const SizedBox(width: 12),
+            Chip(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              avatar: const Text('🎟️', style: TextStyle(fontSize: 24)),
+              label: Text(
+                '$fichas fichas',
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
           ],
-          decoration: InputDecoration(
-            labelText: 'Código de invitación',
-            counterText: '',
-            errorText: _error,
-          ),
-          onSubmitted: (_) => _unirse(),
-        ),
-        const SizedBox(height: 8),
-        TextButton.icon(
-          onPressed: _escanear,
-          icon: const Icon(Icons.qr_code_scanner_rounded),
-          label: const Text('Escanear código QR'),
-        ),
-      ],
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.of(context).pop(),
-        child: const Text('Cancelar'),
+        ],
       ),
-      FilledButton(
-        style: FilledButton.styleFrom(
-          backgroundColor: _colorUnirse,
-          foregroundColor: AppColors.graphiteInk,
-        ),
-        onPressed: _unirse,
-        child: const Text('Unirse'),
+      const SizedBox(height: 8),
+      LiquidGlassButton(
+        variant: LiquidGlassButtonVariant.secondary,
+        onPressed: _escanear,
+        icon: Icons.qr_code_scanner_rounded,
+        label: 'Escanear código QR',
       ),
     ],
   );
@@ -873,17 +861,22 @@ class _TarjetaSalaPublica extends StatelessWidget {
   }
 }
 
-class _DialogoCrearSala extends StatefulWidget {
-  const _DialogoCrearSala({required this.tipo, required this.fichas});
+class _FormularioCrearSala extends StatefulWidget {
+  const _FormularioCrearSala({
+    required this.tipo,
+    required this.fichas,
+    required this.onCrear,
+  });
 
   final TipoSala tipo;
   final int fichas;
+  final ValueChanged<_PeticionCrear> onCrear;
 
   @override
-  State<_DialogoCrearSala> createState() => _DialogoCrearSalaState();
+  State<_FormularioCrearSala> createState() => _FormularioCrearSalaState();
 }
 
-class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
+class _FormularioCrearSalaState extends State<_FormularioCrearSala> {
   var _modo = ModoSala.contrarreloj;
   var _publica = true;
   // null = aleatorio entre los géneros disponibles.
@@ -899,144 +892,253 @@ class _DialogoCrearSalaState extends State<_DialogoCrearSala> {
       padding: const EdgeInsets.only(top: 16, bottom: 8),
       child: Text(texto, style: text.titleMedium),
     );
-    return LiquidGlassDialog(
-      child: ConstrainedBox(
-        // Desplazable en teléfonos bajos o con letra grande.
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        titulo('Elige el género'),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          children: [
+            for (final genero in Genero.reales.where((g) => g.disponible))
+              ChoiceChip(
+                label: Text(genero.nombre),
+                selected: _genero == genero,
+                selectedColor: colorGenero(genero).withValues(alpha: 0.3),
+                onSelected: (_) => setState(() => _genero = genero),
+              ),
+            ChoiceChip(
+              label: const Text('🎲 Aleatorio'),
+              selected: _genero == null,
+              selectedColor: colorAleatorio.withValues(alpha: 0.3),
+              onSelected: (_) => setState(() => _genero = null),
+            ),
+          ],
         ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                '🏆',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 40),
+        titulo('Elige el reto'),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _Opcion(
+                emoji: '⏱️',
+                titulo: 'Contrarreloj',
+                color: acento,
+                elegida: _modo == ModoSala.contrarreloj,
+                onTap: () => setState(() => _modo = ModoSala.contrarreloj),
               ),
-              Text(
-                intros ? 'Nueva sala de intros' : 'Nueva sala',
-                textAlign: TextAlign.center,
-                style: text.headlineMedium,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _Opcion(
+                emoji: '🥊',
+                titulo: 'Eliminación',
+                color: acento,
+                elegida: _modo == ModoSala.eliminacion,
+                onTap: () => setState(() => _modo = ModoSala.eliminacion),
               ),
-              Text(
-                'Hasta 10 jugadores · canciones de todas las dificultades',
-                textAlign: TextAlign.center,
-                style: text.bodySmall?.copyWith(
-                  color: context.paleta.tintaSuave,
-                ),
+            ),
+          ],
+        ),
+        if (sinFichas)
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Text(
+              'Te faltan fichas: gana en salas de Adivina la canción para '
+              'jugar intros con tus amigos.',
+              textAlign: TextAlign.center,
+              style: text.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.error,
               ),
-              titulo('Elige el género'),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                alignment: WrapAlignment.center,
-                children: [
-                  for (final genero in Genero.reales.where((g) => g.disponible))
-                    ChoiceChip(
-                      label: Text(genero.nombre),
-                      selected: _genero == genero,
-                      selectedColor: colorGenero(genero).withValues(alpha: 0.3),
-                      onSelected: (_) => setState(() => _genero = genero),
-                    ),
-                  ChoiceChip(
-                    label: const Text('🎲 Aleatorio'),
-                    selected: _genero == null,
-                    selectedColor: colorAleatorio.withValues(alpha: 0.3),
-                    onSelected: (_) => setState(() => _genero = null),
-                  ),
-                ],
+            ),
+          ),
+        titulo('¿Quién puede entrar?'),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _Opcion(
+                emoji: '🌍',
+                titulo: 'Pública',
+                color: acento,
+                elegida: _publica,
+                onTap: () => setState(() => _publica = true),
               ),
-              titulo('Elige el reto'),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: _Opcion(
-                      emoji: '⏱️',
-                      titulo: 'Contrarreloj',
-                      detalle: '10 minutos. Gana quien sume más puntos.',
-                      color: acento,
-                      elegida: _modo == ModoSala.contrarreloj,
-                      onTap: () =>
-                          setState(() => _modo = ModoSala.contrarreloj),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _Opcion(
-                      emoji: '🥊',
-                      titulo: 'Eliminación',
-                      detalle: 'Sin tiempo. Sale el último en adivinar.',
-                      color: acento,
-                      elegida: _modo == ModoSala.eliminacion,
-                      onTap: () => setState(() => _modo = ModoSala.eliminacion),
-                    ),
-                  ),
-                ],
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _Opcion(
+                emoji: '🔒',
+                titulo: 'Cerrada',
+                color: acento,
+                elegida: !_publica,
+                onTap: () => setState(() => _publica = false),
               ),
-              if (sinFichas)
-                Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: Text(
-                    'Te faltan fichas: gana en salas de Adivina la canción para '
-                    'jugar intros con tus amigos.',
-                    textAlign: TextAlign.center,
-                    style: text.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  ),
-                ),
-              titulo('¿Quién puede entrar?'),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: _Opcion(
-                      emoji: '🌍',
-                      titulo: 'Pública',
-                      detalle: 'Aparece en salas abiertas.',
-                      color: acento,
-                      elegida: _publica,
-                      onTap: () => setState(() => _publica = true),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _Opcion(
-                      emoji: '🔒',
-                      titulo: 'Cerrada',
-                      detalle: 'Solo con código o QR.',
-                      color: acento,
-                      elegida: !_publica,
-                      onTap: () => setState(() => _publica = false),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              LiquidGlassButton(
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            Expanded(
+              child: LiquidGlassButton(
                 color: azulLogin,
                 onPressed: sinFichas
                     ? null
-                    : () => Navigator.of(context).pop((
-                        _modo,
-                        _publica,
-                        // Aleatorio: canciones al azar de los cinco géneros.
-                        _genero ?? Genero.aleatorio,
-                        _genero == null,
-                      )),
+                    : () => widget.onCrear(
+                        _PeticionCrear(
+                          _modo,
+                          _publica,
+                          // Aleatorio: canciones al azar de los cinco géneros.
+                          _genero ?? Genero.aleatorio,
+                          _genero == null,
+                        ),
+                      ),
                 icon: Icons.add_rounded,
                 label: 'Crear sala',
-                precio: intros ? '🎟️ $precioCrearSalaIntros' : null,
               ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancelar'),
+            ),
+            if (intros) ...[
+              const SizedBox(width: 12),
+              // Las fichas, junto al botón que las gasta.
+              Chip(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                avatar: const Text('🎟️', style: TextStyle(fontSize: 24)),
+                label: Text(
+                  '${widget.fichas} fichas',
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
             ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+sealed class _Peticion {
+  const _Peticion();
+}
+
+class _PeticionCrear extends _Peticion {
+  const _PeticionCrear(this.modo, this.publica, this.genero, this.aleatoria);
+
+  final ModoSala modo;
+  final bool publica;
+  final Genero genero;
+  final bool aleatoria;
+}
+
+class _PeticionUnirse extends _Peticion {
+  const _PeticionUnirse(this.codigo);
+
+  final String codigo;
+}
+
+/// Pantalla de una tarjeta de salas: por defecto el formulario para crear
+/// sala; "Unirme con código" lo cambia por el cuadro del código y el escáner.
+class _DetalleSala extends StatefulWidget {
+  const _DetalleSala({required this.tipo, required this.fichas});
+
+  final TipoSala tipo;
+  final int fichas;
+
+  @override
+  State<_DetalleSala> createState() => _DetalleSalaState();
+}
+
+class _DetalleSalaState extends State<_DetalleSala> {
+  var _unirse = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Theme.of(context).textTheme;
+    final intros = widget.tipo == TipoSala.intros;
+    final color = _colorTipo(widget.tipo);
+    return LiquidBackground(
+      acento: color,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: LiquidGlassAppBar(
+          title: Text(intros ? 'Adivina la intro' : 'Adivina la canción'),
+        ),
+        // Se encoge para caber en la pantalla sin desplazarse.
+        body: Padding(
+          padding: _margenLista(context),
+          child: LayoutBuilder(
+            builder: (context, caja) => FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                width: caja.maxWidth,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: LiquidGlassButton(
+                            color: _unirse ? _colorUnirse : azulLogin,
+                            onPressed: () => setState(() => _unirse = false),
+                            icon: Icons.add_rounded,
+                            label: 'Crear sala',
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: LiquidGlassButton(
+                            color: _unirse ? azulLogin : _colorUnirse,
+                            onPressed: () => setState(() => _unirse = true),
+                            icon: Icons.qr_code_rounded,
+                            label: 'Unirme con código',
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    if (_unirse) ...[
+                      Text(
+                        'Unirse a una sala',
+                        textAlign: TextAlign.center,
+                        style: text.headlineSmall,
+                      ),
+                      const SizedBox(height: 12),
+                      _FormularioCodigo(
+                        fichas: intros ? precioEntrarSalaIntros : null,
+                        onUnirse: (codigo) =>
+                            Navigator.of(context).pop(_PeticionUnirse(codigo)),
+                      ),
+                    ] else ...[
+                      Text(
+                        intros ? 'Nueva sala de intros' : 'Nueva sala',
+                        textAlign: TextAlign.center,
+                        style: text.headlineSmall,
+                      ),
+                      Text(
+                        'Hasta 10 jugadores · canciones de todas las dificultades',
+                        textAlign: TextAlign.center,
+                        style: text.bodySmall?.copyWith(
+                          color: context.paleta.tintaSuave,
+                        ),
+                      ),
+                      _FormularioCrearSala(
+                        tipo: widget.tipo,
+                        fichas: widget.fichas,
+                        onCrear: (peticion) =>
+                            Navigator.of(context).pop(peticion),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -1050,7 +1152,6 @@ class _Opcion extends StatelessWidget {
   const _Opcion({
     required this.emoji,
     required this.titulo,
-    required this.detalle,
     required this.color,
     required this.elegida,
     required this.onTap,
@@ -1058,7 +1159,6 @@ class _Opcion extends StatelessWidget {
 
   final String emoji;
   final String titulo;
-  final String detalle;
   final Color color;
   final bool elegida;
   final VoidCallback onTap;
@@ -1091,14 +1191,6 @@ class _Opcion extends StatelessWidget {
                     titulo,
                     style: text.titleSmall?.copyWith(
                       color: elegida ? context.paleta.tonoTexto(color) : null,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    detalle,
-                    textAlign: TextAlign.center,
-                    style: text.bodySmall?.copyWith(
-                      color: context.paleta.tintaSuave,
                     ),
                   ),
                 ],

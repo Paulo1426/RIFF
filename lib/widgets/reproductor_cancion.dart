@@ -224,47 +224,62 @@ class ReproductorCancion extends StatelessWidget {
                   },
                 ),
                 const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    IconButton(
-                      tooltip: 'Desde el inicio',
-                      iconSize: 34,
-                      onPressed: onDesdeInicio,
-                      icon: const Icon(PhosphorIconsFill.skipBack),
-                    ),
-                    const SizedBox(width: 16),
-                    IconButton.filled(
-                      tooltip: reproduciendo && !enPausa
-                          ? 'Pausar'
-                          : 'Reproducir',
-                      iconSize: 44,
-                      style: IconButton.styleFrom(
-                        backgroundColor: color,
-                        // Ícono oscuro sobre colores claros (amarillo, verde).
-                        foregroundColor:
-                            ThemeData.estimateBrightnessForColor(color) ==
-                                Brightness.light
-                            ? AppColors.graphiteInk
-                            : AppColors.paperWhite,
-                        shape: const CircleBorder(),
-                        padding: const EdgeInsets.all(14),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _conNombre(
+                        context,
+                        'Inicio',
+                        IconButton(
+                          tooltip: 'Desde el inicio',
+                          iconSize: 34,
+                          onPressed: onDesdeInicio,
+                          icon: const Icon(PhosphorIconsFill.skipBack),
+                        ),
                       ),
-                      onPressed: onReproducirPausar,
-                      icon: Icon(
-                        reproduciendo && !enPausa
-                            ? Icons.pause_rounded
-                            : PhosphorIconsFill.play,
+                      const SizedBox(width: 16),
+                      _conNombre(
+                        context,
+                        reproduciendo && !enPausa ? 'Pausa' : 'Reproducir',
+                        IconButton.filled(
+                          tooltip: reproduciendo && !enPausa
+                              ? 'Pausar'
+                              : 'Reproducir',
+                          iconSize: 44,
+                          style: IconButton.styleFrom(
+                            backgroundColor: color,
+                            // Ícono oscuro sobre colores claros (amarillo, verde).
+                            foregroundColor:
+                                ThemeData.estimateBrightnessForColor(color) ==
+                                    Brightness.light
+                                ? AppColors.graphiteInk
+                                : AppColors.paperWhite,
+                            shape: const CircleBorder(),
+                            padding: const EdgeInsets.all(14),
+                          ),
+                          onPressed: onReproducirPausar,
+                          icon: Icon(
+                            reproduciendo && !enPausa
+                                ? Icons.pause_rounded
+                                : PhosphorIconsFill.play,
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    IconButton(
-                      tooltip: 'Detener',
-                      iconSize: 34,
-                      onPressed: onDetener,
-                      icon: const Icon(PhosphorIconsFill.stop),
-                    ),
-                  ],
+                      const SizedBox(width: 16),
+                      _conNombre(
+                        context,
+                        'Stop',
+                        IconButton(
+                          tooltip: 'Detener',
+                          iconSize: 34,
+                          onPressed: onDetener,
+                          icon: const Icon(PhosphorIconsFill.stop),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
               const SizedBox(height: 28),
@@ -299,6 +314,14 @@ class ReproductorCancion extends StatelessWidget {
     );
   }
 }
+
+Widget _conNombre(BuildContext context, String nombre, Widget boton) => Column(
+  mainAxisSize: MainAxisSize.min,
+  children: [
+    boton,
+    Text(nombre, style: Theme.of(context).textTheme.labelSmall),
+  ],
+);
 
 String _tiempo(Duration d) =>
     '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';

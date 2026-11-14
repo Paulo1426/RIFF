@@ -105,10 +105,10 @@ class AudioService {
               final inicioFundido = duracionClip - fundidoSalida;
               if (transcurrido < inicioFundido) return;
               final restante = duracionClip - transcurrido;
-              final volumen = (restante.inMilliseconds /
-                      fundidoSalida.inMilliseconds)
-                  .clamp(0.0, 1.0)
-                  .toDouble();
+              final volumen =
+                  (restante.inMilliseconds / fundidoSalida.inMilliseconds)
+                      .clamp(0.0, 1.0)
+                      .toDouble();
               unawaited(
                 player.setVolume(volumen).catchError((
                   Object error,
@@ -170,6 +170,28 @@ class AudioService {
     for (final player in _players) {
       unawaited(player.play());
     }
+  }
+
+  /// Baja el volumen de lo que suena hasta silencio y lo detiene; así un
+  /// instrumento nuevo no corta de golpe al actual.
+  Future<void> desvanecer({
+    Duration duracion = const Duration(milliseconds: 600),
+  }) async {
+    final players = List<AudioPlayer>.from(_players);
+    if (players.isEmpty) return;
+    const pasos = 10;
+    final espera = Duration(microseconds: duracion.inMicroseconds ~/ pasos);
+    for (var i = pasos - 1; i >= 0; i--) {
+      await Future.wait(
+        players.map((p) async {
+          try {
+            await p.setVolume(i / pasos);
+          } catch (_) {}
+        }),
+      );
+      await Future<void>.delayed(espera);
+    }
+    await detener();
   }
 
   Future<void> detener() async {

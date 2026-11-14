@@ -2020,7 +2020,7 @@ async function updateRoom<T>(
     if (campos?.estado === "terminada" && sala.fields.estado !== "terminada") {
       const final = { ...sala.fields, ...campos };
       const ranking = roomRanking(final);
-      const premios = final.tipo === "intros" ? {} : premiosSala(ranking);
+      const premios = premiosSala(ranking);
       const ganador = ranking.find((jugador) =>
         jugador.uid === final.ganadorUid
       );
@@ -2069,7 +2069,7 @@ async function updateRoom<T>(
           ),
         );
       }
-      if (final.tipo !== "intros") campos = { ...campos, premios };
+      campos = { ...campos, premios };
     }
     if (borrar) {
       writes.push({

@@ -148,11 +148,11 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   }
 
   Future<void> _buyAndPlay(Instrumento instrumento) async {
-    if (_buying || _playing || _won) return;
+    if (_buying || _won) return;
     HapticFeedback.selectionClick();
     if (_melodyFound || _purchased.contains(instrumento.id)) {
       try {
-        await _playStems([instrumento]);
+        await _cambiarA([instrumento]);
       } catch (error) {
         if (mounted) {
           setState(
@@ -190,7 +190,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       });
       if (descubierta) _celebrarMelodia();
       try {
-        await _playStems([instrumento]);
+        await _cambiarA([instrumento]);
       } catch (error) {
         if (!mounted) return;
         setState(
@@ -445,6 +445,19 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     );
   }
 
+  /// Si algo suena, lo apaga con un desvanecido y recién entonces arranca lo
+  /// nuevo.
+  Future<void> _cambiarA(List<Instrumento> instruments) async {
+    if (_playing) {
+      // Invalida la reproducción actual para que su cierre no apague el
+      // indicador de "sonando" mientras entra la siguiente.
+      final generacion = ++_playbackGeneration;
+      await _audioService.desvanecer();
+      if (!mounted || generacion != _playbackGeneration) return;
+    }
+    await _playStems(instruments);
+  }
+
   Future<void> _playPurchased() async {
     if (_playing || _buying) return;
     final instruments = widget.nivel.instrumentos
@@ -614,17 +627,17 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                 ],
               ),
             ),
-            IconButton.filled(
-              tooltip: _paused ? 'Reanudar' : 'Pausar',
+            _BotonConNombre(
+              nombre: _paused ? 'Reanudar' : 'Pausa',
+              filled: true,
               onPressed: _togglePause,
-              icon: Icon(
-                _paused ? PhosphorIconsFill.play : PhosphorIconsFill.pause,
-              ),
+              icon: _paused ? PhosphorIconsFill.play : PhosphorIconsFill.pause,
             ),
-            IconButton(
-              tooltip: 'Detener',
+            const SizedBox(width: 4),
+            _BotonConNombre(
+              nombre: 'Stop',
               onPressed: () => _audioService.detener(),
-              icon: const Icon(PhosphorIconsFill.stop),
+              icon: PhosphorIconsFill.stop,
             ),
           ],
         ),
@@ -889,7 +902,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   Widget _instrumentoTile(Instrumento instrumento) {
     final comprado = _purchased.contains(instrumento.id);
     final limite = !_melodyFound && !comprado && _purchased.length >= 3;
-    final disponible = !(_buying || _playing || _won || limite);
+    final disponible = !(_buying || _won || limite);
     final precio = _prices[instrumento.id];
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
@@ -1014,6 +1027,8 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         const SizedBox(height: 16),
         if (!_won)
           LiquidGlassButton(
+            // Del color del género, como el resto del nivel.
+            color: _colorGenero,
             onPressed: _sending ? null : _submitAnswer,
             label: 'Comprobar respuesta',
           ),
@@ -1307,5 +1322,35 @@ class _Premio extends StatelessWidget {
         ),
       ),
     ),
+  );
+}
+
+/// Botón redondo con su nombre debajo del ícono.
+class _BotonConNombre extends StatelessWidget {
+  const _BotonConNombre({
+    required this.nombre,
+    required this.icon,
+    required this.onPressed,
+    this.filled = false,
+  });
+
+  final String nombre;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      filled
+          ? IconButton.filled(
+              tooltip: nombre,
+              onPressed: onPressed,
+              icon: Icon(icon),
+            )
+          : IconButton(tooltip: nombre, onPressed: onPressed, icon: Icon(icon)),
+      Text(nombre, style: Theme.of(context).textTheme.labelSmall),
+    ],
   );
 }

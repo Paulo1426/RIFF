@@ -24,6 +24,7 @@ class LiquidGlassButton extends StatefulWidget {
     this.variant = LiquidGlassButtonVariant.primary,
     this.precio,
     this.color,
+    this.precioBlanco = false,
   });
 
   // null deshabilita el botón.
@@ -32,6 +33,8 @@ class LiquidGlassButton extends StatefulWidget {
   final IconData? icon;
   // Costo resaltado en una píldora al final del botón (p. ej. "🎟️ 10").
   final String? precio;
+  // El costo en un cuadro blanco, para que se vea mejor.
+  final bool precioBlanco;
   final LiquidGlassButtonVariant variant;
   // Si está, reemplaza el color de la variante.
   final Color? color;
@@ -148,10 +151,16 @@ class _LiquidGlassButtonState extends State<LiquidGlassButton> {
                             const SizedBox(width: 10),
                             DecoratedBox(
                               decoration: BoxDecoration(
-                                color: colorTexto.withValues(alpha: 0.18),
-                                borderRadius: BorderRadius.circular(99),
+                                color: widget.precioBlanco
+                                    ? Colors.white
+                                    : colorTexto.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(
+                                  widget.precioBlanco ? 10 : 99,
+                                ),
                                 border: Border.all(
-                                  color: colorTexto.withValues(alpha: 0.5),
+                                  color: widget.precioBlanco
+                                      ? Colors.white
+                                      : colorTexto.withValues(alpha: 0.5),
                                 ),
                               ),
                               child: Padding(
@@ -163,7 +172,9 @@ class _LiquidGlassButtonState extends State<LiquidGlassButton> {
                                   precio,
                                   style: Theme.of(context).textTheme.titleMedium
                                       ?.copyWith(
-                                        color: colorTexto,
+                                        color: widget.precioBlanco
+                                            ? AppColors.graphiteInk
+                                            : colorTexto,
                                         fontWeight: FontWeight.w800,
                                       ),
                                 ),

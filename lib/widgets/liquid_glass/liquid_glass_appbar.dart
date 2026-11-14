@@ -77,7 +77,17 @@ class _LiquidGlassAppBarState extends State<LiquidGlassAppBar> {
         child: AppBar(
           primary: false,
           backgroundColor: Colors.transparent,
-          title: widget.title,
+          // Los títulos de texto se achican en vez de cortarse.
+          title: switch (widget.title) {
+            final Text titulo => FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: widget.centerTitle == false
+                  ? Alignment.centerLeft
+                  : Alignment.center,
+              child: titulo,
+            ),
+            final otro => otro,
+          },
           leading: widget.leading,
           actions: widget.actions,
           centerTitle: widget.centerTitle,

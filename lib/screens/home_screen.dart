@@ -33,7 +33,6 @@ import '../widgets/liquid_glass/liquid_glass_bottom_nav.dart';
 import '../widgets/liquid_glass/liquid_glass_card.dart';
 import '../widgets/liquid_glass/liquid_glass_dialog.dart';
 import '../widgets/liquid_glass/liquid_level_card.dart';
-import '../widgets/monedas_genero.dart';
 import 'carrusel_dificultades.dart';
 import 'game_screen.dart';
 import 'informacion_dialog.dart';
@@ -144,10 +143,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       user: user,
                       genero: genero,
                       onCambiarGenero: () => setState(() {
-                        _volviendo = true;
-                        _genero = null;
-                      }),
-                      onReiniciarProgreso: () => setState(() {
                         _volviendo = true;
                         _genero = null;
                       }),
@@ -392,8 +387,9 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
       emoji: '🏆',
       animacion: _Animacion.saltar,
       titulo: 'Salas',
-      // Sin texto: el ícono y el nombre lo dicen; solo se explica el bloqueo.
-      detalle: invitado ? 'Crea una cuenta para jugar en salas.' : '',
+      detalle: invitado
+          ? 'Crea una cuenta para jugar en salas.'
+          : 'Desafía a tus amigos',
       grande: true,
       color: azulLogin,
       alFrente: alFrente,
@@ -557,7 +553,6 @@ class _AuthenticatedHome extends ConsumerStatefulWidget {
     required this.user,
     required this.genero,
     required this.onCambiarGenero,
-    required this.onReiniciarProgreso,
   });
 
   final User user;
@@ -565,8 +560,6 @@ class _AuthenticatedHome extends ConsumerStatefulWidget {
   final Genero genero;
   // Vuelve al selector de géneros.
   final VoidCallback onCambiarGenero;
-  // Se llama al reiniciar progreso para volver al selector de géneros.
-  final VoidCallback onReiniciarProgreso;
 
   @override
   ConsumerState<_AuthenticatedHome> createState() => _AuthenticatedHomeState();
@@ -612,8 +605,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       clave: _claveMenu,
       titulo: '🎮 Menú principal',
       texto:
-          'Desliza las tarjetas para elegir modo. Con el botón de arriba a '
-          'la derecha vuelves a los géneros y a las salas.',
+          'Desliza las tarjetas para elegir modo. Con "Inicio", arriba a la '
+          'derecha, vuelves a los géneros y a las salas.',
     ),
     PasoRecorrido(
       clave: _clavesPestanas[_pCancion],
@@ -636,9 +629,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     PasoRecorrido(
       clave: _clavesPestanas[_pAjustes],
       titulo: '⚙️ Ajustes',
-      texto:
-          'Instrucciones, música del menú, modo oscuro, '
-          'reiniciar el progreso y cerrar sesión.',
+      texto: 'Instrucciones, recorrido guiado, música del menú y modo oscuro.',
     ),
   ];
 
@@ -985,35 +976,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     }
   }
 
-  Future<void> _reiniciarProgreso() async {
-    final listo = await _reiniciarCuenta(
-      context,
-      ref,
-      alEmpezar: () {
-        if (mounted) {
-          setState(() {
-            _pestana = 0;
-            _loading = true;
-          });
-        }
-      },
-    );
-    if (!mounted) return;
-    if (listo) {
-      setState(() {
-        _resumenIntros = null;
-        _monedas = null;
-        _monedasPorGenero = const {};
-        _seleccionada = null;
-      });
-      widget.onReiniciarProgreso();
-    }
-    // También si falló a medias: se vuelve a cargar lo que haya.
-    if (_loading) await _cargar();
-  }
-
-  Future<void> _cerrarSesion() => _cerrarSesionDe(context, ref, widget.user);
-
   @override
   Widget build(BuildContext context) {
     final estado = _estado;
@@ -1021,7 +983,10 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     return Theme(
       data: temaGenero(context, widget.genero),
       child: LiquidBackground(
+        // Canción, Intro y Progreso van del color del género; solo Medley
+        // conserva los suyos.
         acento: switch (_pestana) {
+          _ when !widget.genero.esPopurri => colorGenero(widget.genero),
           _pCancion when estado != null => colorDificultad(
             _seleccionada ?? estado.dificultadActiva,
           ),
@@ -1057,18 +1022,28 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
                       icon: const Icon(Icons.arrow_back_rounded),
                       onPressed: _cerrarNiveles,
                     )
+                  : _pestana != 0
+                  ? IconButton(
+                      tooltip: 'Volver al menú del género',
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      onPressed: () => _cambiarPestana(0),
+                    )
                   : null,
               title: _tituloBarra(estado),
               actions: [..._accionesBarra(), const SizedBox(width: 8)],
             ),
+            // Sin "Menú": el carrusel de tarjetas aparece al entrar al género
+            // (y con atrás); la barra solo lleva a las secciones.
             bottomNavigationBar: LiquidGlassBottomNav(
-              colorMenu: paletaGenero(widget.genero).barraMenu,
-              colorSecciones: paletaGenero(widget.genero).barraSecciones,
-              claves: _clavesPestanas,
-              currentIndex: _pestana,
-              onTap: _cambiarPestana,
+              colores: List.filled(
+                4,
+                paletaGenero(widget.genero).barraSecciones,
+              ),
+              claves: _clavesPestanas.sublist(1),
+              // En el carrusel (pestaña 0) no hay ninguna marcada.
+              currentIndex: _pestana - 1,
+              onTap: (i) => _cambiarPestana(i + 1),
               items: const [
-                (icon: Icons.home_rounded, label: 'Menú'),
                 (icon: PhosphorIconsFill.musicNotes, label: 'Canción'),
                 (icon: PhosphorIconsFill.headphones, label: 'Intro'),
                 (icon: Icons.insights_rounded, label: 'Progreso'),
@@ -1086,13 +1061,10 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
                   saldo: _saldo.deGenero(widget.genero),
                   esInvitado: widget.user.isAnonymous,
                 ),
+                // Dentro de un género no hay reiniciar, eliminar ni cerrar sesión.
                 _pAjustes => _PestanaConfiguracion(
                   key: const ValueKey('configuracion'),
                   onRecorrido: _verRecorrido,
-                  onCerrarSesion: _cerrarSesion,
-                  onReiniciar: widget.user.isAnonymous
-                      ? null
-                      : _reiniciarProgreso,
                 ),
                 _ => _pestanaMenu(estado),
               },
@@ -1134,39 +1106,29 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
 
   /// Moneda del género en Intro y Progreso; fichas 🎟️ en Salas y Progreso.
   List<Widget> _accionesBarra() => [
-    // Desde el menú se vuelve a la selección de género (Ajustes está abajo).
-    if (_pestana == 0)
-      Tooltip(
-        message: 'Menú principal',
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: widget.onCambiarGenero,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.apps_rounded),
-                Text(
-                  'Inicio',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
-                ),
-              ],
-            ),
+    // Siempre a la vista: vuelve a la selección de género y a las salas.
+    Tooltip(
+      message: 'Menú principal',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: widget.onCambiarGenero,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.apps_rounded),
+              Text(
+                'Inicio',
+                style: Theme.of(
+                  context,
+                ).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ],
           ),
         ),
       ),
-    if ((_pestana == _pIntro || _pestana == _pProgreso) && _monedas != null)
-      Padding(
-        padding: const EdgeInsets.only(left: 6),
-        child: MonedasGenero(
-          genero: widget.genero,
-          saldo: _monedas!,
-          saldos: _monedasPorGenero,
-        ),
-      ),
+    ),
   ];
 
   void _cambiarPestana(int pestana) {

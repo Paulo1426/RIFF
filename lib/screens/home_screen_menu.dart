@@ -175,11 +175,15 @@ class _MenuPrincipal extends StatelessWidget {
   final VoidCallback onProgreso;
   final String? infoProgreso;
 
-  List<Color> get _colores => [
-    colorGenero(genero),
-    paletaGenero(genero).intro,
-    paletaGenero(genero).progreso,
-  ];
+  // Las tres tarjetas llevan el color del género; solo Medley conserva los
+  // suyos.
+  List<Color> get _colores => genero.esPopurri
+      ? [
+          colorGenero(genero),
+          paletaGenero(genero).intro,
+          paletaGenero(genero).progreso,
+        ]
+      : List.filled(3, colorGenero(genero));
 
   @override
   Widget build(BuildContext context) {
@@ -224,7 +228,7 @@ class _MenuPrincipal extends StatelessWidget {
         titulo: 'Adivina la intro',
         detalle: 'Escucha 30 segundos y adivina la canción.',
         info: infoIntros,
-        color: paletaGenero(genero).intro,
+        color: _colores[1],
         alFrente: alFrente,
         // Solo la del frente se mueve; las laterales, quietas.
         animar: animar && alFrente,
@@ -236,7 +240,7 @@ class _MenuPrincipal extends StatelessWidget {
         titulo: 'Progreso',
         detalle: 'Tus niveles, intros e insignias.',
         info: infoProgreso,
-        color: paletaGenero(genero).progreso,
+        color: _colores[2],
         alFrente: alFrente,
         // Solo la del frente se mueve; las laterales, quietas.
         animar: animar && alFrente,

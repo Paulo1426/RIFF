@@ -171,13 +171,14 @@ class _PestanaConfiguracion extends ConsumerStatefulWidget {
   const _PestanaConfiguracion({
     super.key,
     this.onRecorrido,
-    required this.onCerrarSesion,
+    this.onCerrarSesion,
     this.onReiniciar,
   });
 
   // null fuera de un género: el recorrido explica el menú del género.
   final VoidCallback? onRecorrido;
-  final VoidCallback onCerrarSesion;
+  // null dentro de un género: la cuenta se gestiona desde el menú principal.
+  final VoidCallback? onCerrarSesion;
   // null para invitados: su progreso ya se borra al salir.
   final VoidCallback? onReiniciar;
 
@@ -294,20 +295,21 @@ class _PestanaConfiguracionState extends ConsumerState<_PestanaConfiguracion> {
           ),
           const SizedBox(height: 16),
         ],
-        LiquidGlassCard(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: ListTile(
-            leading: Icon(
-              Icons.logout_rounded,
-              color: Theme.of(context).colorScheme.error,
+        if (widget.onCerrarSesion case final cerrarSesion?)
+          LiquidGlassCard(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: ListTile(
+              leading: Icon(
+                Icons.logout_rounded,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              title: Text(
+                'Cerrar sesión',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+              onTap: cerrarSesion,
             ),
-            title: Text(
-              'Cerrar sesión',
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-            onTap: widget.onCerrarSesion,
           ),
-        ),
       ],
     );
   }

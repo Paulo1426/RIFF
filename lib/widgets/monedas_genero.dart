@@ -8,17 +8,32 @@ class MonedasGenero extends StatelessWidget {
     required this.genero,
     required this.saldo,
     this.saldos = const {},
+    this.grande = false,
   });
 
   final Genero genero;
   final int saldo;
   final Map<String, int> saldos;
+  // Más grande y visible.
+  final bool grande;
 
-  Widget _chip() => Chip(
-    visualDensity: VisualDensity.compact,
-    avatar: Text(genero.simboloMoneda),
-    label: Text('$saldo'),
-  );
+  Widget _chip() => grande
+      ? Chip(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          avatar: Text(
+            genero.simboloMoneda,
+            style: const TextStyle(fontSize: 24),
+          ),
+          label: Text(
+            '$saldo',
+            style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
+          ),
+        )
+      : Chip(
+          visualDensity: VisualDensity.compact,
+          avatar: Text(genero.simboloMoneda),
+          label: Text('$saldo'),
+        );
 
   @override
   Widget build(BuildContext context) {

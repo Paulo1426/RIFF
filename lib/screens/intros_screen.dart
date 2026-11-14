@@ -28,7 +28,10 @@ import '../widgets/reproductor_cancion.dart';
 import '../widgets/monedas_genero.dart';
 
 // Color de las intros del género que se está jugando.
-Color get _colorIntros => paletaGenero(generoActivo).intro;
+// Del color del género; solo Medley conserva el suyo.
+Color get _colorIntros => generoActivo.esPopurri
+    ? paletaGenero(generoActivo).intro
+    : colorGenero(generoActivo);
 
 /// "Adivina la intro": cada moneda saca una carta con una intro al azar que
 /// el jugador aún no tiene; las obtenidas quedan en su colección.
@@ -36,7 +39,8 @@ class IntrosScreen extends ConsumerStatefulWidget {
   const IntrosScreen({super.key, this.embebida = false, this.onEstado});
 
   // Dentro de una pestaña del menú: sin barra ni fondo propios; el título y
-  // las monedas van en la barra del menú (avisadas con [onEstado]).
+  // las monedas van junto al botón de sacar carta (el menú las recibe con
+  // [onEstado]).
   final bool embebida;
   final ValueChanged<EstadoIntros>? onEstado;
 
@@ -50,6 +54,8 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
   Map<String, File> _portadas = const {};
   Object? _error;
   bool _sacando = false;
+  // Cada carta sacada reinicia el aviso "-1 moneda" sobre las monedas.
+  int _restas = 0;
   final _claveMonedas = GlobalKey();
   final _claveColeccion = GlobalKey();
   final _claveSacar = GlobalKey();
@@ -142,6 +148,7 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
         context: context,
         builder: (context) => _CartaRevelada(intro: nueva),
       );
+      if (mounted) setState(() => _restas++);
       if (jugar == true && mounted) await _abrir(nueva, reproducir: true);
     } catch (error) {
       if (mounted) {
@@ -160,15 +167,71 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        LiquidGlassButton(
-          key: _claveSacar,
-          onPressed: _sacando || !estado.puedeSacar || estado.restantes == 0
-              ? null
-              : _sacarCarta,
-          icon: Icons.style_rounded,
-          label: estado.restantes == 0
-              ? '¡Tienes todas las intros!'
-              : 'Sacar carta · 1 moneda',
+        LayoutBuilder(
+          builder: (context, caja) {
+            final boton = LiquidGlassButton(
+              key: _claveSacar,
+              onPressed: _sacando || !estado.puedeSacar || estado.restantes == 0
+                  ? null
+                  : _sacarCarta,
+              icon: Icons.style_rounded,
+              label: estado.restantes == 0
+                  ? '¡Tienes todas las intros!'
+                  : 'Sacar carta',
+              // La moneda en la píldora del botón, bien visible.
+              precio: estado.restantes == 0
+                  ? null
+                  : '1 ${generoActivo.simboloMoneda}',
+              precioBlanco: true,
+              // Del color del género donde está.
+              color: colorGenero(generoActivo),
+            );
+            // Las monedas del género, junto al botón que las gasta.
+            final monedas = KeyedSubtree(
+              key: _claveMonedas,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  MonedasGenero(
+                    grande: true,
+                    genero: generoActivo,
+                    saldo: estado.monedas,
+                    saldos: estado.monedasPorGenero,
+                  ),
+                  if (_restas > 0)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: IgnorePointer(
+                        child: _MenosUna(
+                          key: ValueKey(_restas),
+                          simbolo: generoActivo.simboloMoneda,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+            // Solo en pantallas muy angostas pasa encima del botón.
+            if (caja.maxWidth < 300) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Center(child: monedas),
+                  const SizedBox(height: 8),
+                  boton,
+                ],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: boton),
+                const SizedBox(width: 8),
+                monedas,
+              ],
+            );
+          },
         ),
         const SizedBox(height: 8),
         Text(
@@ -195,16 +258,6 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
             ? null
             : () => mostrarRecorrido(context, _pasos()),
       ),
-      if (estado != null)
-        Padding(
-          key: _claveMonedas,
-          padding: const EdgeInsets.only(right: 12),
-          child: MonedasGenero(
-            genero: generoActivo,
-            saldo: estado.monedas,
-            saldos: estado.monedasPorGenero,
-          ),
-        ),
     ];
     if (widget.embebida) return _cuerpo(estado);
     return LiquidBackground(
@@ -314,7 +367,7 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
             // pulgar.
             SafeArea(
               top: false,
-              minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              minimum: const EdgeInsets.fromLTRB(8, 8, 8, 16),
               child: _panelInferior(estado),
             ),
           ],
@@ -1140,6 +1193,8 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
             ],
             const SizedBox(height: 12),
             LiquidGlassButton(
+              // Del color del género.
+              color: colorGenero(generoActivo),
               onPressed: _sending ? null : _submitAnswer,
               label: 'Comprobar respuesta',
             ),
@@ -1191,7 +1246,10 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
                 children: [
                   Expanded(
                     child: LiquidGlassButton(
-                      variant: LiquidGlassButtonVariant.secondary,
+                      // Pausar naranja; Reanudar verde.
+                      variant: _paused
+                          ? LiquidGlassButtonVariant.secondary
+                          : LiquidGlassButtonVariant.primary,
                       onPressed: _togglePause,
                       icon: _paused
                           ? PhosphorIconsFill.play
@@ -1199,10 +1257,12 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
                       label: _paused ? 'Reanudar' : 'Pausar',
                     ),
                   ),
-                  IconButton(
-                    tooltip: 'Detener',
+                  const SizedBox(width: 8),
+                  LiquidGlassButton(
+                    color: const Color(0xFFD64545),
                     onPressed: () => _audioService.detener(),
-                    icon: const Icon(PhosphorIconsFill.stop),
+                    icon: PhosphorIconsFill.stop,
+                    label: 'Stop',
                   ),
                 ],
               )
@@ -1229,12 +1289,22 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => LiquidBackground(
+  // Tipografía y color del género (abre como pantalla aparte y no hereda el
+  // tema de su menú).
+  Widget build(BuildContext context) => Theme(
+    data: temaGenero(context, generoActivo),
+    child: Builder(builder: _pantalla),
+  );
+
+  Widget _pantalla(BuildContext context) => LiquidBackground(
     acento: _colorIntros,
     child: Scaffold(
       backgroundColor: Colors.transparent,
       appBar: LiquidGlassAppBar(
-        title: Text(_titulo0),
+        title: Text(
+          _titulo0,
+          style: TextStyle(color: context.paleta.tonoTexto(_colorIntros)),
+        ),
         actions: [
           if (!_won && _gratis != null && (_pista?.contains('') ?? true))
             IconButton(
@@ -1251,6 +1321,37 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
         ],
       ),
       body: SafeArea(top: false, child: _won ? _vistaGanada() : _vistaJuego()),
+    ),
+  );
+}
+
+/// "-1 🪙" que sube desde las monedas y se desvanece al gastar una.
+class _MenosUna extends StatelessWidget {
+  const _MenosUna({super.key, required this.simbolo});
+
+  final String simbolo;
+
+  @override
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+    tween: Tween(begin: 0, end: 1),
+    duration: const Duration(milliseconds: 1400),
+    curve: Curves.easeOut,
+    builder: (context, t, _) => Opacity(
+      opacity: (1 - t * t).clamp(0.0, 1.0),
+      child: Transform.translate(
+        offset: Offset(0, -8 - 44 * t),
+        child: Center(
+          child: Text(
+            '-1 $simbolo',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              color: Theme.of(context).colorScheme.error,
+              shadows: const [Shadow(blurRadius: 6, color: Colors.black45)],
+            ),
+          ),
+        ),
+      ),
     ),
   );
 }

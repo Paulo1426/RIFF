@@ -667,9 +667,12 @@ class _Saldo extends StatelessWidget {
       label: '$valor $nombre',
       excludeSemantics: true,
       child: Chip(
-        visualDensity: VisualDensity.compact,
-        avatar: Text(emoji),
-        label: Text('$valor'),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        avatar: Text(emoji, style: const TextStyle(fontSize: 22)),
+        label: Text(
+          '$valor',
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+        ),
       ),
     ),
   );
