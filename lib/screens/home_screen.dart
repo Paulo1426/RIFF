@@ -1118,7 +1118,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.apps_rounded),
+              const Icon(Icons.home_rounded, size: 28),
               Text(
                 'Inicio',
                 style: Theme.of(
