@@ -266,6 +266,7 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: LiquidGlassAppBar(
+          colorTitulo: _colorIntros,
           title: const Text('Adivina la intro'),
           actions: acciones,
         ),
@@ -997,7 +998,13 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancelar'),
           ),
-          TextButton(
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: colorGenero(genero),
+              foregroundColor: colorGenero(genero).computeLuminance() > 0.45
+                  ? AppColors.graphiteInk
+                  : AppColors.paperWhite,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Usar pista'),
           ),

@@ -46,9 +46,11 @@ class LiquidGlassBottomNav extends StatefulWidget {
 class _LiquidGlassBottomNavState extends State<LiquidGlassBottomNav> {
   // Rebote al llegar a la pestaña: se pasa un poco y vuelve.
   static const _salto = Cubic(0.68, -0.55, 0.27, 1.55);
-  Color _colorDe(int index) =>
-      widget.colores?[index] ??
-      (index == 0 ? widget.colorMenu : widget.colorSecciones);
+  // En oscuro, los colores muy apagados se aclaran para verse sobre el vidrio.
+  Color _colorDe(BuildContext context, int index) => context.paleta.legible(
+    widget.colores?[index] ??
+        (index == 0 ? widget.colorMenu : widget.colorSecciones),
+  );
 
   // Deformación en reposo: lenta, con el reloj compartido de 30 cuadros.
   final _reposo = CicloLento(periodo: const Duration(seconds: 4));
@@ -104,7 +106,7 @@ class _LiquidGlassBottomNavState extends State<LiquidGlassBottomNav> {
                         child: TweenAnimationBuilder<Color?>(
                           duration: const Duration(milliseconds: 400),
                           tween: ColorTween(
-                            end: _colorDe(hayActiva ? actual : 0),
+                            end: _colorDe(context, hayActiva ? actual : 0),
                           ),
                           builder: (context, color, _) => _gota(color!),
                         ),
@@ -170,7 +172,7 @@ class _LiquidGlassBottomNavState extends State<LiquidGlassBottomNav> {
     // Sobre la gota: blanco, u oscuro si la gota es clara (amarillos,
     // celestes), para que se lea. Fuera, el tono de la pestaña si tiene color
     // propio.
-    final gotaClara = _colorDe(i).computeLuminance() > 0.45;
+    final gotaClara = _colorDe(context, i).computeLuminance() > 0.45;
     final color = activa
         ? (gotaClara ? AppColors.graphiteInk : AppColors.paperWhite)
         : widget.colores == null

@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/terminos.dart';
 import '../screens/informacion_dialog.dart';
-import 'liquid_glass/liquid_background.dart';
 import 'liquid_glass/liquid_glass_button.dart';
 
 /// Pide aceptar los términos, una sola vez por cuenta, antes de mostrar
@@ -92,60 +91,76 @@ class _PuertaTerminosState extends State<PuertaTerminos> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (aceptados) return widget.child;
-    final text = Theme.of(context).textTheme;
-    return Scaffold(
-      body: LiquidBackground(
-        child: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
-                    child: Text(
-                      'Términos y condiciones',
-                      style: text.headlineMedium,
-                      textAlign: TextAlign.center,
+    // Fondo azul del login con texto blanco.
+    final tema = Theme.of(context);
+    final text = tema.textTheme.apply(
+      bodyColor: Colors.white,
+      displayColor: Colors.white,
+    );
+    return Theme(
+      data: tema.copyWith(
+        textTheme: text,
+        checkboxTheme: CheckboxThemeData(
+          side: const BorderSide(color: Colors.white, width: 2),
+          checkColor: const WidgetStatePropertyAll(Colors.white),
+        ),
+      ),
+      child: Scaffold(
+        backgroundColor: fondoTerminos,
+        body: Container(
+          color: fondoTerminos,
+          child: SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+                      child: Text(
+                        'Términos y condiciones',
+                        style: text.headlineMedium,
+                        textAlign: TextAlign.center,
+                      ),
                     ),
-                  ),
-                  const Expanded(
-                    child: SingleChildScrollView(
-                      padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
-                      child: TextoTerminos(),
+                    const Expanded(
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+                        child: TextoTerminos(),
+                      ),
                     ),
-                  ),
-                  CheckboxListTile(
-                    value: _leidos,
-                    onChanged: (valor) =>
-                        setState(() => _leidos = valor ?? false),
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: const Text(
-                      'He leído y acepto los términos y condiciones.',
+                    CheckboxListTile(
+                      value: _leidos,
+                      onChanged: (valor) =>
+                          setState(() => _leidos = valor ?? false),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: const Text(
+                        'He leído y acepto los términos y condiciones.',
+                      ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: LiquidGlassButton(
-                            onPressed: widget.onRechazar,
-                            label: 'No acepto',
-                            variant: LiquidGlassButtonVariant.secondary,
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: LiquidGlassButton(
+                              onPressed: widget.onRechazar,
+                              label: 'No acepto',
+                              variant: LiquidGlassButtonVariant.secondary,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: LiquidGlassButton(
-                            onPressed: _leidos ? _aceptar : null,
-                            label: 'Aceptar y continuar',
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: LiquidGlassButton(
+                              onPressed: _leidos ? _aceptar : null,
+                              label: 'Aceptar y continuar',
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

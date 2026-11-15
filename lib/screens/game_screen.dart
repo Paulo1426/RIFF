@@ -1065,6 +1065,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         child: Scaffold(
           backgroundColor: Colors.transparent,
           appBar: LiquidGlassAppBar(
+            colorTitulo: _colorGenero,
             title: Text(
               widget.titulo ??
                   'Nivel ${widget.numeroVisible ?? widget.nivel.numero}',

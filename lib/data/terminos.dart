@@ -3,6 +3,9 @@
 
 const versionTerminos = '1.0';
 const fechaTerminos = '6 de noviembre de 2026';
+const revisionTerminos = '12 de noviembre de 2026';
+const responsableTerminos = 'Joannes Gutierrez';
+const correoTerminos = 'jpaulogutierrez@unicesar.edu.co';
 
 const introTerminos = 'Lee con atención estos Términos y Condiciones de Uso (en adelante, los «Términos») antes de usar RIFF. Al marcar la casilla de aceptación y pulsar «Aceptar y continuar», declaras que los leíste, que los entiendes y que estás de acuerdo con ellos. Si no estás de acuerdo, pulsa «No acepto»: cerraremos tu sesión y no podrás usar la aplicación.';
 

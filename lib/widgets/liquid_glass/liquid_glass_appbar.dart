@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../theme.dart';
 import 'liquid_glass_card.dart';
 
 /// Barra superior flotante de vidrio: una píldora separada de los bordes que
@@ -14,6 +15,8 @@ class LiquidGlassAppBar extends StatefulWidget implements PreferredSizeWidget {
     this.actions,
     this.centerTitle,
     this.titleSpacing,
+    this.leadingWidth,
+    this.colorTitulo,
   });
 
   final Widget? title;
@@ -21,6 +24,9 @@ class LiquidGlassAppBar extends StatefulWidget implements PreferredSizeWidget {
   final List<Widget>? actions;
   final bool? centerTitle;
   final double? titleSpacing;
+  final double? leadingWidth;
+  // Color de acento del título (se aclara solo en oscuro para que se lea).
+  final Color? colorTitulo;
 
   // Margen alrededor de la píldora.
   static const _margen = 8.0;
@@ -84,11 +90,19 @@ class _LiquidGlassAppBarState extends State<LiquidGlassAppBar> {
               alignment: widget.centerTitle == false
                   ? Alignment.centerLeft
                   : Alignment.center,
-              child: titulo,
+              child: widget.colorTitulo == null
+                  ? titulo
+                  : DefaultTextStyle.merge(
+                      style: TextStyle(
+                        color: context.paleta.tonoTexto(widget.colorTitulo!),
+                      ),
+                      child: titulo,
+                    ),
             ),
             final otro => otro,
           },
           leading: widget.leading,
+          leadingWidth: widget.leadingWidth,
           actions: widget.actions,
           centerTitle: widget.centerTitle,
           titleSpacing: widget.titleSpacing,

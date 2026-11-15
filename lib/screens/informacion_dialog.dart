@@ -4,8 +4,13 @@ import '../data/creditos.dart';
 import '../data/terminos.dart';
 import '../theme.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
+import '../widgets/login_liquido.dart' show azulLogin;
 import '../widgets/liquid_glass/liquid_glass_button.dart';
 import '../widgets/liquid_glass/liquid_glass_card.dart';
+
+/// Fondo de los términos: el azul del login, un poco más claro para que el
+/// texto blanco se lea bien.
+final fondoTerminos = Color.lerp(azulLogin, Colors.white, 0.1)!;
 
 Future<void> mostrarInformacion(BuildContext context) => showDialog<void>(
   context: context,
@@ -98,7 +103,7 @@ class TextoTerminos extends StatelessWidget {
                   ? Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('•  '),
+                        Text('•  ', style: text.bodyMedium),
                         Expanded(
                           child: Text(
                             parrafo.substring(2),
@@ -107,7 +112,7 @@ class TextoTerminos extends StatelessWidget {
                         ),
                       ],
                     )
-                  : Text(parrafo, style: text.bodyMedium),
+                  : _conSubtitulo(parrafo, text.bodyMedium),
             ),
         ],
         const SizedBox(height: 28),
@@ -120,6 +125,27 @@ class TextoTerminos extends StatelessWidget {
       ],
     );
   }
+}
+
+/// "5.1. Modo Invitado: texto" lleva el subtítulo en negrita.
+Widget _conSubtitulo(String parrafo, TextStyle? estilo) {
+  final partes = RegExp(
+    r'^(\d+\.\d+\.\s[^:.]+[:.])\s(.*)$',
+    dotAll: true,
+  ).firstMatch(parrafo);
+  if (partes == null) return Text(parrafo, style: estilo);
+  return Text.rich(
+    TextSpan(
+      children: [
+        TextSpan(
+          text: '${partes[1]} ',
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        TextSpan(text: partes[2]),
+      ],
+    ),
+    style: estilo,
+  );
 }
 
 class _Creditos extends StatelessWidget {
@@ -158,7 +184,10 @@ class _Creditos extends StatelessWidget {
         Theme(
           data: tema,
           child: ExpansionTile(
-            title: Text('Música de fondo de los menús', style: text.titleMedium),
+            title: Text(
+              'Música de fondo de los menús',
+              style: text.titleMedium,
+            ),
             children: [
               for (final (grupo, pistas) in musicaMenuCreditos) ...[
                 Padding(

@@ -1066,6 +1066,7 @@ class _DetalleSalaState extends State<_DetalleSala> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: LiquidGlassAppBar(
+          colorTitulo: color,
           title: Text(intros ? 'Adivina la intro' : 'Adivina la canción'),
         ),
         // Se encoge para caber en la pantalla sin desplazarse.
@@ -1403,6 +1404,7 @@ class _SalaScreenState extends ConsumerState<SalaScreen> {
               icon: const Icon(Icons.arrow_back_rounded),
               onPressed: _salir,
             ),
+            colorTitulo: sala == null ? _colorSalas : _colorDe(sala.tipo),
             title: const Text('Sala'),
           ),
           body: ConCarga(

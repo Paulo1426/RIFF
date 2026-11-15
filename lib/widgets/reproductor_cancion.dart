@@ -120,18 +120,20 @@ class ReproductorCancion extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        // Si el título es largo, la letra se achica hasta que
+                        // quepa en dos líneas.
+                        _TextoAjustado(
                           titulo ?? 'Canción descubierta',
                           maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: text.headlineMedium,
+                          tamanoMinimo: 18,
+                          style: text.headlineMedium!,
                         ),
                         const SizedBox(height: 2),
-                        Text(
+                        _TextoAjustado(
                           artista ?? 'Artista desconocido',
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: text.bodyLarge?.copyWith(
+                          tamanoMinimo: 12,
+                          style: text.bodyLarge!.copyWith(
                             color: context.paleta.tintaSuave,
                           ),
                         ),
@@ -313,6 +315,53 @@ class ReproductorCancion extends StatelessWidget {
       },
     );
   }
+}
+
+/// Texto que baja su tamaño de letra, desde el de [style], hasta que cabe en
+/// [maxLines] líneas del ancho disponible (sin pasar de [tamanoMinimo]; si
+/// aún no cabe, se corta con puntos suspensivos).
+class _TextoAjustado extends StatelessWidget {
+  const _TextoAjustado(
+    this.texto, {
+    required this.style,
+    required this.maxLines,
+    required this.tamanoMinimo,
+  });
+
+  final String texto;
+  final TextStyle style;
+  final int maxLines;
+  final double tamanoMinimo;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, caja) {
+      final escala = MediaQuery.textScalerOf(context);
+      final direccion = Directionality.of(context);
+      var tamano = style.fontSize ?? 14;
+      bool cabe(double t) {
+        final medidor = TextPainter(
+          text: TextSpan(text: texto, style: style.copyWith(fontSize: t)),
+          textDirection: direccion,
+          textScaler: escala,
+          maxLines: maxLines,
+        )..layout(maxWidth: caja.maxWidth);
+        final ok = !medidor.didExceedMaxLines;
+        medidor.dispose();
+        return ok;
+      }
+
+      while (tamano > tamanoMinimo && !cabe(tamano)) {
+        tamano -= 1;
+      }
+      return Text(
+        texto,
+        maxLines: maxLines,
+        overflow: TextOverflow.ellipsis,
+        style: style.copyWith(fontSize: tamano),
+      );
+    },
+  );
 }
 
 Widget _conNombre(BuildContext context, String nombre, Widget boton) => Column(

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../animations/liquid_pulse.dart';
 import '../../animations/liquid_ripple_effect.dart';
 import '../../animations/liquid_shimmer.dart';
+import '../../models/genero.dart';
 import '../../theme.dart';
 import 'liquid_glass_button.dart';
 import 'liquid_glass_card.dart';
@@ -124,7 +125,12 @@ class _LiquidLevelCardState extends State<LiquidLevelCard> {
       EstadoNivel.disponible => SizedBox(
         height: 44,
         child: LiquidPulse(
-          child: LiquidGlassButton(onPressed: widget.onJugar, label: 'Jugar'),
+          child: LiquidGlassButton(
+            // Del color del género que se juega, no el de la dificultad.
+            color: context.paleta.legible(colorGenero(generoActivo)),
+            onPressed: widget.onJugar,
+            label: 'Jugar',
+          ),
         ),
       ),
       EstadoNivel.bloqueado => const _CandadoVidrio(),

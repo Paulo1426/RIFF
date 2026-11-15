@@ -317,7 +317,11 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
         acento: acento,
         child: Scaffold(
           backgroundColor: Colors.transparent,
-          appBar: LiquidGlassAppBar(title: Text(titulo), actions: acciones),
+          appBar: LiquidGlassAppBar(
+            title: Text(titulo),
+            colorTitulo: acento,
+            actions: acciones,
+          ),
           body: cuerpo,
         ),
       ),
@@ -424,20 +428,19 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: LiquidGlassAppBar(
-          centerTitle: false,
-          title: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Image.asset(
-                'lib/assets/images/logo/riff_logo.png',
-                height: 56,
-                cacheHeight: 192,
-                semanticLabel: 'RIFF',
-              ),
-              const SizedBox(width: 12),
-              Text('Inicio', style: text.headlineSmall),
-            ],
+          // El logo se queda a la izquierda y "Inicio" va al centro de la barra.
+          leadingWidth: 72,
+          leading: Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: Image.asset(
+              'lib/assets/images/logo/riff_logo.png',
+              height: 56,
+              cacheHeight: 192,
+              semanticLabel: 'RIFF',
+            ),
           ),
+          colorTitulo: azulLogin,
+          title: Text('Inicio', style: text.headlineMedium),
           actions: [
             IconButton(
               tooltip: 'Ajustes',
@@ -1016,7 +1019,10 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
           child: Scaffold(
             backgroundColor: Colors.transparent,
             appBar: LiquidGlassAppBar(
-              centerTitle: false,
+              // Título centrado y del color del género; el logo (menú) o el
+              // botón atrás se quedan a la izquierda.
+              colorTitulo: colorGenero(widget.genero),
+              leadingWidth: _pestana == 0 && !_nivelesAbiertos ? 72 : null,
               leading: _pestana == _pCancion && _nivelesAbiertos
                   ? IconButton(
                       tooltip: 'Volver a las dificultades',
@@ -1029,7 +1035,15 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
                       icon: const Icon(Icons.arrow_back_rounded),
                       onPressed: () => _cambiarPestana(0),
                     )
-                  : null,
+                  : Padding(
+                      padding: const EdgeInsets.only(left: 16),
+                      child: Image.asset(
+                        'lib/assets/images/logo/riff_logo.png',
+                        height: 56,
+                        cacheHeight: 192,
+                        semanticLabel: 'RIFF',
+                      ),
+                    ),
               title: _tituloBarra(estado),
               actions: [..._accionesBarra(), const SizedBox(width: 8)],
             ),
@@ -1083,26 +1097,8 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     _pIntro => const Text('Adivina la intro'),
     _pProgreso => const Text('Progreso'),
     _pAjustes => const Text('Ajustes'),
-    // El logo (ya dice RIFF) y el género, para saber dónde se está.
-    _ => Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Image.asset(
-          'lib/assets/images/logo/riff_logo.png',
-          height: 56,
-          cacheHeight: 192,
-          semanticLabel: 'RIFF',
-        ),
-        const SizedBox(width: 10),
-        // Nombres largos ("Rock / Pop") se achican en vez de cortarse.
-        Flexible(
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(widget.genero.nombre),
-          ),
-        ),
-      ],
-    ),
+    // El género, para saber dónde se está (el logo va a la izquierda).
+    _ => Text(widget.genero.nombre),
   };
 
   /// Moneda del género en Intro y Progreso; fichas 🎟️ en Salas y Progreso.

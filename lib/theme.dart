@@ -53,7 +53,7 @@ Color colorDificultad(Dificultad dificultad) => switch (dificultad) {
 Color colorGenero(Genero genero) => switch (genero) {
   Genero.vallenato => const Color(0xFFFF8C42),
   Genero.reggaeton => const Color(0xFF00827C),
-  Genero.rockPop => const Color(0xFF007FFF),
+  Genero.rockPop => const Color(0xFFA6D600),
   Genero.salsa => const Color(0xFF9B30FF),
   Genero.popular => const Color(0xFFD81B8F),
   Genero.aleatorio => colorAleatorio,
@@ -66,8 +66,8 @@ Color colorGenero(Genero genero) => switch (genero) {
 /// juguetones (mandarina, turquesa, azul cielo, amarillo sol y morado);
 /// reggaetón, abisal y bioluminiscente (verde azulado, alga profunda, aguamarina
 /// y lavanda);
-/// rock / pop, de cuento ilustrado (azul globo, cian cielo, amarillo sol y
-/// tinta carbón); salsa, casete de neón (violeta eléctrico sobre negro tinta y
+/// rock / pop, verde lima eléctrico (con amarillo sol y tinta carbón), que no
+/// se parece al azul del login ni al de otro género; salsa, casete de neón (violeta eléctrico sobre negro tinta y
 /// arena); popular, fucsia (rosa mexicano) con azul medianoche y gris
 /// niebla; Medley, turquesa con violeta, rosa y amarillo. Cada uno tiene la
 /// suya.
@@ -98,11 +98,11 @@ paletaGenero(Genero genero) => switch (genero) {
   ),
   Genero.rockPop => (
     progreso: const Color(0xFF333333),
-    intro: const Color(0xFF00C8FF),
+    intro: const Color(0xFF8DB600),
     mancha1: const Color(0xFFFFE600),
-    mancha2: const Color(0xFF007FFF),
-    barraMenu: const Color(0xFF007FFF),
-    barraSecciones: const Color(0xFF00C8FF),
+    mancha2: const Color(0xFFA6D600),
+    barraMenu: const Color(0xFFA6D600),
+    barraSecciones: const Color(0xFF7FA300),
   ),
   Genero.salsa => (
     progreso: const Color(0xFFD9D7CE),
@@ -218,7 +218,19 @@ class Paleta extends ThemeExtension<Paleta> {
   /// porque el amarillo de Medio no se lee sobre fondo claro; en oscuro casi
   /// no cambia porque los acentos ya contrastan.
   Color tonoTexto(Color acento) =>
-      Color.lerp(acento, tinta, oscuro ? 0.1 : 0.4)!;
+      oscuro ? legible(acento) : Color.lerp(acento, tinta, 0.4)!;
+
+  /// En oscuro aclara los colores muy apagados (negro tinta, verde azulado
+  /// profundo, azul medianoche) hasta que se vean sobre el fondo; en claro
+  /// los deja igual.
+  Color legible(Color c) {
+    if (!oscuro) return c;
+    var r = c;
+    for (var i = 0; i < 10 && r.computeLuminance() < 0.22; i++) {
+      r = Color.lerp(r, tinta, 0.12)!;
+    }
+    return r;
+  }
 
   @override
   Paleta copyWith() => this;
