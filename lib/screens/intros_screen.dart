@@ -664,6 +664,7 @@ class _CartaReveladaState extends State<_CartaRevelada>
             ),
           ),
           child: LiquidGlassButton(
+            color: colorGenero(generoActivo),
             onPressed: () => Navigator.of(context).pop(true),
             icon: PhosphorIconsFill.play,
             label: '¡Jugar ahora!',

@@ -44,6 +44,10 @@ void main() {
         ),
       );
       await tester.pump();
+      // El botón de comprobar solo aparece al escribir una respuesta.
+      expect(find.text('Comprobar respuesta'), findsNothing);
+      await tester.enterText(find.byType(TextField), 'abc');
+      await tester.pump(const Duration(milliseconds: 300));
       // Recorre toda la pantalla: un desborde de layout se reporta como
       // excepción y hace fallar el test.
       await tester.scrollUntilVisible(

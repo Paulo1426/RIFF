@@ -73,13 +73,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   String _nowPlaying = '';
   // Instrumentos sonando; vacío cuando suena la canción completa.
   List<Instrumento> _nowPlayingInstruments = const [];
-  int _descuento = 0;
-  int _descuentoId = 0;
   String? _message;
   bool? _correct;
-  int _balance = Nivel.presupuestoTotal;
   final Set<String> _purchased = {};
-  final Map<String, int> _prices = {};
   bool _melodyFound = false;
   bool _won = false;
   // Lo ganado al acertar; se muestra en la barra de arriba.
@@ -111,8 +107,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     // La música del menú se pausa mientras se juega y vuelve al salir.
     _musicaMenu = ref.read(musicaMenuProvider)..entrarNivel();
     _purchased.addAll(widget.comprasPrevias.keys);
-    _prices.addAll(widget.comprasPrevias);
-    _balance -= widget.comprasPrevias.values.fold(0, (a, b) => a + b);
     _melodyFound = widget.melodiaDescubierta;
     unawaited(_cargarMonedas());
   }
@@ -177,10 +171,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       if (!mounted) return;
       final descubierta = result.melodiaDescubierta && !_melodyFound;
       setState(() {
-        if (result.compraRealizada) {
-          _prices[instrumento.id] = result.precioInstrumento;
-        }
-        _setBalance(result.presupuestoRestante);
         _purchased
           ..clear()
           ..addAll(result.instrumentosComprados);
@@ -310,17 +300,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     );
   }
 
-  // Llamar dentro de setState: guarda el descuento para animarlo.
-  void _setBalance(int nuevo) {
-    if (nuevo < _balance) {
-      _descuento = _balance - nuevo;
-      _descuentoId++;
-    }
-    _balance = nuevo;
-  }
-
-  /// Dos bloques: presupuesto restante (con barra de lo que queda) y
-  /// instrumentos comprados de los 3 posibles (con un punto por compra).
+  /// Instrumentos comprados de los 3 posibles (con un punto por compra).
   Widget _presupuesto() {
     final text = Theme.of(context).textTheme;
     final color = _colorGenero;
@@ -334,35 +314,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
-          flex: 3,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('PRESUPUESTO', style: etiqueta),
-              _monto(text),
-              const SizedBox(height: 6),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(99),
-                child: LinearProgressIndicator(
-                  value: _balance / Nivel.presupuestoTotal,
-                  minHeight: 6,
-                  color: color,
-                  backgroundColor: color.withValues(alpha: 0.2),
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'de \$${formatearMiles(Nivel.presupuestoTotal)}',
-                style: text.bodySmall?.copyWith(
-                  color: context.paleta.tintaSuave,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          flex: 2,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -401,47 +352,16 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             ],
           ),
         ),
-      ],
-    );
-  }
-
-  /// Monto restante animado y, al comprar, el descuento que sube y se borra.
-  Widget _monto(TextTheme text) {
-    // Wrap: en pantallas angostas el descuento baja de línea.
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.end,
-      spacing: 8,
-      children: [
-        TweenAnimationBuilder<int>(
-          tween: IntTween(end: _balance),
-          duration: const Duration(milliseconds: 900),
-          curve: Curves.easeOutCubic,
-          builder: (context, value, _) => FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text('\$${formatearMiles(value)}', style: text.titleLarge),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Text(
+            widget.nivel.modoPrueba
+                ? 'Modo de prueba: ${widget.nivel.duracionFragmentoSegundos} segundos por escucha.'
+                : 'Selecciona un instrumento para escuchar un fragmento y adivina la canción.',
+            textAlign: TextAlign.end,
+            style: text.titleSmall,
           ),
         ),
-        if (_descuentoId > 0)
-          // La clave reinicia la animación en cada compra.
-          TweenAnimationBuilder<double>(
-            key: ValueKey(_descuentoId),
-            tween: Tween(begin: 0, end: 1),
-            duration: const Duration(milliseconds: 1400),
-            curve: Curves.easeOut,
-            builder: (context, t, child) => Opacity(
-              opacity: 1 - t,
-              child: Transform.translate(
-                offset: Offset(0, -18 * t),
-                child: child,
-              ),
-            ),
-            child: Text(
-              '-\$${formatearMiles(_descuento)}',
-              style: text.titleSmall?.copyWith(
-                color: Theme.of(context).colorScheme.error,
-              ),
-            ),
-          ),
       ],
     );
   }
@@ -901,15 +821,16 @@ class _GameScreenState extends ConsumerState<GameScreen> {
 
   /// Alto de cada casilla de instrumento: lo que deja libre el resto del
   /// nivel, repartido en 2 filas, para que todo quepa sin desplazar.
-  /// shortcut: el alto del resto es una estimación (texto ~360 px más los
+  /// shortcut: el alto del resto es una estimación (texto ~280 px más los
   /// botones visibles); si el diseño cambia mucho, medirlo de verdad.
   double _altoCasilla(double altoDisponible) {
     final escala = MediaQuery.textScalerOf(context).scale(1);
     final extras =
         (_purchased.isNotEmpty || _melodyFound ? 60 : 0) +
         (_playing ? 72 : 0) +
-        (_message != null ? 48 : 0);
-    final libre = altoDisponible - 360 * escala - extras - 12;
+        (_message != null ? 48 : 0) +
+        _pistasDesbloqueadas.length * 46;
+    final libre = altoDisponible - 280 * escala - extras - 12;
     return (libre / 2).clamp(84.0, 150.0);
   }
 
@@ -917,7 +838,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     final comprado = _purchased.contains(instrumento.id);
     final limite = !_melodyFound && !comprado && _purchased.length >= 3;
     final disponible = !(_buying || _won || limite);
-    final precio = _prices[instrumento.id];
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     return Tooltip(
@@ -955,21 +875,13 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                           style: text.titleMedium,
                         ),
                       ),
-                      if (precio != null)
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            '\$${formatearMiles(precio)}',
-                            style: text.titleSmall?.copyWith(
-                              color: scheme.primary,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
                       Icon(
-                        comprado || _melodyFound
+                        comprado
+                            ? PhosphorIconsFill.checkCircle
+                            : _melodyFound
                             ? PhosphorIconsFill.play
                             : Icons.shopping_cart,
+                        color: comprado ? scheme.primary : null,
                         size: 26,
                       ),
                     ],
@@ -1038,14 +950,25 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                   ),
           ),
         ),
-        const SizedBox(height: 16),
-        if (!_won)
-          LiquidGlassButton(
-            // Del color del género, como el resto del nivel.
-            color: _colorGenero,
-            onPressed: _sending ? null : _submitAnswer,
-            label: 'Comprobar respuesta',
+        // El botón aparece al escribir algo.
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: _answerController,
+          builder: (context, valor, _) => AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            alignment: Alignment.topCenter,
+            child: !_won && valor.text.trim().isNotEmpty
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: LiquidGlassButton(
+                      // Del color del género, como el resto del nivel.
+                      color: _colorGenero,
+                      onPressed: _sending ? null : _submitAnswer,
+                      label: 'Comprobar respuesta',
+                    ),
+                  )
+                : const SizedBox(width: double.infinity),
           ),
+        ),
         if (!_won && widget.onSaltar != null) ...[
           const SizedBox(height: 8),
           TextButton.icon(
@@ -1134,15 +1057,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                                       cabecera,
                                       const SizedBox(height: 12),
                                     ],
-                                    Text(
-                                      widget.nivel.modoPrueba
-                                          ? 'Modo de prueba: ${widget.nivel.duracionFragmentoSegundos} segundos por escucha.'
-                                          : 'Compra un instrumento para escuchar un fragmento de la canción.',
-                                      style: Theme.of(
-                                        context,
-                                      ).textTheme.titleMedium,
-                                    ),
-                                    const SizedBox(height: 12),
                                     LiquidGlassCard(
                                       borderRadius: 18,
                                       tintColor: _colorGenero,

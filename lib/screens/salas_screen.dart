@@ -20,6 +20,8 @@ import '../widgets/con_reflejo.dart';
 import '../widgets/login_liquido.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
 import '../widgets/liquid_glass/liquid_glass_appbar.dart';
+import '../widgets/liquid_glass/liquid_glass_bottom_nav.dart';
+import '../animations/ciclo_lento.dart';
 import '../widgets/liquid_glass/liquid_glass_button.dart';
 import '../widgets/liquid_glass/liquid_glass_card.dart';
 import '../widgets/liquid_glass/liquid_glass_dialog.dart';
@@ -910,17 +912,17 @@ class _FormularioCrearSalaState extends State<_FormularioCrearSala> {
           alignment: WrapAlignment.center,
           children: [
             for (final genero in Genero.reales.where((g) => g.disponible))
-              ChoiceChip(
-                label: Text(genero.nombre),
-                selected: _genero == genero,
-                selectedColor: colorGenero(genero).withValues(alpha: 0.3),
-                onSelected: (_) => setState(() => _genero = genero),
+              _BotonGenero(
+                label: genero.nombre,
+                color: colorGenero(genero),
+                elegido: _genero == genero,
+                onTap: () => setState(() => _genero = genero),
               ),
-            ChoiceChip(
-              label: const Text('🎲 Aleatorio'),
-              selected: _genero == null,
-              selectedColor: colorAleatorio.withValues(alpha: 0.3),
-              onSelected: (_) => setState(() => _genero = null),
+            _BotonGenero(
+              label: '🎲 Aleatorio',
+              color: colorAleatorio,
+              elegido: _genero == null,
+              onTap: () => setState(() => _genero = null),
             ),
           ],
         ),
@@ -1154,6 +1156,110 @@ class _DetalleSalaState extends State<_DetalleSala> {
   }
 }
 
+/// Botón de género: elegido se vuelve una gota líquida del color del género
+/// (como la de la barra inferior); sin elegir, lleva su color en borde y tinte.
+class _BotonGenero extends StatelessWidget {
+  const _BotonGenero({
+    required this.label,
+    required this.color,
+    required this.elegido,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color color;
+  final bool elegido;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tono = context.paleta.legible(color);
+    final sobreGota = tono.computeLuminance() > 0.45
+        ? AppColors.graphiteInk
+        : AppColors.paperWhite;
+    return Semantics(
+      selected: elegido,
+      button: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned.fill(
+              child: AnimatedScale(
+                scale: elegido ? 1.08 : 0,
+                duration: const Duration(milliseconds: 500),
+                // Rebote al elegirse, como la gota de la barra.
+                curve: elegido ? Curves.elasticOut : Curves.easeIn,
+                child: GotaLiquida(color: tono),
+              ),
+            ),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(22),
+                color: elegido ? null : tono.withValues(alpha: 0.18),
+                border: Border.all(
+                  color: elegido ? Colors.transparent : tono,
+                  width: 2,
+                ),
+              ),
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: elegido ? sobreGota : context.paleta.tonoTexto(color),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Emoji que gira sobre su eje vertical, como una moneda, sin parar.
+class _EmojiGiratorio extends StatefulWidget {
+  const _EmojiGiratorio(this.emoji);
+
+  final String emoji;
+
+  @override
+  State<_EmojiGiratorio> createState() => _EmojiGiratorioState();
+}
+
+class _EmojiGiratorioState extends State<_EmojiGiratorio> {
+  final _ciclo = CicloLento(periodo: const Duration(seconds: 4));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _ciclo.activo =
+        !MediaQuery.disableAnimationsOf(context) &&
+        TickerMode.valuesOf(context).enabled;
+  }
+
+  @override
+  void dispose() {
+    _ciclo.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _ciclo,
+    builder: (context, _) => Transform(
+      alignment: Alignment.center,
+      transform: Matrix4.identity()
+        ..setEntry(3, 2, 0.002)
+        ..rotateY(_ciclo.value * 2 * pi),
+      child: Text(widget.emoji, style: const TextStyle(fontSize: 28)),
+    ),
+  );
+}
+
 /// Tarjeta seleccionable del diálogo de nueva sala; la elegida se tiñe y
 /// lleva borde del color de acento.
 class _Opcion extends StatelessWidget {
@@ -1193,7 +1299,7 @@ class _Opcion extends StatelessWidget {
               padding: const EdgeInsets.all(12),
               child: Column(
                 children: [
-                  Text(emoji, style: const TextStyle(fontSize: 28)),
+                  _EmojiGiratorio(emoji),
                   const SizedBox(height: 4),
                   Text(
                     titulo,
@@ -1231,6 +1337,9 @@ class _SalaScreenState extends ConsumerState<SalaScreen> {
   // Hay una canción abierta encima de esta pantalla.
   bool _jugando = false;
   ModalRoute<dynamic>? _ruta;
+  // El servidor cierra la sala tras 20 min sin actividad; este sondeo se lo
+  // recuerda aunque nadie escriba en ella.
+  Timer? _vigilante;
 
   FirebaseGameRepository get _repo => ref.read(firebaseGameRepositoryProvider);
   String get _uid => _repo.uid ?? '';
@@ -1244,6 +1353,13 @@ class _SalaScreenState extends ConsumerState<SalaScreen> {
           _alCambiar,
           onError: (Object error) => setState(() => _error = error),
         );
+    _vigilante = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (_sala != null && _sala!.estado != EstadoSala.terminada) {
+        _repo
+            .revisarSala(widget.codigo)
+            .catchError((Object e) => debugPrint('Revisión de sala: $e'));
+      }
+    });
   }
 
   @override
@@ -1254,6 +1370,7 @@ class _SalaScreenState extends ConsumerState<SalaScreen> {
 
   @override
   void dispose() {
+    _vigilante?.cancel();
     _suscripcion?.cancel();
     super.dispose();
   }
@@ -1422,7 +1539,7 @@ class _SalaScreenState extends ConsumerState<SalaScreen> {
                 : !_cargada
                 ? const Cargando(texto: 'Abriendo la sala...')
                 : sala == null
-                ? const Center(child: Text('Esta sala ya no existe.'))
+                ? const Center(child: Text('Esta sala ya no existe (se cierra tras 20 min sin actividad).'))
                 : ListView(
                     padding: _margenLista(context),
                     children: [

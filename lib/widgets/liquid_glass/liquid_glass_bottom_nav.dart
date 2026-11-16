@@ -52,24 +52,6 @@ class _LiquidGlassBottomNavState extends State<LiquidGlassBottomNav> {
         (index == 0 ? widget.colorMenu : widget.colorSecciones),
   );
 
-  // Deformación en reposo: lenta, con el reloj compartido de 30 cuadros.
-  final _reposo = CicloLento(periodo: const Duration(seconds: 4));
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Quieta con "reducir animaciones" o con la pantalla tapada por otra.
-    _reposo.activo =
-        !MediaQuery.disableAnimationsOf(context) &&
-        TickerMode.valuesOf(context).enabled;
-  }
-
-  @override
-  void dispose() {
-    _reposo.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
@@ -108,7 +90,7 @@ class _LiquidGlassBottomNavState extends State<LiquidGlassBottomNav> {
                           tween: ColorTween(
                             end: _colorDe(context, hayActiva ? actual : 0),
                           ),
-                          builder: (context, color, _) => _gota(color!),
+                          builder: (context, color, _) => GotaLiquida(color: color!),
                         ),
                       ),
                     ),
@@ -130,43 +112,6 @@ class _LiquidGlassBottomNavState extends State<LiquidGlassBottomNav> {
       ),
     );
   }
-
-  /// La gota: degradado de [color] con brillo; las esquinas cambian despacio
-  /// para que parezca líquida.
-  Widget _gota(Color color) => AnimatedBuilder(
-    animation: _reposo,
-    builder: (context, _) {
-      final t = _reposo.value * 2 * pi;
-      double radio(double fase) => 20 + 6 * sin(t + fase);
-      return Transform.scale(
-        scaleX: 1 + 0.03 * sin(t),
-        scaleY: 1 - 0.03 * sin(t),
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color.lerp(color, AppColors.paperWhite, 0.35)!,
-                color,
-                Color.lerp(color, Colors.black, 0.15)!,
-              ],
-            ),
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(radio(0)),
-              topRight: Radius.circular(radio(pi / 2)),
-              bottomRight: Radius.circular(radio(pi)),
-              bottomLeft: Radius.circular(radio(3 * pi / 2)),
-            ),
-            boxShadow: [
-              BoxShadow(color: color.withValues(alpha: 0.6), blurRadius: 18),
-              BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 32),
-            ],
-          ),
-        ),
-      );
-    },
-  );
 
   Widget _pestana(BuildContext context, TextTheme text, int i, bool activa) {
     // Sobre la gota: blanco, u oscuro si la gota es clara (amarillos,
@@ -211,6 +156,77 @@ class _LiquidGlassBottomNavState extends State<LiquidGlassBottomNav> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// La gota: degradado de [color] con brillo; las esquinas cambian despacio
+/// para que parezca líquida. Se usa en la barra inferior y en los botones
+/// elegidos de las salas.
+class GotaLiquida extends StatefulWidget {
+  const GotaLiquida({super.key, required this.color});
+
+  final Color color;
+
+  @override
+  State<GotaLiquida> createState() => _GotaLiquidaState();
+}
+
+class _GotaLiquidaState extends State<GotaLiquida> {
+  // Deformación en reposo: lenta, con el reloj compartido de 30 cuadros.
+  final _reposo = CicloLento(periodo: const Duration(seconds: 4));
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Quieta con "reducir animaciones" o con la pantalla tapada por otra.
+    _reposo.activo =
+        !MediaQuery.disableAnimationsOf(context) &&
+        TickerMode.valuesOf(context).enabled;
+  }
+
+  @override
+  void dispose() {
+    _reposo.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.color;
+    return AnimatedBuilder(
+      animation: _reposo,
+      builder: (context, _) {
+        final t = _reposo.value * 2 * pi;
+        double radio(double fase) => 20 + 6 * sin(t + fase);
+        return Transform.scale(
+          scaleX: 1 + 0.03 * sin(t),
+          scaleY: 1 - 0.03 * sin(t),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color.lerp(color, AppColors.paperWhite, 0.35)!,
+                  color,
+                  Color.lerp(color, Colors.black, 0.15)!,
+                ],
+              ),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(radio(0)),
+                topRight: Radius.circular(radio(pi / 2)),
+                bottomRight: Radius.circular(radio(pi)),
+                bottomLeft: Radius.circular(radio(3 * pi / 2)),
+              ),
+              boxShadow: [
+                BoxShadow(color: color.withValues(alpha: 0.6), blurRadius: 18),
+                BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 32),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

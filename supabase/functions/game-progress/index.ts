@@ -1830,6 +1830,15 @@ function roomExpired(sala: JsonObject): boolean {
     Date.parse(sala.finEn) <= Date.now();
 }
 
+/// Sin escrituras en la sala durante este tiempo se cierra (pública o privada).
+const inactividadSalaMs = 20 * 60_000;
+
+function roomInactive(sala: JsonObject): boolean {
+  const ultima = Date.parse(String(sala.updatedAt ?? sala.createdAt));
+  return sala.estado !== "terminada" && Number.isFinite(ultima) &&
+    Date.now() - ultima > inactividadSalaMs;
+}
+
 /// Posiciones: en contrarreloj por puntos y luego aciertos; en eliminación,
 /// los que siguen vivos y después quien cayó más tarde. A igualdad, quien
 /// entró primero.
@@ -2096,6 +2105,22 @@ async function updateRoom<T>(
   throw new HttpError(409, "La sala está muy ocupada; inténtalo de nuevo");
 }
 
+/// Si la sala lleva 20 min inactiva la borra (los jugadores dejan de verla) y,
+/// si no había empezado, devuelve lo pagado. Responde si la cerró.
+function closeIfInactive(token: string, codigo: string): Promise<boolean> {
+  return updateRoom(token, codigo, (sala) => {
+    if (!roomInactive(sala)) return { resultado: false };
+    const extra = sala.estado === "esperando"
+      ? Object.entries(roomPlayers(sala)).flatMap(([uid, jugador]) =>
+        jugador.pagado && jugador.cuentaBorrada !== true
+          ? [walletWrite(uid, jugador.pagado)]
+          : []
+      )
+      : [];
+    return { borrar: true, extra, resultado: true };
+  });
+}
+
 async function createRoom(
   token: string,
   uid: string,
@@ -2157,6 +2182,20 @@ async function createRoom(
 }
 
 function joinRoom(
+  token: string,
+  uid: string,
+  nombre: string,
+  codigo: string,
+): Promise<JsonObject> {
+  return closeIfInactive(token, codigo).then((cerrada) => {
+    if (cerrada) {
+      throw new HttpError(410, "La sala se cerró por inactividad");
+    }
+    return joinOpenRoom(token, uid, nombre, codigo);
+  });
+}
+
+function joinOpenRoom(
   token: string,
   uid: string,
   nombre: string,
@@ -2446,11 +2485,12 @@ function skipRoomSong(
 }
 
 /// La app lo llama al acabarse el reloj para cerrar la sala.
-function checkRoom(
+async function checkRoom(
   token: string,
   uid: string,
   codigo: string,
 ): Promise<JsonObject> {
+  if (await closeIfInactive(token, codigo)) return { estado: "cerrada" };
   return updateRoom(token, codigo, (sala) => {
     roomMember(sala, uid);
     return roomExpired(sala) && sala.estado === "jugando"
@@ -3254,8 +3294,17 @@ async function listarSalasPublicas(token: string): Promise<JsonObject> {
     { campo: "publica", valor: true },
     { campo: "estado", valor: "esperando" },
   ], 50);
-  const salas = documentos
+  const vigentes = documentos
     .map((documento) => fromFields(documento.fields ?? {}))
+    .filter((sala) => {
+      if (!roomInactive(sala)) return true;
+      // Se barre aquí: quien mira la lista cierra las salas abandonadas.
+      if (codigoValido(sala.codigo)) {
+        closeIfInactive(token, sala.codigo).catch(() => undefined);
+      }
+      return false;
+    });
+  const salas = vigentes
     .flatMap((sala) => {
       const jugadores = roomPlayers(sala);
       const capacidad = typeof sala.maxJugadores === "number"
