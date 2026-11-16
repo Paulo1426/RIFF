@@ -1037,11 +1037,19 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
                     )
                   : Padding(
                       padding: const EdgeInsets.only(left: 16),
-                      child: Image.asset(
-                        'lib/assets/images/logo/riff_logo.png',
-                        height: 56,
-                        cacheHeight: 192,
-                        semanticLabel: 'RIFF',
+                      // Tocar el logo hace lo mismo que "Inicio".
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: widget.onCambiarGenero,
+                        child: Tooltip(
+                          message: 'Menú principal',
+                          child: Image.asset(
+                            'lib/assets/images/logo/riff_logo.png',
+                            height: 56,
+                            cacheHeight: 192,
+                            semanticLabel: 'RIFF',
+                          ),
+                        ),
                       ),
                     ),
               title: _tituloBarra(estado),
