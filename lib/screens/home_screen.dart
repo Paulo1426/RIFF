@@ -677,7 +677,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       final logrados = {
         for (final logro in logrosDe(
           _saldo.deGenero(widget.genero),
-          _avanceDe(estado.dificultades, _resumenIntros, widget.genero),
+          avanceDe(estado.dificultades, _resumenIntros, widget.genero),
           widget.genero,
         ))
           if (logro.logrado) logro.nombre: logro,
@@ -1233,38 +1233,6 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
       onRefresh: _cargar,
     );
   }
-}
-
-/// Avance del jugador para calcular las insignias.
-AvanceJuego _avanceDe(
-  List<ProgresoDificultadRemoto> dificultades,
-  EstadoIntros? intros,
-  Genero genero,
-) {
-  int completados(Dificultad dificultad) =>
-      dificultades
-          .where((item) => item.dificultad == dificultad)
-          .firstOrNull
-          ?.completados ??
-      0;
-  return AvanceJuego(
-    facil: completados(Dificultad.facil),
-    media: completados(Dificultad.medio),
-    avanzada: completados(Dificultad.avanzado),
-    nivelesPorDificultad: genero.nivelesPorDificultad,
-    introsAdivinadas:
-        intros?.intros
-            .where((item) => item.estado == EstadoIntro.completada)
-            .length ??
-        0,
-    totalIntros: intros == null
-        ? genero.totalIntros
-        : intros.intros.length + intros.restantes,
-    unInstrumento: dificultades.fold(
-      0,
-      (total, item) => total + item.unInstrumento,
-    ),
-  );
 }
 
 String _nombreSesion(User user) {

@@ -13,7 +13,7 @@ const instrumentosComunes = [
   TipoInstrumento.guitarra,
 ];
 
-const _muestreo = 22050;
+const _muestreo = 44100;
 
 /// Sonido corto de cada instrumento, generado en el teléfono: así suena sin
 /// conexión y sin archivos de audio aparte.
@@ -39,6 +39,13 @@ void _cuerda(
   final n = max(2, (_muestreo / frecuencia).round());
   final azar = Random(frecuencia.round());
   final cuerda = List<double>.generate(n, (_) => azar.nextDouble() * 2 - 1);
+  // Suaviza el ruido inicial: la púa suena menos áspera y más a cuerda.
+  for (var k = 0; k < 2; k++) {
+    final copia = List<double>.of(cuerda);
+    for (var j = 0; j < n; j++) {
+      cuerda[j] = (copia[j] + copia[(j + 1) % n]) / 2;
+    }
+  }
   var i = 0;
   for (var s = (inicio * _muestreo).round(); s < salida.length; s++) {
     final actual = cuerda[i];
@@ -64,7 +71,7 @@ Float64List _bajo() {
   // Suaviza para quitar el brillo de la cuerda: queda grave y redondo.
   var previo = 0.0;
   for (var s = 0; s < salida.length; s++) {
-    previo = previo * 0.8 + salida[s] * 0.2;
+    previo = previo * 0.9 + salida[s] * 0.1;
     salida[s] = previo;
   }
   return salida;
@@ -97,6 +104,15 @@ Uint8List _wav(Float64List muestras) {
     pico = max(pico, m.abs());
   }
   final escala = pico == 0 ? 0.0 : 0.9 / pico;
+  // Entrada y salida suaves (3 ms y 40 ms) para evitar chasquidos.
+  final entrada = (_muestreo * 0.003).round();
+  final salidaN = (_muestreo * 0.04).round();
+  for (var i = 0; i < entrada && i < muestras.length; i++) {
+    muestras[i] *= i / entrada;
+  }
+  for (var i = 0; i < salidaN && i < muestras.length; i++) {
+    muestras[muestras.length - 1 - i] *= i / salidaN;
+  }
   final datos = ByteData(44 + muestras.length * 2);
   void texto(int pos, String t) {
     for (var i = 0; i < t.length; i++) {

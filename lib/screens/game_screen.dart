@@ -15,6 +15,7 @@ import '../providers/providers.dart';
 import '../services/audio_service.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/musica_menu.dart';
+import '../widgets/aviso_insignia.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
 import '../animations/liquid_ripple_effect.dart';
 import '../animations/sound_wave_animation.dart';
@@ -676,8 +677,17 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         // Canción y portada se piden a la vez: el reproductor aparece con la
         // portada lista (máx. ~2 s) y la canción ya cargando, así salen
         // juntas sin sumar las dos esperas.
-        unawaited(_playSong('fullSong', replaceCurrent: true));
-        await _cargarPortada();
+        // Si el acierto da una insignia, su tarjeta sale antes de la canción.
+        final insignias = insigniasNuevas(
+          ref.read(firebaseGameRepositoryProvider),
+        );
+        final portada = _cargarPortada();
+        final nuevas = await insignias;
+        if (!mounted) return;
+        if (nuevas.isEmpty) {
+          unawaited(_playSong('fullSong', replaceCurrent: true));
+        }
+        await portada;
         if (!mounted) return;
         setState(() {
           _ganar(
@@ -696,6 +706,10 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                 )
               : null;
         });
+        if (nuevas.isNotEmpty) {
+          await mostrarInsignias(context, nuevas);
+          if (mounted) unawaited(_playSong('fullSong', replaceCurrent: true));
+        }
       } else {
         HapticFeedback.lightImpact();
         setState(() {

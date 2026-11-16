@@ -1,9 +1,87 @@
 import 'package:confetti/confetti.dart';
 import 'package:flutter/material.dart';
 
+import '../models/genero.dart';
 import '../models/logros.dart';
+import '../models/nivel.dart';
+import '../models/sala.dart';
+import '../services/firebase_game_repository.dart';
+import '../services/insignias_vistas.dart';
 import '../theme.dart';
 import 'liquid_glass/liquid_glass_dialog.dart';
+
+/// Avance del jugador para calcular las insignias.
+AvanceJuego avanceDe(
+  List<ProgresoDificultadRemoto> dificultades,
+  EstadoIntros? intros,
+  Genero genero,
+) {
+  int completados(Dificultad dificultad) =>
+      dificultades
+          .where((item) => item.dificultad == dificultad)
+          .firstOrNull
+          ?.completados ??
+      0;
+  return AvanceJuego(
+    facil: completados(Dificultad.facil),
+    media: completados(Dificultad.medio),
+    avanzada: completados(Dificultad.avanzado),
+    nivelesPorDificultad: genero.nivelesPorDificultad,
+    introsAdivinadas:
+        intros?.intros
+            .where((item) => item.estado == EstadoIntro.completada)
+            .length ??
+        0,
+    totalIntros: intros == null
+        ? genero.totalIntros
+        : intros.intros.length + intros.restantes,
+    unInstrumento: dificultades.fold(
+      0,
+      (total, item) => total + item.unInstrumento,
+    ),
+  );
+}
+
+/// Insignias conseguidas que el jugador aún no ha visto (las marca como
+/// vistas). Pensado para llamarse justo tras acertar un nivel o una intro.
+/// Ante cualquier fallo o tardanza devuelve vacío: el menú las avisará luego.
+Future<List<Logro>> insigniasNuevas(FirebaseGameRepository repo) async {
+  final uid = repo.uid;
+  if (uid == null) return const [];
+  try {
+    final genero = generoActivo;
+    final resultados = await Future.wait<Object?>([
+      repo.cargarEstado(),
+      repo.cargarIntros().then<EstadoIntros?>((e) => e, onError: (_) => null),
+      repo.saldoSalas().first.then<SaldoSalas>(
+        (s) => s,
+        onError: (_) => const SaldoSalas(),
+      ),
+    ]).timeout(const Duration(seconds: 3));
+    final estado = resultados[0]! as EstadoJuegoRemoto;
+    final logrados = {
+      for (final logro in logrosDe(
+        resultados[2]! as SaldoSalas,
+        avanceDe(estado.dificultades, resultados[1] as EstadoIntros?, genero),
+        genero,
+      ))
+        if (logro.logrado) logro.nombre: logro,
+    };
+    final nuevas = await InsigniasVistas(uid).registrar(logrados.keys.toSet());
+    return [for (final nombre in nuevas) logrados[nombre]!];
+  } catch (error) {
+    debugPrint('No se pudieron revisar las insignias: $error');
+    return const [];
+  }
+}
+
+/// Muestra las tarjetas una tras otra.
+Future<void> mostrarInsignias(BuildContext context, List<Logro> logros) async {
+  for (final logro in logros) {
+    if (!context.mounted) return;
+    await mostrarInsignia(context, logro);
+  }
+}
 
 /// Avisa que se consiguió [logro]. La maestra del género (Vallenatólogo,
 /// Rey del perreo...) sale con una corona gigante.

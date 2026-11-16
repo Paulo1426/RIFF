@@ -15,6 +15,8 @@ import '../animations/sound_wave_animation.dart';
 import '../providers/providers.dart';
 import '../models/artistas.dart';
 import '../models/genero.dart';
+import '../models/logros.dart';
+import '../widgets/aviso_insignia.dart';
 import '../services/audio_service.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/musica_menu.dart';
@@ -1051,9 +1053,15 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     _playbackGeneration++;
     await _audioService.detener();
     if (!mounted) return;
-    // Canción y portada a la vez; así salen juntas.
-    unawaited(_play('fullSong'));
-    await _cargarPortada();
+    // Si el acierto da una insignia, su tarjeta sale antes de la canción.
+    final insignias = widget.sala == null
+        ? insigniasNuevas(_repo)
+        : Future.value(const <Logro>[]);
+    final portada = _cargarPortada();
+    final nuevas = await insignias;
+    if (!mounted) return;
+    if (nuevas.isEmpty) unawaited(_play('fullSong'));
+    await portada;
     if (!mounted) return;
     setState(() {
       _won = true;
@@ -1063,6 +1071,10 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     });
     HapticFeedback.mediumImpact();
     _confeti.play();
+    if (nuevas.isNotEmpty) {
+      await mostrarInsignias(context, nuevas);
+      if (mounted) unawaited(_play('fullSong'));
+    }
   }
 
   Widget _vistaGanada() => ReproductorCancion(

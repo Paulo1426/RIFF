@@ -1,3 +1,4 @@
+import 'package:riff/iconos_phosphor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -38,7 +39,7 @@ void main() {
     tester,
   ) async {
     await abrir(tester);
-    await tester.tap(find.byIcon(Icons.lightbulb_rounded));
+    await tester.tap(find.byIcon(PhosphorIconsFill.lightbulb));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
@@ -52,6 +53,6 @@ void main() {
   testWidgets('en las salas no hay botón de pistas', (tester) async {
     await abrir(tester, pistas: false);
 
-    expect(find.byIcon(Icons.lightbulb_rounded), findsNothing);
+    expect(find.byIcon(PhosphorIconsFill.lightbulb), findsNothing);
   });
 }

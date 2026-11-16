@@ -23,7 +23,7 @@ class _ProgresoTodo extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final avances = [
       for (final MapEntry(key: genero, value: d) in datos.entries)
-        _avanceDe(d.estado.dificultades, d.intros, genero),
+        avanceDe(d.estado.dificultades, d.intros, genero),
     ];
     final logros = logrosGenerales(saldo, avances);
     // Niveles cargados de verdad (un género en preparación suma 0) e intros.
@@ -156,7 +156,7 @@ class _PestanaProgreso extends StatelessWidget {
         final cargando = snapshot.connectionState != ConnectionState.done;
         final logros = logrosDe(
           saldo,
-          _avanceDe(dificultades, estadoIntros, generoActivo),
+          avanceDe(dificultades, estadoIntros, generoActivo),
           generoActivo,
         );
         // Progreso y Salas muestran todo en la tarjeta; Insignias abre una
