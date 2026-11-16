@@ -11,14 +11,12 @@ void main() {
     expect(cierreTerminos, contains('2026'));
   });
 
-  test('créditos: los cinco géneros tienen sus 60 canciones con artista', () {
+  test('créditos: los cinco géneros tienen artistas sin repetir', () {
     expect(creditosPorGenero.length, 5);
-    for (final canciones in creditosPorGenero.values) {
-      expect(canciones.length, 60);
-      for (final (titulo, artista) in canciones) {
-        expect(titulo.trim(), isNotEmpty);
-        expect(artista.trim(), isNotEmpty);
-      }
+    for (final artistas in creditosPorGenero.values) {
+      expect(artistas, isNotEmpty);
+      expect(artistas.toSet().length, artistas.length);
+      expect(artistas.every((a) => a.trim().isNotEmpty), isTrue);
     }
   });
 
@@ -37,7 +35,7 @@ void main() {
     expect(find.text('Vallenato'), findsOneWidget);
     await tester.tap(find.text('Vallenato'));
     await tester.pumpAndSettle();
-    expect(find.text('Martin Elias Diaz'), findsOneWidget);
+    expect(find.text('Martín Elías'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

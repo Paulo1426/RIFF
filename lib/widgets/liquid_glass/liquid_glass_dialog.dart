@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 
 import 'liquid_glass_card.dart';
 
@@ -30,7 +31,7 @@ class LiquidGlassDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    return Dialog(
+    final dialogo = Dialog(
       backgroundColor: Colors.transparent,
       elevation: 0,
       insetPadding: insetPadding,
@@ -85,5 +86,15 @@ class LiquidGlassDialog extends StatelessWidget {
         ),
       ),
     );
+    if (MediaQuery.disableAnimationsOf(context)) return dialogo;
+    // Aparece con un leve rebote, como los diálogos de los ejemplos de Flutter.
+    return dialogo
+        .animate()
+        .fadeIn(duration: 180.ms)
+        .scale(
+          begin: const Offset(0.92, 0.92),
+          duration: 320.ms,
+          curve: Curves.easeOutBack,
+        );
   }
 }

@@ -946,15 +946,18 @@ class _TarjetaDificultad extends StatelessWidget {
 
   Widget _tarjetaNivel(int index, NivelAsignado asignado, Color color) {
     final canStart = asignado.completado || asignado.puedeIniciar;
-    return LiquidLevelCard(
-      numero: index + 1,
-      color: color,
-      estado: asignado.completado
-          ? EstadoNivel.completado
-          : canStart
-          ? EstadoNivel.disponible
-          : EstadoNivel.bloqueado,
-      onJugar: () => onJugar(index),
+    return Entrada(
+      indice: index,
+      child: LiquidLevelCard(
+        numero: index + 1,
+        color: color,
+        estado: asignado.completado
+            ? EstadoNivel.completado
+            : canStart
+            ? EstadoNivel.disponible
+            : EstadoNivel.bloqueado,
+        onJugar: () => onJugar(index),
+      ),
     );
   }
 }

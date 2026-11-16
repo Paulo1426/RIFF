@@ -1,6 +1,7 @@
 import 'package:riff/iconos_phosphor.dart';
 import 'package:flutter/material.dart';
 
+import '../../animations/entrada.dart';
 import '../../models/pista.dart';
 import '../../theme.dart';
 import 'liquid_glass_dialog.dart';
@@ -66,22 +67,25 @@ class PistasDialog extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          for (final tipo in TipoPistaExtension.comprables)
-            PistaCard(
-              tipo: tipo,
-              saldoMonedas: saldoMonedas,
-              simboloMoneda: simboloMoneda,
-              desbloqueada: tipo == TipoPista.sorpresa
-                  // La sorpresa se agota cuando ya salieron las tres.
-                  ? TipoPistaExtension.sorpresas.every(
-                      pistasDesbloqueadas.containsKey,
-                    )
-                  : pistasDesbloqueadas.containsKey(tipo),
-              valor: tipo == TipoPista.sorpresa
-                  ? _sorpresasReveladas()
-                  : pistasDesbloqueadas[tipo],
-              cargando: cargandoTipo == tipo,
-              onComprar: () => onComprarPista(tipo),
+          for (final (i, tipo) in TipoPistaExtension.comprables.indexed)
+            Entrada(
+              indice: i,
+              child: PistaCard(
+                tipo: tipo,
+                saldoMonedas: saldoMonedas,
+                simboloMoneda: simboloMoneda,
+                desbloqueada: tipo == TipoPista.sorpresa
+                    // La sorpresa se agota cuando ya salieron las tres.
+                    ? TipoPistaExtension.sorpresas.every(
+                        pistasDesbloqueadas.containsKey,
+                      )
+                    : pistasDesbloqueadas.containsKey(tipo),
+                valor: tipo == TipoPista.sorpresa
+                    ? _sorpresasReveladas()
+                    : pistasDesbloqueadas[tipo],
+                cargando: cargandoTipo == tipo,
+                onComprar: () => onComprarPista(tipo),
+              ),
             ),
         ],
       ),

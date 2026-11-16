@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'firebase_options.dart';
 import 'providers/providers.dart';
+import 'animations/logo_animado.dart';
 import 'screens/home_screen.dart';
 import 'theme/liquid_glass_theme.dart';
 import 'services/logs_release.dart';
@@ -89,7 +90,7 @@ class SongGuessApp extends ConsumerWidget {
     home:
         home ??
         (firebaseSupported
-            ? const HomeScreen()
+            ? const IntroLogo(child: HomeScreen())
             : const Scaffold(
                 body: Center(
                   child: Text(

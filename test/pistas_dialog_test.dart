@@ -115,5 +115,6 @@ void main() {
     await tester.pump();
 
     expect(selectedType, TipoPista.iniciales);
+    await tester.pumpAndSettle();
   });
 }

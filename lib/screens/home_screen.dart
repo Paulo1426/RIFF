@@ -17,6 +17,7 @@ import '../providers/providers.dart';
 import '../services/validadores_acceso.dart';
 import '../services/firebase_game_repository.dart';
 import '../animations/ciclo_lento.dart';
+import '../animations/entrada.dart';
 import '../animations/transicion_musical.dart';
 import '../animations/liquid_ripple_effect.dart';
 import '../widgets/aviso_insignia.dart';

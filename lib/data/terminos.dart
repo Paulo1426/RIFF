@@ -7,7 +7,8 @@ const revisionTerminos = '12 de noviembre de 2026';
 const responsableTerminos = 'Joannes Gutierrez';
 const correoTerminos = 'jpaulogutierrez@unicesar.edu.co';
 
-const introTerminos = 'Lee con atención estos Términos y Condiciones de Uso (en adelante, los «Términos») antes de usar RIFF. Al marcar la casilla de aceptación y pulsar «Aceptar y continuar», declaras que los leíste, que los entiendes y que estás de acuerdo con ellos. Si no estás de acuerdo, pulsa «No acepto»: cerraremos tu sesión y no podrás usar la aplicación.';
+const introTerminos =
+    'Lee con atención estos Términos y Condiciones de Uso (en adelante, los «Términos») antes de usar RIFF. Al marcar la casilla de aceptación y pulsar «Aceptar y continuar», declaras que los leíste, que los entiendes y que estás de acuerdo con ellos. Si no estás de acuerdo, pulsa «No acepto»: cerraremos tu sesión y no podrás usar la aplicación.';
 
 /// Cada sección: (título, párrafos). Los que empiezan con «• » son viñetas.
 const seccionesTerminos = <(String, List<String>)>[
@@ -86,7 +87,7 @@ const seccionesTerminos = <(String, List<String>)>[
       'RIFF reconoce que las obras musicales, interpretaciones artísticas y grabaciones utilizadas en la Aplicación pertenecen a sus respectivos titulares de derechos.',
       'Estos pueden incluir autores, compositores, artistas intérpretes, productores fonográficos y editores musicales.',
       'La Aplicación no reclama la titularidad de las canciones ni de las grabaciones de terceros.',
-      'En Colombia, SAYCO (Sociedad de Autores y Compositores de Colombia) administra determinados derechos de autor correspondientes a autores y compositores. Los derechos conexos de artistas intérpretes y productores fonográficos corresponden a sus respectivos titulares y pueden ser gestionados por las entidades competentes.',
+      'En cada país, las sociedades de gestión colectiva administran determinados derechos de autor correspondientes a autores y compositores. Los derechos conexos de artistas intérpretes y productores fonográficos corresponden a sus respectivos titulares y pueden ser gestionados por las entidades competentes.',
       'El uso de contenido musical dentro de RIFF deberá contar con las autorizaciones o licencias que resulten legalmente exigibles.',
       'La finalidad educativa, cultural o recreativa de la Aplicación no constituye por sí misma una autorización para utilizar obras musicales o grabaciones protegidas.',
       'El usuario únicamente podrá acceder al contenido musical mediante las funcionalidades habilitadas dentro de RIFF y de acuerdo con las condiciones de uso aplicables.',
@@ -296,9 +297,11 @@ const seccionesTerminos = <(String, List<String>)>[
   ),
 ];
 
-const cierreTerminos = 'RIFF — La música se convierte en un desafío.\n© 2026 Joannes Gutierrez. Todos los derechos reservados.';
+const cierreTerminos =
+    'RIFF — La música se convierte en un desafío.\n© 2026 Joannes Gutierrez. Todos los derechos reservados.';
 
-const avisoCreditos = 'Las canciones de RIFF se usan con fines educativos y culturales, sin ánimo de lucro. Los derechos sobre cada obra y grabación pertenecen a sus autores, compositores, artistas, productores y editores, representados en Colombia por SAYCO (Sociedad de Autores y Compositores de Colombia) y las demás entidades de gestión colectiva. RIFF no es dueño de esas canciones ni reclama ningún derecho sobre ellas. Si eres titular de derechos y quieres corregir un crédito o retirar una canción, escríbenos a jpaulogutierrez@unicesar.edu.co.';
+const avisoCreditos =
+    'Las canciones de RIFF se usan con fines educativos y culturales, sin ánimo de lucro. Los derechos sobre cada obra y grabación pertenecen a sus autores, compositores, artistas, productores y editores, o a las sociedades de gestión colectiva que los representan en cada país. RIFF no es dueño de esas canciones ni reclama ningún derecho sobre ellas. Si eres titular de derechos y quieres corregir un crédito o retirar una canción, escríbenos a jpaulogutierrez@unicesar.edu.co.';
 
 /// Música de fondo de los menús: (grupo, [(título, autor)]).
 const musicaMenuCreditos = <(String, List<(String, String)>)>[
@@ -306,22 +309,37 @@ const musicaMenuCreditos = <(String, List<(String, String)>)>[
     'Menús de los géneros: vallenato',
     [
       ('Intro (Saludos Inicio)', 'El Gran Martín Elías'),
-      ('Pista de ambientación 2', 'Autor original sin identificar (fuente: YouTube)'),
-      ('Pista de ambientación 3', 'Autor original sin identificar (fuente: YouTube)'),
+      (
+        'Pista de ambientación 2',
+        'Autor original sin identificar (fuente: YouTube)',
+      ),
+      (
+        'Pista de ambientación 3',
+        'Autor original sin identificar (fuente: YouTube)',
+      ),
     ],
   ),
   (
     'Menús de los géneros: salsa',
     [
-      ('Super Salsa Mix Vol. 3: Puro Sabor', 'DJ Marlong Son (fuente: YouTube)'),
-      ('Una Experiencia Musical (Pacific Live)', 'DJ Marlong Son (fuente: YouTube)'),
+      (
+        'Super Salsa Mix Vol. 3: Puro Sabor',
+        'DJ Marlong Son (fuente: YouTube)',
+      ),
+      (
+        'Una Experiencia Musical (Pacific Live)',
+        'DJ Marlong Son (fuente: YouTube)',
+      ),
     ],
   ),
   (
     'Menús de los géneros: rock / pop',
     [
       ('Mix Rock Clásico Corto', 'DJ V (fuente: YouTube)'),
-      ('Psychedelic Classic Rock Blues Guitar Mix (Tribute)', 'Pink Floyd y Black Sabbath, mezcla de tributo (fuente: YouTube)'),
+      (
+        'Psychedelic Classic Rock Blues Guitar Mix (Tribute)',
+        'Pink Floyd y Black Sabbath, mezcla de tributo (fuente: YouTube)',
+      ),
     ],
   ),
   (
@@ -334,16 +352,28 @@ const musicaMenuCreditos = <(String, List<(String, String)>)>[
   (
     'Menús de los géneros: popular',
     [
-      ('Ayer Te Soñé (ranchera)', 'Autor original sin identificar (fuente: YouTube)'),
-      ('Esta letra te hará pensar en tu vida', 'Autor original sin identificar (fuente: YouTube)'),
+      (
+        'Ayer Te Soñé (ranchera)',
+        'Autor original sin identificar (fuente: YouTube)',
+      ),
+      (
+        'Esta letra te hará pensar en tu vida',
+        'Autor original sin identificar (fuente: YouTube)',
+      ),
     ],
   ),
   (
     'Menú principal, Medley y salas',
     [
       ('Bossa Nova Instrumental 2024', 'Música instrumental (fuente: YouTube)'),
-      ('Bossa Nova Jazz para Relajarte', 'Música instrumental (fuente: YouTube)'),
-      ('Cafe Music (música ambiental instrumental)', 'Música instrumental (fuente: YouTube)'),
+      (
+        'Bossa Nova Jazz para Relajarte',
+        'Música instrumental (fuente: YouTube)',
+      ),
+      (
+        'Cafe Music (música ambiental instrumental)',
+        'Música instrumental (fuente: YouTube)',
+      ),
       ('Relaxing Bossa Nova Vibes', 'Música instrumental (fuente: YouTube)'),
     ],
   ),

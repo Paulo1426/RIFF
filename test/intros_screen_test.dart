@@ -121,6 +121,7 @@ void main() {
         abre.dy < una.dy || (abre.dy == una.dy && abre.dx < una.dx),
         isTrue,
       );
+      await tester.pump(const Duration(seconds: 1));
     });
   }
 }

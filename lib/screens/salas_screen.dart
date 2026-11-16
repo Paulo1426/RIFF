@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../animations/entrada.dart';
 import '../animations/liquid_ripple_effect.dart';
 import '../models/genero.dart';
 import '../models/sala.dart';
@@ -262,10 +263,13 @@ extension on _SalasPanelState {
                 style: TextStyle(color: context.paleta.tintaSuave),
               )
             else
-              for (final sala in historial)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _FilaHistorial(sala: sala),
+              for (final (i, sala) in historial.indexed)
+                Entrada(
+                  indice: i,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _FilaHistorial(sala: sala),
+                  ),
                 ),
           ],
         ),
@@ -375,12 +379,15 @@ class _TarjetaTipoSala extends StatelessWidget {
                     : ListView(
                         padding: EdgeInsets.zero,
                         children: [
-                          for (final sala in salas)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: _TarjetaSalaPublica(
-                                sala: sala,
-                                onUnirse: () => onUnirse(sala.codigo),
+                          for (final (i, sala) in salas.indexed)
+                            Entrada(
+                              indice: i,
+                              child: Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _TarjetaSalaPublica(
+                                  sala: sala,
+                                  onUnirse: () => onUnirse(sala.codigo),
+                                ),
                               ),
                             ),
                         ],
@@ -1419,11 +1426,19 @@ class _SalaScreenState extends ConsumerState<SalaScreen> {
                 : ListView(
                     padding: _margenLista(context),
                     children: [
-                      _Resumen(sala: sala, uid: _uid),
+                      Entrada(
+                        child: _Resumen(sala: sala, uid: _uid),
+                      ),
                       const SizedBox(height: 16),
-                      ..._contenido(sala),
+                      Entrada(
+                        indice: 1,
+                        child: Column(children: _contenido(sala)),
+                      ),
                       const SizedBox(height: 16),
-                      _Clasificacion(sala: sala, uid: _uid),
+                      Entrada(
+                        indice: 2,
+                        child: _Clasificacion(sala: sala, uid: _uid),
+                      ),
                     ],
                   ),
           ),

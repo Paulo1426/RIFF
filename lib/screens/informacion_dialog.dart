@@ -164,20 +164,16 @@ class _Creditos extends StatelessWidget {
           child: Text(avisoCreditos, style: text.bodyMedium),
         ),
         const SizedBox(height: 12),
-        for (final MapEntry(key: genero, value: canciones)
+        for (final MapEntry(key: genero, value: artistas)
             in creditosPorGenero.entries)
           Theme(
             data: tema,
             child: ExpansionTile(
               title: Text(genero, style: text.titleMedium),
-              subtitle: Text('${canciones.length} canciones'),
+              subtitle: Text('${artistas.length} artistas'),
               children: [
-                for (final (titulo, artista) in canciones)
-                  ListTile(
-                    dense: true,
-                    title: Text(titulo),
-                    subtitle: Text(artista),
-                  ),
+                for (final artista in artistas)
+                  ListTile(dense: true, title: Text(artista)),
               ],
             ),
           ),

@@ -38,5 +38,6 @@ void main() {
     await tester.tap(find.text('Reiniciar'));
     await tester.pump();
     expect(find.byType(DialogoContrasena), findsOneWidget);
+    await tester.pumpAndSettle();
   });
 }

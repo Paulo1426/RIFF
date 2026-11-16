@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../animations/entrada.dart';
 import '../animations/liquid_ripple_effect.dart';
 import '../animations/refresco.dart';
 import '../animations/sound_wave_animation.dart';
@@ -166,87 +167,91 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
 
   Widget _panelInferior(EstadoIntros estado) {
     final text = Theme.of(context).textTheme;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        LayoutBuilder(
-          builder: (context, caja) {
-            final boton = LiquidGlassButton(
-              key: _claveSacar,
-              onPressed: _sacando || !estado.puedeSacar || estado.restantes == 0
-                  ? null
-                  : _sacarCarta,
-              icon: Icons.style_rounded,
-              label: estado.restantes == 0
-                  ? '¡Tienes todas las intros!'
-                  : 'Sacar carta',
-              // La moneda en la píldora del botón, bien visible.
-              precio: estado.restantes == 0
-                  ? null
-                  : '1 ${generoActivo.simboloMoneda}',
-              precioBlanco: true,
-              // Del color del género donde está.
-              color: colorGenero(generoActivo),
-            );
-            // Las monedas del género, junto al botón que las gasta.
-            final monedas = KeyedSubtree(
-              key: _claveMonedas,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  MonedasGenero(
-                    grande: true,
-                    genero: generoActivo,
-                    saldo: estado.monedas,
-                    saldos: estado.monedasPorGenero,
-                  ),
-                  if (_restas > 0)
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      child: IgnorePointer(
-                        child: _MenosUna(
-                          key: ValueKey(_restas),
-                          simbolo: generoActivo.simboloMoneda,
+    return Entrada(
+      indice: 3,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LayoutBuilder(
+            builder: (context, caja) {
+              final boton = LiquidGlassButton(
+                key: _claveSacar,
+                onPressed:
+                    _sacando || !estado.puedeSacar || estado.restantes == 0
+                    ? null
+                    : _sacarCarta,
+                icon: Icons.style_rounded,
+                label: estado.restantes == 0
+                    ? '¡Tienes todas las intros!'
+                    : 'Sacar carta',
+                // La moneda en la píldora del botón, bien visible.
+                precio: estado.restantes == 0
+                    ? null
+                    : '1 ${generoActivo.simboloMoneda}',
+                precioBlanco: true,
+                // Del color del género donde está.
+                color: colorGenero(generoActivo),
+              );
+              // Las monedas del género, junto al botón que las gasta.
+              final monedas = KeyedSubtree(
+                key: _claveMonedas,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    MonedasGenero(
+                      grande: true,
+                      genero: generoActivo,
+                      saldo: estado.monedas,
+                      saldos: estado.monedasPorGenero,
+                    ),
+                    if (_restas > 0)
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: IgnorePointer(
+                          child: _MenosUna(
+                            key: ValueKey(_restas),
+                            simbolo: generoActivo.simboloMoneda,
+                          ),
                         ),
                       ),
-                    ),
-                ],
-              ),
-            );
-            // Solo en pantallas muy angostas pasa encima del botón.
-            if (caja.maxWidth < 300) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+                  ],
+                ),
+              );
+              // Solo en pantallas muy angostas pasa encima del botón.
+              if (caja.maxWidth < 300) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(child: monedas),
+                    const SizedBox(height: 8),
+                    boton,
+                  ],
+                );
+              }
+              return Row(
                 children: [
-                  Center(child: monedas),
-                  const SizedBox(height: 8),
-                  boton,
+                  Expanded(child: boton),
+                  const SizedBox(width: 8),
+                  monedas,
                 ],
               );
-            }
-            return Row(
-              children: [
-                Expanded(child: boton),
-                const SizedBox(width: 8),
-                monedas,
-              ],
-            );
-          },
-        ),
-        const SizedBox(height: 8),
-        Text(
-          estado.restantes == 0
-              ? 'Descubriste las ${estado.intros.length} intros.'
-              : !estado.puedeSacar
-              ? 'Gana monedas completando niveles del género correspondiente.'
-              : 'Quedan ${estado.restantes} intros por descubrir.',
-          textAlign: TextAlign.center,
-          style: text.bodySmall?.copyWith(color: context.paleta.tintaSuave),
-        ),
-      ],
+            },
+          ),
+          const SizedBox(height: 8),
+          Text(
+            estado.restantes == 0
+                ? 'Descubriste las ${estado.intros.length} intros.'
+                : !estado.puedeSacar
+                ? 'Gana monedas completando niveles del género correspondiente.'
+                : 'Quedan ${estado.restantes} intros por descubrir.',
+            textAlign: TextAlign.center,
+            style: text.bodySmall?.copyWith(color: context.paleta.tintaSuave),
+          ),
+        ],
+      ),
     );
   }
 
@@ -304,10 +309,13 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
         itemBuilder: (context, index) {
           final intro = cartas[index];
           final portada = _portadas[intro.id];
-          return _TarjetaIntro(
-            intro: intro,
-            portada: portada == null ? null : FileImage(portada),
-            onTap: () => _abrir(intro),
+          return Entrada(
+            indice: index,
+            child: _TarjetaIntro(
+              intro: intro,
+              portada: portada == null ? null : FileImage(portada),
+              onTap: () => _abrir(intro),
+            ),
           );
         },
       ),
