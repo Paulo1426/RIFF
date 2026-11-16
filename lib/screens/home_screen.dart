@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/genero.dart';
 import '../models/logros.dart';
@@ -186,11 +187,13 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
   // Las salas son de todos los géneros.
   SaldoSalas _saldo = const SaldoSalas();
   StreamSubscription<SaldoSalas>? _suscripcionSaldo;
+  Timer? _temporizadorAviso;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Un rato después, cuando el logo y los géneros ya terminaron de entrar.
+    _temporizadorAviso = Timer(const Duration(milliseconds: 1500), () {
       if (mounted) _avisoAuriculares(context);
     });
     if (!widget.user.isAnonymous) {
@@ -207,6 +210,7 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
 
   @override
   void dispose() {
+    _temporizadorAviso?.cancel();
     _suscripcionSaldo?.cancel();
     super.dispose();
   }
@@ -511,40 +515,34 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
   }
 }
 
-// Una vez por apertura de la app; cerrar sesión y volver a entrar no lo repite.
-var _avisoAuricularesMostrado = false;
+const _claveAvisoAuriculares = 'aviso_auriculares_visto';
 
-/// Tras el login, antes de elegir género: se recomienda usar auriculares.
+/// Recomienda usar auriculares con un aviso discreto, solo la primera vez que
+/// se abre la app en este teléfono.
 Future<void> _avisoAuriculares(BuildContext context) async {
-  if (_avisoAuricularesMostrado) return;
-  _avisoAuricularesMostrado = true;
-  await showDialog<void>(
-    context: context,
-    builder: (context) => LiquidGlassDialog(
-      icon: const Icon(
-        PhosphorIconsFill.headphones,
-        size: 64,
-        color: azulLogin,
-      ),
-      title: const Text('Usa auriculares', textAlign: TextAlign.center),
-      content: const Text(
-        'Se recomienda usar cascos (audífonos o auriculares) para '
-        'distinguir bien cada instrumento.',
-        textAlign: TextAlign.center,
-      ),
-      actions: [
-        FilledButton(
-          style: FilledButton.styleFrom(
-            backgroundColor: azulLogin,
-            foregroundColor: AppColors.paperWhite,
+  // Los recordatorios se programan en cada apertura, haya o no aviso.
+  unawaited(Recordatorios.programar());
+  final mensajes = ScaffoldMessenger.of(context);
+  final prefs = await SharedPreferences.getInstance();
+  if (prefs.getBool(_claveAvisoAuriculares) ?? false) return;
+  await prefs.setBool(_claveAvisoAuriculares, true);
+  mensajes.showSnackBar(
+    SnackBar(
+      duration: const Duration(seconds: 6),
+      showCloseIcon: true,
+      content: Row(
+        children: [
+          const Icon(PhosphorIconsFill.headphones, color: azulLogin),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'Usa auriculares para distinguir bien cada instrumento.',
+            ),
           ),
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Entendido'),
-        ),
-      ],
+        ],
+      ),
     ),
   );
-  unawaited(Recordatorios.programar());
 }
 
 // GoogleSignIn se inicializa una sola vez (login y confirmar la cuenta).
