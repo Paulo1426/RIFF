@@ -48,6 +48,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Con la misma llave que el release, la única SHA-1 registrada en Firebase
+            // sirve para F5 y para el APK publicado (Google Sign-In la exige).
+            // Sin key.properties se queda con la llave debug de cada equipo.
+            if (!claves.isEmpty) signingConfig = signingConfigs.getByName("release")
+        }
         release {
             // H-01: R8 ofusca y reduce el código; quita clases y recursos sin uso.
             isMinifyEnabled = true
