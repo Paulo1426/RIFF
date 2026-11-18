@@ -181,223 +181,251 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
           children: [
             const FondoLogin(),
             SafeArea(
-              child: Center(
-                child: SingleChildScrollView(
+              // La tarjeta se achica para caber sin desplazar en cualquier
+              // teléfono; solo con el teclado abierto (o pantalla diminuta,
+              // < 480 px de alto) se desplaza en vez de seguir encogiendo.
+              child: LayoutBuilder(
+                builder: (context, caja) => SingleChildScrollView(
                   padding: const EdgeInsets.all(24),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 420),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          LiquidGlassCard(
-                            // Más opaca y con borde azul del logo: resalta
-                            // sobre el fondo y el texto se lee bien.
-                            opacity: 0.6,
-                            borderRadius: 28,
-                            borderColor: azulLogin,
-                            padding: const EdgeInsets.all(24),
-                            // Campos con contorno cian y etiqueta arriba.
-                            child: Theme(
-                              data: Theme.of(context).copyWith(
-                                inputDecorationTheme: camposLogin(context),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  const Stack(
-                                    clipBehavior: Clip.none,
-                                    children: [
-                                      Center(child: LogoCircular()),
-                                      // Dentro de la tarjeta: arriba no
-                                      // tapa su borde.
-                                      Positioned(
-                                        top: -12,
-                                        right: -12,
-                                        child: _AjustesLogin(),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    _registering
-                                        ? 'Crea tu cuenta'
-                                        : 'Bienvenido',
-                                    textAlign: TextAlign.center,
-                                    style: text.headlineMedium?.copyWith(
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Pon a prueba tu oído y descubre la melodía',
-                                    textAlign: TextAlign.center,
-                                    style: text.bodyMedium?.copyWith(
-                                      color: context.paleta.tintaSuave,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 20),
-                                  if (_registering) ...[
-                                    TextFormField(
-                                      controller: _name,
-                                      textInputAction: TextInputAction.next,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Nombre',
-                                        prefixIcon: Icon(Icons.person_outline),
-                                      ),
-                                      validator: (value) =>
-                                          value == null || value.trim().isEmpty
-                                          ? 'Escribe tu nombre'
-                                          : null,
-                                    ),
-                                    const SizedBox(height: 12),
-                                  ],
-                                  TextFormField(
-                                    controller: _email,
-                                    keyboardType: TextInputType.emailAddress,
-                                    textInputAction: TextInputAction.next,
-                                    decoration: const InputDecoration(
-                                      labelText: 'Correo',
-                                      prefixIcon: Icon(Icons.mail_outline),
-                                    ),
-                                    validator: (value) => validarCorreo(
-                                      value,
-                                      registrando: _registering,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  TextFormField(
-                                    controller: _password,
-                                    obscureText: !_showPassword,
-                                    decoration: InputDecoration(
-                                      labelText: 'Contraseña',
-                                      prefixIcon: const Icon(
-                                        Icons.lock_outline,
-                                      ),
-                                      suffixIcon: IconButton(
-                                        tooltip: _showPassword
-                                            ? 'Ocultar contraseña'
-                                            : 'Mostrar contraseña',
-                                        onPressed: () => setState(
-                                          () => _showPassword = !_showPassword,
-                                        ),
-                                        icon: Icon(
-                                          _showPassword
-                                              ? Icons.visibility_off_outlined
-                                              : Icons.visibility_outlined,
-                                        ),
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  child: SizedBox(
+                    height: max(caja.maxHeight - 48, 480.0),
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: SizedBox(
+                          width: min(caja.maxWidth - 48, 420.0),
+                          child: Form(
+                            key: _formKey,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                LiquidGlassCard(
+                                  // Más opaca y con borde azul del logo: resalta
+                                  // sobre el fondo y el texto se lee bien.
+                                  opacity: 0.6,
+                                  borderRadius: 28,
+                                  borderColor: azulLogin,
+                                  padding: const EdgeInsets.all(24),
+                                  // Campos con contorno cian y etiqueta arriba.
+                                  child: Theme(
+                                    data: Theme.of(context).copyWith(
+                                      inputDecorationTheme: camposLogin(
+                                        context,
                                       ),
                                     ),
-                                    validator: (value) => validarClave(
-                                      value,
-                                      registrando: _registering,
-                                    ),
-                                  ),
-                                  if (_error != null) ...[
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      _error!,
-                                      style: TextStyle(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.error,
-                                      ),
-                                    ),
-                                  ],
-                                  const SizedBox(height: 20),
-                                  BotonDegradado(
-                                    onPressed: _busy ? null : _submit,
-                                    label: _registering
-                                        ? 'Crear cuenta'
-                                        : 'Iniciar sesión',
-                                  ),
-                                  // El invitado ya tiene "Jugar sin registrarme",
-                                  // que retoma la misma sesión anónima.
-                                  if (!_registering &&
-                                      widget.savedUser != null &&
-                                      !widget.savedUser!.isAnonymous) ...[
-                                    const SizedBox(height: 12),
-                                    OutlinedButton.icon(
-                                      onPressed: _busy
-                                          ? null
-                                          : widget.onSignedIn,
-                                      icon: const Icon(
-                                        Icons.play_circle_outline,
-                                      ),
-                                      label: Text(
-                                        'Continuar como ${_nombreSesion(widget.savedUser!)}',
-                                      ),
-                                    ),
-                                  ],
-                                  if (!_registering) ...[
-                                    const SizedBox(height: 16),
-                                    Row(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
                                       children: [
-                                        const Expanded(child: Divider()),
-                                        Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                          ),
-                                          child: Text(
-                                            'o',
-                                            style: text.bodySmall,
+                                        const Stack(
+                                          clipBehavior: Clip.none,
+                                          children: [
+                                            Center(child: LogoCircular()),
+                                            // Dentro de la tarjeta: arriba no
+                                            // tapa su borde.
+                                            Positioned(
+                                              top: -12,
+                                              right: -12,
+                                              child: _AjustesLogin(),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Text(
+                                          _registering
+                                              ? 'Crea tu cuenta'
+                                              : 'Bienvenido',
+                                          textAlign: TextAlign.center,
+                                          style: text.headlineMedium?.copyWith(
+                                            fontWeight: FontWeight.w800,
                                           ),
                                         ),
-                                        const Expanded(child: Divider()),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Pon a prueba tu oído y descubre la melodía',
+                                          textAlign: TextAlign.center,
+                                          style: text.bodyMedium?.copyWith(
+                                            color: context.paleta.tintaSuave,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 20),
+                                        if (_registering) ...[
+                                          TextFormField(
+                                            controller: _name,
+                                            textInputAction:
+                                                TextInputAction.next,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Nombre',
+                                              prefixIcon: Icon(
+                                                Icons.person_outline,
+                                              ),
+                                            ),
+                                            validator: (value) =>
+                                                value == null ||
+                                                    value.trim().isEmpty
+                                                ? 'Escribe tu nombre'
+                                                : null,
+                                          ),
+                                          const SizedBox(height: 12),
+                                        ],
+                                        TextFormField(
+                                          controller: _email,
+                                          keyboardType:
+                                              TextInputType.emailAddress,
+                                          textInputAction: TextInputAction.next,
+                                          decoration: const InputDecoration(
+                                            labelText: 'Correo',
+                                            prefixIcon: Icon(
+                                              Icons.mail_outline,
+                                            ),
+                                          ),
+                                          validator: (value) => validarCorreo(
+                                            value,
+                                            registrando: _registering,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 12),
+                                        TextFormField(
+                                          controller: _password,
+                                          obscureText: !_showPassword,
+                                          decoration: InputDecoration(
+                                            labelText: 'Contraseña',
+                                            prefixIcon: const Icon(
+                                              Icons.lock_outline,
+                                            ),
+                                            suffixIcon: IconButton(
+                                              tooltip: _showPassword
+                                                  ? 'Ocultar contraseña'
+                                                  : 'Mostrar contraseña',
+                                              onPressed: () => setState(
+                                                () => _showPassword =
+                                                    !_showPassword,
+                                              ),
+                                              icon: Icon(
+                                                _showPassword
+                                                    ? Icons
+                                                          .visibility_off_outlined
+                                                    : Icons.visibility_outlined,
+                                              ),
+                                            ),
+                                          ),
+                                          validator: (value) => validarClave(
+                                            value,
+                                            registrando: _registering,
+                                          ),
+                                        ),
+                                        if (_error != null) ...[
+                                          const SizedBox(height: 12),
+                                          Text(
+                                            _error!,
+                                            style: TextStyle(
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.error,
+                                            ),
+                                          ),
+                                        ],
+                                        const SizedBox(height: 20),
+                                        BotonDegradado(
+                                          onPressed: _busy ? null : _submit,
+                                          label: _registering
+                                              ? 'Crear cuenta'
+                                              : 'Iniciar sesión',
+                                        ),
+                                        // El invitado ya tiene "Jugar sin registrarme",
+                                        // que retoma la misma sesión anónima.
+                                        if (!_registering &&
+                                            widget.savedUser != null &&
+                                            !widget.savedUser!.isAnonymous) ...[
+                                          const SizedBox(height: 12),
+                                          OutlinedButton.icon(
+                                            onPressed: _busy
+                                                ? null
+                                                : widget.onSignedIn,
+                                            icon: const Icon(
+                                              Icons.play_circle_outline,
+                                            ),
+                                            label: Text(
+                                              'Continuar como ${_nombreSesion(widget.savedUser!)}',
+                                            ),
+                                          ),
+                                        ],
+                                        if (!_registering) ...[
+                                          const SizedBox(height: 16),
+                                          Row(
+                                            children: [
+                                              const Expanded(child: Divider()),
+                                              Padding(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                    ),
+                                                child: Text(
+                                                  'o',
+                                                  style: text.bodySmall,
+                                                ),
+                                              ),
+                                              const Expanded(child: Divider()),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 16),
+                                          OutlinedButton.icon(
+                                            onPressed: _busy
+                                                ? null
+                                                : _signInWithGoogle,
+                                            style: OutlinedButton.styleFrom(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 14,
+                                                  ),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(16),
+                                              ),
+                                            ),
+                                            icon: const _LogoGoogle(),
+                                            label: const Text(
+                                              'Continuar con Google',
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          TextButton.icon(
+                                            onPressed: _busy
+                                                ? null
+                                                : _continueAsGuest,
+                                            icon: const Icon(
+                                              Icons.sports_esports_outlined,
+                                            ),
+                                            label: const Text(
+                                              'Jugar sin registrarme',
+                                            ),
+                                          ),
+                                        ],
                                       ],
                                     ),
-                                    const SizedBox(height: 16),
-                                    OutlinedButton.icon(
-                                      onPressed: _busy
-                                          ? null
-                                          : _signInWithGoogle,
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 14,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            16,
-                                          ),
-                                        ),
-                                      ),
-                                      icon: const _LogoGoogle(),
-                                      label: const Text('Continuar con Google'),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    TextButton.icon(
-                                      onPressed: _busy
-                                          ? null
-                                          : _continueAsGuest,
-                                      icon: const Icon(
-                                        Icons.sports_esports_outlined,
-                                      ),
-                                      label: const Text(
-                                        'Jugar sin registrarme',
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                TextButton(
+                                  onPressed: _busy
+                                      ? null
+                                      : () => setState(() {
+                                          _registering = !_registering;
+                                          _error = null;
+                                        }),
+                                  child: Text(
+                                    _registering
+                                        ? '¿Ya tienes cuenta? Inicia sesión'
+                                        : '¿No tienes cuenta? Crea una nueva',
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 12),
-                          TextButton(
-                            onPressed: _busy
-                                ? null
-                                : () => setState(() {
-                                    _registering = !_registering;
-                                    _error = null;
-                                  }),
-                            child: Text(
-                              _registering
-                                  ? '¿Ya tienes cuenta? Inicia sesión'
-                                  : '¿No tienes cuenta? Crea una nueva',
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                   ),

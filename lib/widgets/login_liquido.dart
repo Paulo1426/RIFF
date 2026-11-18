@@ -160,90 +160,92 @@ class _BienvenidaLoginState extends State<BienvenidaLogin>
         fit: StackFit.expand,
         children: [
           const FondoLogin(),
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 420),
-                child: LiquidGlassCard(
-                  opacity: 0.4,
-                  padding: const EdgeInsets.fromLTRB(24, 40, 24, 32),
-                  child: AnimatedBuilder(
-                    animation: _anim,
-                    builder: (context, _) {
-                      final t = _anim.value;
-                      return Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox.square(
-                            dimension: 96,
-                            child: CustomPaint(
-                              painter: _Check(
-                                avance: Curves.easeOut.transform(
-                                  (t / 0.6).clamp(0.0, 1.0),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: LiquidGlassCard(
+                    opacity: 0.4,
+                    padding: const EdgeInsets.fromLTRB(24, 40, 24, 32),
+                    child: AnimatedBuilder(
+                      animation: _anim,
+                      builder: (context, _) {
+                        final t = _anim.value;
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox.square(
+                              dimension: 96,
+                              child: CustomPaint(
+                                painter: _Check(
+                                  avance: Curves.easeOut.transform(
+                                    (t / 0.6).clamp(0.0, 1.0),
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 20),
-                          Opacity(
-                            opacity: ((t - 0.35) / 0.25).clamp(0.0, 1.0),
-                            child: Column(
-                              children: [
-                                Semantics(
-                                  liveRegion: true,
-                                  child: Text(
-                                    '¡Sesión iniciada!',
-                                    textAlign: TextAlign.center,
-                                    style: text.headlineSmall?.copyWith(
-                                      color: azulLogin,
-                                      fontWeight: FontWeight.w800,
+                            const SizedBox(height: 20),
+                            Opacity(
+                              opacity: ((t - 0.35) / 0.25).clamp(0.0, 1.0),
+                              child: Column(
+                                children: [
+                                  Semantics(
+                                    liveRegion: true,
+                                    child: Text(
+                                      '¡Sesión iniciada!',
+                                      textAlign: TextAlign.center,
+                                      style: text.headlineSmall?.copyWith(
+                                        color: azulLogin,
+                                        fontWeight: FontWeight.w800,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  widget.nombre == null
-                                      ? 'Bienvenido a RIFF'
-                                      : 'Bienvenido, ${widget.nombre}',
-                                  textAlign: TextAlign.center,
-                                  style: text.bodyMedium?.copyWith(
-                                    color: context.paleta.tintaSuave,
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    widget.nombre == null
+                                        ? 'Bienvenido a RIFF'
+                                        : 'Bienvenido, ${widget.nombre}',
+                                    textAlign: TextAlign.center,
+                                    style: text.bodyMedium?.copyWith(
+                                      color: context.paleta.tintaSuave,
+                                    ),
                                   ),
-                                ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            // Tres puntos que se encienden por turnos.
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                for (var i = 0; i < 3; i++)
+                                  Container(
+                                    margin: const EdgeInsets.symmetric(
+                                      horizontal: 3,
+                                    ),
+                                    width: 7,
+                                    height: 7,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: azulLogin.withValues(
+                                        alpha:
+                                            0.3 +
+                                            0.7 *
+                                                max(
+                                                  0,
+                                                  sin((t * 3 - i * 0.33) * pi),
+                                                ),
+                                      ),
+                                    ),
+                                  ),
                               ],
                             ),
-                          ),
-                          const SizedBox(height: 16),
-                          // Tres puntos que se encienden por turnos.
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              for (var i = 0; i < 3; i++)
-                                Container(
-                                  margin: const EdgeInsets.symmetric(
-                                    horizontal: 3,
-                                  ),
-                                  width: 7,
-                                  height: 7,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: azulLogin.withValues(
-                                      alpha:
-                                          0.3 +
-                                          0.7 *
-                                              max(
-                                                0,
-                                                sin((t * 3 - i * 0.33) * pi),
-                                              ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
-                      );
-                    },
+                          ],
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),

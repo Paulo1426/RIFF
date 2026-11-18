@@ -15,6 +15,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "655179331422-e5bovel7bl4psgqt9m4alp0ri5m8qhqr.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.song_guess_game",
+            "certificate_hash": "20a93d818e312c9aac6e01e25c05d1a303f2a8ed"
+          }
+        },
+        {
           "client_id": "655179331422-8turslccahe27035sehn4d1mjc6cg642.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -50,6 +58,14 @@
         }
       },
       "oauth_client": [
+        {
+          "client_id": "655179331422-mlgtuo56o17q5j6nriq20v2p1l3cfpfq.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.marin.song_guess_game",
+            "certificate_hash": "20a93d818e312c9aac6e01e25c05d1a303f2a8ed"
+          }
+        },
         {
           "client_id": "655179331422-8turslccahe27035sehn4d1mjc6cg642.apps.googleusercontent.com",
           "client_type": 3

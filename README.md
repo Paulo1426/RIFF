@@ -17,13 +17,13 @@ RIFF es un juego musical para dispositivos Android en el que tendrás que descub
 RIFF todavía no está publicado en las tiendas oficiales. Mientras tanto, puedes descargar e instalar la última versión directamente desde GitHub.
 
 <p align="center">
-  <a href="https://github.com/Paulo1426/RIFF/releases/download/apk-latest/app-release.apk">
+  <a href="https://github.com/Paulo1426/RIFF/releases/download/apk-latest/riff.apk">
     <strong>⬇️ DESCARGAR RIFF PARA ANDROID (APK)</strong>
   </a>
 </p>
 
 <p align="center">
-  <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https%3A%2F%2Fgithub.com%2FPaulo1426%2FRIFF%2Freleases%2Fdownload%2Fapk-latest%2Fapp-release.apk" alt="Código QR para descargar el APK de RIFF" width="220">
+  <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https%3A%2F%2Fgithub.com%2FPaulo1426%2FRIFF%2Freleases%2Fdownload%2Fapk-latest%2Friff.apk" alt="Código QR para descargar el APK de RIFF" width="220">
   <br>
   <em>Escanea el código QR para descargar el APK</em>
 </p>

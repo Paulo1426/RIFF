@@ -548,7 +548,14 @@ Future<void> _avisoAuriculares(BuildContext context) async {
 // GoogleSignIn se inicializa una sola vez (login y confirmar la cuenta).
 Future<void>? _googleListo;
 Future<void> prepararGoogle() =>
-    _googleListo ??= GoogleSignIn.instance.initialize();
+    _googleListo ??= GoogleSignIn.instance.initialize(
+      // Cliente web (client_type 3) de google-services.json: da el idToken
+      // que Firebase valida, sin depender del recurso generado.
+      serverClientId: kIsWeb ? null : _clienteWebGoogle,
+    );
+
+const _clienteWebGoogle =
+    '655179331422-8turslccahe27035sehn4d1mjc6cg642.apps.googleusercontent.com';
 
 class _AuthenticatedHome extends ConsumerStatefulWidget {
   const _AuthenticatedHome({
