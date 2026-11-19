@@ -81,6 +81,7 @@ const limiteGeneral = new LimiteTasa(60);
 const limiteCaro = new LimiteTasa(20);
 const accionesCaras = new Set([
   "startLevel",
+  "offlinePack",
   "purchaseInstrument",
   "requestHint",
   "submitAnswer",
@@ -3381,6 +3382,122 @@ function exigirReautenticacion(authTime: unknown, mensaje: string): void {
   }
 }
 
+/// Huella de una respuesta para jugar sin conexión: SHA-256 de
+/// "id:respuesta normalizada". La app compara la huella de lo que escribe el
+/// jugador; el texto de la respuesta nunca sale del servidor.
+async function huellaRespuesta(id: string, respuesta: string): Promise<string> {
+  const bytes = new TextEncoder().encode(
+    `${id}:${normalizeAnswer(respuesta)}`,
+  );
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/// Paquete para jugar sin conexión una canción de este género (la app lo pide
+/// al iniciar sesión): el primer nivel que le toca al jugador según su orden
+/// y una intro suya. Para el nivel se crea una partida ya resuelta, solo para
+/// que `audio-link` firme los instrumentos, la versión instrumental, la
+/// original y la portada; esa partida no da progreso ni monedas y la app la
+/// descarta tras bajar los archivos.
+async function offlinePack(
+  token: string,
+  uid: string,
+  guest: boolean,
+): Promise<JsonObject> {
+  if (esPopurri()) {
+    throw new HttpError(400, "Medley no tiene paquete sin conexión");
+  }
+  const pack: JsonObject = { nivel: null, intro: null };
+
+  const state = await getProgress(token, uid, guest);
+  const entries = state.niveles as JsonObject[];
+  const entry = entries.find((item) =>
+    item.puede_iniciar === true && item.completado !== true
+  ) ?? entries[0];
+  if (entry) {
+    const nivel = entry.nivel as JsonObject;
+    const levelId = nivel.id as string;
+    const [level, answerDoc] = await Promise.all([
+      getDocument(token, enCatalogo("levels", levelId)),
+      getDocument(token, enCatalogo("privateLevelAnswers", levelId)),
+    ]);
+    const answer = answerDoc?.fields.respuestaCancionNormalizada ??
+      answerDoc?.fields.titulo;
+    if (level && typeof answer === "string") {
+      const instrumentList = nivel.instrumentos as JsonObject[];
+      const { gameId, write } = newGame(uid, levelId, nivel, {
+        ganada: true,
+        melodiaDescubierta: true,
+        instrumentosComprados: instrumentList.map((item) => item.tipo),
+        soloOffline: true,
+      });
+      // Una sola partida de paquete por género: la anterior se borra.
+      const anteriores = (await queryDocuments(token, "games", [
+        { campo: "uid", valor: uid },
+        { campo: "soloOffline", valor: true },
+      ], 100)).filter((document) =>
+        document.fields?.genero === generoActual() &&
+        typeof document.name === "string"
+      );
+      await commitWrites(token, [
+        ...anteriores.map((document) => ({ delete: document.name! })),
+        write,
+      ]);
+      pack.nivel = {
+        gameId,
+        nivel: {
+          ...nivel,
+          instrumentos: instrumentList.map((item) => ({
+            tipo: item.tipo,
+            precio: 0,
+            audio_url: "",
+            comprable: true,
+          })),
+        },
+        huella: await huellaRespuesta(levelId, answer),
+        ...await revealedSong(token, level, levelId),
+      };
+    }
+  }
+
+  // Intro: una que el jugador ya tenga y no haya adivinado; si aún no sacó
+  // ninguna, la primera de su orden, solo para practicar sin conexión (no la
+  // desbloquea ni suma monedas).
+  const intros = await loadIntroState(token, uid, guest);
+  const introId = intros.unlocked.find((id) =>
+    intros.intros.has(id) && !intros.completed.has(id)
+  ) ?? [...intros.intros.keys()].find((id) => !intros.unlocked.includes(id));
+  if (introId) {
+    const fields = intros.intros.get(introId)!;
+    const expected = fields.respuestaCancionNormalizada ?? fields.titulo;
+    if (typeof expected === "string") {
+      const url = async (type: keyof typeof introAudioTypes) => {
+        try {
+          return await signedIntroUrl(introId, fields, type);
+        } catch (error) {
+          console.warn("offlinePack: intro sin", type, introId, error);
+          return null;
+        }
+      };
+      pack.intro = {
+        id: introId,
+        propia: intros.unlocked.includes(introId),
+        huella: await huellaRespuesta(introId, expected),
+        titulo: typeof fields.titulo === "string" ? fields.titulo : null,
+        artista: typeof fields.artista === "string" ? fields.artista : null,
+        urls: {
+          intro: await url("intro"),
+          fullSong: await url("fullSong"),
+          cover: await url("cover"),
+        },
+      };
+    }
+  }
+  return pack;
+}
+
 async function handle(request: Request): Promise<Response> {
   if (request.method !== "POST") {
     return response(405, { error: "Método no permitido" });
@@ -3556,6 +3673,9 @@ async function handle(request: Request): Promise<Response> {
         throw new HttpError(400, "introId no es válido");
       }
       return response(200, await introHint(token, uid, body.introId, guest));
+    }
+    if (action === "offlinePack") {
+      return response(200, await offlinePack(token, uid, guest));
     }
     if (action === "introAudio") {
       if (

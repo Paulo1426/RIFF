@@ -13,6 +13,8 @@ import '../services/firebase_game_repository.dart';
 import '../services/game_service.dart';
 import '../services/musica_menu.dart';
 import '../services/nivel_repository.dart';
+import '../services/paquete_offline.dart';
+import '../services/repositorio_offline.dart';
 import '../services/validation_service.dart';
 
 final gameServiceProvider = Provider((ref) => GameService());
@@ -25,8 +27,15 @@ final musicaMenuProvider = Provider((ref) {
 final modoTemaProvider = StateNotifierProvider<ModoTema, ThemeMode>(
   (ref) => ModoTema()..cargar(),
 );
-final firebaseGameRepositoryProvider = Provider(
-  (ref) => FirebaseGameRepository(),
+final paqueteOfflineProvider = Provider(
+  (ref) => PaqueteOffline(ref.read(audioServiceProvider)),
+);
+// Con red es el repositorio de siempre; sin red juega con el paquete guardado.
+final firebaseGameRepositoryProvider = Provider<FirebaseGameRepository>(
+  (ref) => RepositorioConPaquete(
+    paquetes: ref.read(paqueteOfflineProvider),
+    audio: ref.read(audioServiceProvider),
+  ),
 );
 
 final nivelRepositoryProvider = Provider<NivelRepository>(

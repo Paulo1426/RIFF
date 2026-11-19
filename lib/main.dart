@@ -9,6 +9,7 @@ import 'providers/providers.dart';
 import 'animations/logo_animado.dart';
 import 'screens/home_screen.dart';
 import 'theme/liquid_glass_theme.dart';
+import 'widgets/escala_pantalla.dart';
 import 'services/logs_release.dart';
 import 'services/supabase_service.dart';
 
@@ -69,7 +70,7 @@ class SongGuessApp extends ConsumerWidget {
     // Las tarjetas de vidrio comparten una sola captura del fondo.
     builder: (context, child) {
       final app = BackdropGroup(child: child!);
-      if (!kIsWeb) return app;
+      if (!kIsWeb) return EscalaPantalla(child: app);
       // Web en PC: columna de móvil centrada. MediaQuery también se acota
       // para que los widgets que miden la pantalla usen ese ancho.
       final media = MediaQuery.of(context);

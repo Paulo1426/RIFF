@@ -36,16 +36,19 @@ class AudioService {
 
   // Cada género guarda aparte: "intro:cancion-01" existe en todos. Se aplica
   // al entrar, antes de cualquier await.
-  static String _conGenero(String key) => '${generoActivo.prefijo}$key';
+  // [genero] permite guardar o leer los de otro género sin cambiar el activo
+  // (los paquetes sin conexión se bajan de todos los géneros).
+  static String _conGenero(String key, [Genero? genero]) =>
+      '${(genero ?? generoActivo).prefijo}$key';
 
-  Future<File?> cachedFile(String key) async {
+  Future<File?> cachedFile(String key, {Genero? genero}) async {
     if (kIsWeb) return null; // web: sin caché en disco
-    final file = await _cacheFile(_conGenero(key));
-    return await file.exists() ? file : null;
+    final file = await _cacheFile(_conGenero(key, genero));
+    return await file.exists() && await file.length() > 0 ? file : null;
   }
 
-  Future<File> descargarYGuardar(String url, String key) =>
-      _ensureCached(url, _conGenero(key));
+  Future<File> descargarYGuardar(String url, String key, {Genero? genero}) =>
+      _ensureCached(url, _conGenero(key, genero));
 
   Future<void> reproducir({
     required List<String> urls,

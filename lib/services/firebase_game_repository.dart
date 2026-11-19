@@ -195,6 +195,15 @@ class FirebaseGameRepository {
     );
   }
 
+  /// Una canción por minijuego de [genero] para jugar sin conexión: el nivel
+  /// y la intro que le tocan al jugador, con sus respuestas como huellas.
+  Future<Map<String, dynamic>> paqueteOffline(Genero genero) =>
+      _post({'action': 'offlinePack', 'genero': genero.id});
+
+  /// Al iniciar sesión: deja listo el modo sin conexión. Nada por defecto;
+  /// lo reemplaza `RepositorioConPaquete`.
+  Future<void> prepararOffline() async {}
+
   Future<void> finalizarSesionInvitado() async {
     await _post({'action': 'endGuestSession'});
   }

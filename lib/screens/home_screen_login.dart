@@ -10,7 +10,13 @@ class FirebaseAuthScreen extends StatefulWidget {
   State<FirebaseAuthScreen> createState() => _FirebaseAuthScreenState();
 }
 
-class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
+class _FirebaseAuthScreenState extends State<FirebaseAuthScreen>
+    with SingleTickerProviderStateMixin {
+  // Vuelta del borde de colores de la tarjeta.
+  late final _giroBorde = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 6),
+  )..repeat();
   final _formKey = GlobalKey<FormState>();
   final _email = TextEditingController();
   final _password = TextEditingController();
@@ -22,6 +28,7 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
 
   @override
   void dispose() {
+    _giroBorde.dispose();
     _email.dispose();
     _password.dispose();
     _name.dispose();
@@ -174,6 +181,9 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
         ),
       ),
       child: Scaffold(
+        // El teclado no redimensiona el cuerpo (encogería la tarjeta): se
+        // añade como relleno inferior del scroll y la tarjeta conserva su tamaño.
+        resizeToAvoidBottomInset: false,
         // Sin pantalla de carga: los botones se desactivan mientras entra y
         // después sale la bienvenida con el nombre.
         body: Stack(
@@ -186,7 +196,12 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
               // < 480 px de alto) se desplaza en vez de seguir encogiendo.
               child: LayoutBuilder(
                 builder: (context, caja) => SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
+                  padding: EdgeInsets.fromLTRB(
+                    24,
+                    24,
+                    24,
+                    24 + MediaQuery.viewInsetsOf(context).bottom,
+                  ),
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
                   child: SizedBox(
@@ -203,11 +218,12 @@ class _FirebaseAuthScreenState extends State<FirebaseAuthScreen> {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 LiquidGlassCard(
-                                  // Más opaca y con borde azul del logo: resalta
-                                  // sobre el fondo y el texto se lee bien.
+                                  // Más opaca y con borde de los colores del
+                                  // icono: resalta y el texto se lee bien.
                                   opacity: 0.6,
                                   borderRadius: 28,
-                                  borderColor: azulLogin,
+                                  borderGradient: bordeIconoApp,
+                                  giroBorde: _giroBorde,
                                   padding: const EdgeInsets.all(24),
                                   // Campos con contorno cian y etiqueta arriba.
                                   child: Theme(

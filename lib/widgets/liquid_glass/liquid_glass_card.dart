@@ -1,3 +1,4 @@
+import 'dart:math' show pi;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -25,6 +26,8 @@ class LiquidGlassCard extends StatelessWidget {
     this.margin,
     this.tintColor,
     this.borderColor,
+    this.borderGradient,
+    this.giroBorde,
   });
 
   final Widget child;
@@ -38,6 +41,10 @@ class LiquidGlassCard extends StatelessWidget {
   final Color? tintColor;
   // Borde sólido de color en vez del borde de luz (p. ej. elemento activo).
   final Color? borderColor;
+  // Borde en degradado; gana sobre [borderColor].
+  final Gradient? borderGradient;
+  // 0..1 = una vuelta del [borderGradient]; solo aplica si es SweepGradient.
+  final Animation<double>? giroBorde;
 
   @override
   Widget build(BuildContext context) {
@@ -68,6 +75,8 @@ class LiquidGlassCard extends StatelessWidget {
             radio: borderRadius,
             paleta: paleta,
             color: borderColor,
+            degradado: borderGradient,
+            giro: giroBorde,
           ),
           child: Padding(padding: padding ?? EdgeInsets.zero, child: child),
         ),
@@ -96,24 +105,38 @@ class _BordeLuzPainter extends CustomPainter {
     required this.radio,
     required this.paleta,
     this.color,
-  });
+    this.degradado,
+    this.giro,
+  }) : super(repaint: giro);
 
   final double radio;
   final Paleta paleta;
   final Color? color;
+  final Gradient? degradado;
+  final Animation<double>? giro;
 
   @override
   void paint(Canvas canvas, Size size) {
     const ancho = LiquidGlass.glassBorderWidth;
     final rect = Offset.zero & size;
+    final grosor = degradado != null ? 3.5 : (color == null ? ancho : 2.0);
     final borde = RRect.fromRectAndRadius(
-      rect.deflate(ancho / 2),
+      rect.deflate(grosor / 2),
       Radius.circular(radio),
     );
     final pincel = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = color == null ? ancho : 2;
-    if (color == null) {
+      ..strokeWidth = grosor;
+    if (degradado != null) {
+      final g = degradado!;
+      pincel.shader = g is SweepGradient && giro != null
+          ? SweepGradient(
+              colors: g.colors,
+              stops: g.stops,
+              transform: GradientRotation(giro!.value * 2 * pi),
+            ).createShader(rect)
+          : g.createShader(rect);
+    } else if (color == null) {
       pincel.shader = LiquidGlass.glassBorderGradient(
         paleta,
       ).createShader(rect);
@@ -138,7 +161,9 @@ class _BordeLuzPainter extends CustomPainter {
   bool shouldRepaint(_BordeLuzPainter oldDelegate) =>
       oldDelegate.radio != radio ||
       oldDelegate.paleta != paleta ||
-      oldDelegate.color != color;
+      oldDelegate.color != color ||
+      oldDelegate.degradado != degradado ||
+      oldDelegate.giro != giro;
 }
 
 /// Sombra suave solo por fuera de la tarjeta: una BoxShadow normal se vería a

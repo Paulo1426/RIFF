@@ -238,7 +238,6 @@ class MusicaMenu with WidgetsBindingObserver {
     });
   }
 
-
   Future<File> _archivoSilencio() async {
     final directory = await getApplicationSupportDirectory();
     return File('${directory.path}/musica_menu_silenciada');

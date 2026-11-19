@@ -21,39 +21,30 @@ class FondoLogin extends StatelessWidget {
   );
 }
 
-/// Logo dentro de un círculo con degradado y brillo.
+/// Colores del icono de la app: naranja, amarillo y rojo.
+const bordeIconoApp = SweepGradient(
+  // El naranja se repite al final para que la vuelta cierre sin corte.
+  colors: [
+    Color(0xFFFF8C42),
+    Color(0xFFFFD100),
+    Color(0xFFCE1126),
+    Color(0xFFFF8C42),
+  ],
+);
+
+/// Logo suelto, sin círculo detrás.
 class LogoCircular extends StatelessWidget {
   const LogoCircular({super.key, this.tamano = 88});
 
   final double tamano;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: tamano,
+  Widget build(BuildContext context) => Image.asset(
+    'lib/assets/images/logo/riff_logo.png',
     height: tamano,
-    padding: const EdgeInsets.all(3),
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      gradient: const LinearGradient(colors: [azulLogin, celesteLogin]),
-      boxShadow: [
-        BoxShadow(color: azulLogin.withValues(alpha: 0.5), blurRadius: 24),
-      ],
-    ),
-    child: ClipOval(
-      child: ColoredBox(
-        color: context.paleta.superficie,
-        // El logo es apaisado: con margen no lo recorta el círculo.
-        child: Padding(
-          padding: EdgeInsets.all(tamano * 0.1),
-          child: Image.asset(
-            'lib/assets/images/logo/riff_logo.png',
-            fit: BoxFit.contain,
-            cacheWidth: 384,
-            semanticLabel: 'Riff',
-          ),
-        ),
-      ),
-    ),
+    fit: BoxFit.contain,
+    cacheWidth: 384,
+    semanticLabel: 'Riff',
   );
 }
 

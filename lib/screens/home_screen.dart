@@ -192,6 +192,16 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
   @override
   void initState() {
     super.initState();
+    // Con cualquier cuenta o de invitado: si hay red, deja una canción por
+    // género lista para jugar sin conexión. Sin red no hace nada.
+    unawaited(
+      ref
+          .read(firebaseGameRepositoryProvider)
+          .prepararOffline()
+          .catchError(
+            (Object error) => debugPrint('Modo sin conexión: $error'),
+          ),
+    );
     // Un rato después, cuando el logo y los géneros ya terminaron de entrar.
     _temporizadorAviso = Timer(const Duration(milliseconds: 1500), () {
       if (mounted) _avisoAuriculares(context);
