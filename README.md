@@ -17,13 +17,13 @@ RIFF es un juego musical para dispositivos Android en el que tendrás que descub
 RIFF todavía no está publicado en las tiendas oficiales. Mientras tanto, puedes descargar e instalar la última versión directamente desde GitHub.
 
 <p align="center">
-  <a href="https://github.com/Paulo1426/RIFF/releases/download/apk-latest/riff.apk">
+  <a href="https://github.com/Paulo1426/RIFF/releases/download/apk-latest/riff_v_1.0.0.apk">
     <strong>⬇️ DESCARGAR RIFF PARA ANDROID (APK)</strong>
   </a>
 </p>
 
 <p align="center">
-  <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https%3A%2F%2Fgithub.com%2FPaulo1426%2FRIFF%2Freleases%2Fdownload%2Fapk-latest%2Friff.apk" alt="Código QR para descargar el APK de RIFF" width="220">
+  <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https%3A%2F%2Fgithub.com%2FPaulo1426%2FRIFF%2Freleases%2Fdownload%2Fapk-latest%2Friff_v_1.0.0.apk" alt="Código QR para descargar el APK de RIFF" width="220">
   <br>
   <em>Escanea el código QR para descargar el APK</em>
 </p>
@@ -127,6 +127,18 @@ Cuando creas saber qué canción estás escuchando, escribe su nombre. Si aciert
 - Desbloquearás la grabación original con voz.
 - Podrás escuchar la canción completa desde el reproductor del juego.
 
+### ¿Te atascaste? Usa una pista
+
+Puedes gastar monedas del género para desbloquear pistas:
+
+| Pista | Qué te da | Monedas |
+|---|---|---|
+| Sorpresa | Una pista al azar: primera letra, última letra o artista | 3 |
+| Iniciales | Las iniciales del título | 4 |
+| Cuarto instrumento | La pista del instrumento que no compraste | 5 |
+
+En las salas multijugador no hay pistas: se compite en igualdad.
+
 > **¡Cada partida puede ser diferente!** Los precios y la ubicación de la melodía cambian cuando vuelves a jugar un nivel.
 
 ---
@@ -170,7 +182,7 @@ En lugar de jugar exclusivamente con un género, aquí las canciones y las intro
 
 - 15 niveles por dificultad.
 - Canciones seleccionadas aleatoriamente entre los cinco géneros.
-- Hasta 100 intros diferentes.
+- Hasta 75 intros diferentes.
 - Progreso independiente.
 - Monedas propias para descubrir introducciones.
 
@@ -184,16 +196,21 @@ Es una excelente opción si quieres poner a prueba tus conocimientos musicales s
 
 ¡La música también se disfruta en compañía!
 
-RIFF incorpora un modo de salas en el que pueden participar hasta **10 jugadores**.
+RIFF incorpora un modo de salas en el que pueden participar hasta **10 jugadores**, todos con las mismas canciones.
 
-Puedes crear o unirte a una sala seleccionando:
+Puedes crear una sala (pública o privada) o unirte con su código de 6 caracteres, eligiendo:
 
-- Un género musical específico.
-- 🎲 Modo aleatorio, con canciones e intros de cualquiera de los cinco géneros.
+- **Tipo:** canciones con instrumentos o intros.
+- **Género:** uno específico o 🎲 aleatorio, con canciones de los cinco géneros.
+- **Modo de juego:**
+  - ⏱️ **Contrarreloj:** 10 minutos desde que todos están listos. Cada acierto da 100 puntos, hasta 50 más por rapidez y 1 por cada $10.000 sin gastar. Gana quien sume más.
+  - 🪦 **Eliminación:** sin tiempo; en cada ronda sale el último en adivinar.
 
-Las salas cuentan con fichas para participar y estadísticas propias. Cada cuenta registrada recibe 20 fichas de bienvenida.
+La partida arranca cuando hay al menos 2 jugadores y todos marcan "Listo". Las salas se cierran tras 20 minutos sin actividad.
 
-También podrás consultar tus estadísticas de partidas jugadas, victorias, podios y otras actividades.
+Las salas usan **fichas**: los tres primeros puestos ganan 10, 7 y 3 fichas en las salas de instrumentos, y las fichas sirven para crear (10) o entrar (5) a las salas de intros. Si sales antes de que empiece la partida, se te devuelven. No cobra premio quien abandona ni quien no acierta ninguna canción. Cada cuenta registrada recibe 20 fichas de bienvenida.
+
+También podrás consultar tus estadísticas de partidas jugadas, victorias, podios y otras actividades, por género y en general.
 
 ---
 
@@ -216,13 +233,15 @@ Cuanto más juegues, más oportunidades tendrás de completar tu colección.
 - **Compra de instrumentos:** administra un presupuesto de $1.000.000 en cada partida.
 - **Reproducción musical:** escucha pistas individuales y mezclas instrumentales.
 - **Adivina la intro:** descubre canciones escuchando sus introducciones.
-- **Salas multijugador:** comparte desafíos musicales con hasta 10 jugadores.
+- **Pistas:** desbloquea ayudas con monedas cuando una canción se te resiste.
+- **Salas multijugador:** contrarreloj o eliminación con hasta 10 jugadores, públicas o privadas.
 - **Insignias y logros:** consigue reconocimientos por tus avances.
 - **Estadísticas:** consulta tu rendimiento general y por género.
 - **Progreso guardado:** conserva tus niveles, canciones descubiertas y logros.
 - **Inicio de sesión:** accede con correo electrónico, Google o mediante el modo invitado.
 - **Requiere conexión a internet:** puedes repetir niveles completados y volver a escuchar las intros que ya desbloqueaste; las canciones desbloqueadas se guardan en la caché del teléfono para escucharlas más rápido (en la web no se guarda nada).
-- **Diseño moderno:** interfaz Liquid Glass, iconos musicales, animaciones, transiciones y música de fondo en los menús.
+- **Diseño moderno:** interfaz Liquid Glass, modo claro y oscuro, iconos musicales, animaciones, transiciones y música de fondo en los menús.
+- **Se adapta a tu pantalla:** la interfaz se escala según el tamaño de tu teléfono.
 
 ---
 
@@ -245,7 +264,7 @@ RIFF cuenta con una interfaz moderna, animaciones y una identidad visual inspira
 
 ## 📲 Plataforma
 
-Actualmente, RIFF está desarrollado para dispositivos **Android**.
+RIFF está pensado para dispositivos **Android** (Android 7.0 o superior). También puedes jugar en el navegador.
 
 ---
 
