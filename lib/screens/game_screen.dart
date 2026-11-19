@@ -73,9 +73,13 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   String _nowPlaying = '';
   // Instrumentos sonando; vacío cuando suena la canción completa.
   List<Instrumento> _nowPlayingInstruments = const [];
+  int _descuento = 0;
+  int _descuentoId = 0;
   String? _message;
   bool? _correct;
+  int _balance = Nivel.presupuestoTotal;
   final Set<String> _purchased = {};
+  final Map<String, int> _prices = {};
   bool _melodyFound = false;
   bool _won = false;
   // Lo ganado al acertar; se muestra en la barra de arriba.
@@ -89,7 +93,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   // Al descubrir la melodía: confeti y el aviso que se desvanece (cada
   // descubrimiento cambia la clave y reinicia la animación).
   final _confetiMelodia = ConfettiController(
-    duration: const Duration(milliseconds: 1500),
+    duration: const Duration(milliseconds: 2000),
   );
   int _celebracion = 0;
   int _playbackGeneration = 0;
@@ -107,6 +111,8 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     // La música del menú se pausa mientras se juega y vuelve al salir.
     _musicaMenu = ref.read(musicaMenuProvider)..entrarNivel();
     _purchased.addAll(widget.comprasPrevias.keys);
+    _prices.addAll(widget.comprasPrevias);
+    _balance -= widget.comprasPrevias.values.fold(0, (a, b) => a + b);
     _melodyFound = widget.melodiaDescubierta;
     unawaited(_cargarMonedas());
   }
@@ -171,13 +177,14 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       if (!mounted) return;
       final descubierta = result.melodiaDescubierta && !_melodyFound;
       setState(() {
+        if (result.compraRealizada) {
+          _prices[instrumento.id] = result.precioInstrumento;
+        }
+        _setBalance(result.presupuestoRestante);
         _purchased
           ..clear()
           ..addAll(result.instrumentosComprados);
         _melodyFound = result.melodiaDescubierta;
-        _message = result.melodiaDescubierta
-            ? '¡Encontraste la melodía! Se desbloquearon todos los instrumentos.'
-            : null;
       });
       if (descubierta) _celebrarMelodia();
       try {
@@ -249,8 +256,6 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             ..clear()
             ..addAll(resultado.instrumentosComprados);
           _melodyFound = true;
-          _message =
-              '¡Encontraste la melodía! Se desbloquearon todos los instrumentos.';
         }
       });
       if (resultado.tipo == TipoPista.cuartoInstrumento) _celebrarMelodia();
@@ -300,7 +305,17 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     );
   }
 
-  /// Instrumentos comprados de los 3 posibles (con un punto por compra).
+  // Llamar dentro de setState: guarda el descuento para animarlo.
+  void _setBalance(int nuevo) {
+    if (nuevo < _balance) {
+      _descuento = _balance - nuevo;
+      _descuentoId++;
+    }
+    _balance = nuevo;
+  }
+
+  /// Dos bloques: presupuesto restante (con barra de lo que queda) e
+  /// instrumentos comprados del total disponible (un punto por instrumento).
   Widget _presupuesto() {
     final text = Theme.of(context).textTheme;
     final color = _colorGenero;
@@ -309,11 +324,40 @@ class _GameScreenState extends ConsumerState<GameScreen> {
       fontWeight: FontWeight.w800,
       letterSpacing: 1,
     );
-    const maxCompras = 3;
+    final total = widget.nivel.instrumentos.length;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
+          flex: 3,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('PRESUPUESTO', style: etiqueta),
+              _monto(text),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(99),
+                child: LinearProgressIndicator(
+                  value: _balance / Nivel.presupuestoTotal,
+                  minHeight: 6,
+                  color: color,
+                  backgroundColor: color.withValues(alpha: 0.2),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'de \$${formatearMiles(Nivel.presupuestoTotal)}',
+                style: text.bodySmall?.copyWith(
+                  color: context.paleta.tintaSuave,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          flex: 2,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -322,18 +366,19 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  '${_purchased.length} de $maxCompras',
+                  '${_purchased.length} de $total',
                   style: text.titleLarge,
                 ),
               ),
               const SizedBox(height: 6),
-              Row(
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
                 children: [
-                  for (var i = 0; i < maxCompras; i++)
+                  for (var i = 0; i < total; i++)
                     Container(
                       width: 14,
                       height: 14,
-                      margin: const EdgeInsets.only(right: 6),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: i < _purchased.length ? color : null,
@@ -344,7 +389,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'de ${widget.nivel.instrumentos.length} disponibles',
+                'disponibles',
                 style: text.bodySmall?.copyWith(
                   color: context.paleta.tintaSuave,
                 ),
@@ -352,16 +397,47 @@ class _GameScreenState extends ConsumerState<GameScreen> {
             ],
           ),
         ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Text(
-            widget.nivel.modoPrueba
-                ? 'Modo de prueba: ${widget.nivel.duracionFragmentoSegundos} segundos por escucha.'
-                : 'Selecciona un instrumento para escuchar un fragmento y adivina la canción.',
-            textAlign: TextAlign.end,
-            style: text.titleSmall,
+      ],
+    );
+  }
+
+  /// Monto restante animado y, al comprar, el descuento que sube y se borra.
+  Widget _monto(TextTheme text) {
+    // Wrap: en pantallas angostas el descuento baja de línea.
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.end,
+      spacing: 8,
+      children: [
+        TweenAnimationBuilder<int>(
+          tween: IntTween(end: _balance),
+          duration: const Duration(milliseconds: 900),
+          curve: Curves.easeOutCubic,
+          builder: (context, value, _) => FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text('\$${formatearMiles(value)}', style: text.titleLarge),
           ),
         ),
+        if (_descuentoId > 0)
+          // La clave reinicia la animación en cada compra.
+          TweenAnimationBuilder<double>(
+            key: ValueKey(_descuentoId),
+            tween: Tween(begin: 0, end: 1),
+            duration: const Duration(milliseconds: 1400),
+            curve: Curves.easeOut,
+            builder: (context, t, child) => Opacity(
+              opacity: 1 - t,
+              child: Transform.translate(
+                offset: Offset(0, -18 * t),
+                child: child,
+              ),
+            ),
+            child: Text(
+              '-\$${formatearMiles(_descuento)}',
+              style: text.titleSmall?.copyWith(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ),
       ],
     );
   }
@@ -443,7 +519,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     setState(() {
       _playing = true;
       _paused = false;
-      _nowPlaying = type == 'instrumentalSong' ? 'Canción' : 'Canción original';
+      _nowPlaying = type == 'instrumentalSong'
+          ? 'Canción instrumental'
+          : 'Canción original';
       _nowPlayingInstruments = const [];
     });
     try {
@@ -502,11 +580,11 @@ class _GameScreenState extends ConsumerState<GameScreen> {
   Widget _reproductor() {
     return LiquidGlassCard(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         child: Row(
           children: [
             SizedBox.square(
-              dimension: 40,
+              dimension: 32,
               child: _nowPlayingInstruments.isEmpty
                   ? DiscoGirando(girando: !_paused)
                   : FittedBox(
@@ -533,7 +611,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                         activo: !_paused,
                         color: _colorGenero,
                         width: caja.maxWidth,
-                        height: 34,
+                        height: 26,
                         barras: 24,
                       ),
                     ),
@@ -704,11 +782,12 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     children: [
       vista,
       Align(
-        alignment: Alignment.topCenter,
+        // Sale justo donde aparece el aviso.
+        alignment: const Alignment(0, -0.85),
         child: ConfettiWidget(
           confettiController: _confetiMelodia,
           blastDirectionality: BlastDirectionality.explosive,
-          numberOfParticles: 30,
+          numberOfParticles: 40,
           maxBlastForce: 20,
           minBlastForce: 8,
           gravity: 0.3,
@@ -722,34 +801,58 @@ class _GameScreenState extends ConsumerState<GameScreen> {
         ),
       ),
       if (_celebracion > 0)
-        Center(
+        Positioned(
+          top: 20,
+          left: 16,
+          right: 16,
           child: IgnorePointer(
             child: TweenAnimationBuilder<double>(
               key: ValueKey(_celebracion),
               tween: Tween(begin: 0, end: 1),
-              duration: const Duration(milliseconds: 2600),
+              duration: const Duration(milliseconds: 3200),
               builder: (context, t, hijo) => Opacity(
-                // Aparece rápido, se queda y se desvanece.
-                opacity: t < 0.15
-                    ? t / 0.15
-                    : t > 0.65
-                    ? (1 - t) / 0.35
+                // Entra rápido deslizándose desde arriba, se queda y se va.
+                opacity: t < 0.1
+                    ? t / 0.1
+                    : t > 0.75
+                    ? (1 - t) / 0.25
                     : 1,
-                child: Transform.scale(scale: 0.9 + 0.15 * t, child: hijo),
+                child: Transform.translate(
+                  offset: Offset(0, -24 * (1 - (t / 0.1).clamp(0.0, 1.0))),
+                  child: hijo,
+                ),
               ),
               child: Semantics(
                 liveRegion: true,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Text(
-                    '¡Encontraste la melodía! 🎶',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                      color: AppColors.paperWhite,
-                      shadows: [
-                        Shadow(blurRadius: 16, color: _colorGenero),
-                        const Shadow(blurRadius: 4, color: Colors.black54),
+                child: Center(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: _colorGenero,
+                      borderRadius: BorderRadius.circular(99),
+                      boxShadow: const [
+                        BoxShadow(blurRadius: 18, color: Color(0x66000000)),
                       ],
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      child: Text(
+                        '¡Encontraste la melodía! 🎶',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              color:
+                                  ThemeData.estimateBrightnessForColor(
+                                        _colorGenero,
+                                      ) ==
+                                      Brightness.dark
+                                  ? Colors.white
+                                  : Colors.black87,
+                              fontWeight: FontWeight.w800,
+                            ),
+                      ),
                     ),
                   ),
                 ),
@@ -819,26 +922,44 @@ class _GameScreenState extends ConsumerState<GameScreen> {
     ],
   );
 
-  /// Alto de cada casilla de instrumento: lo que deja libre el resto del
-  /// nivel, repartido en 2 filas, para que todo quepa sin desplazar.
-  /// shortcut: el alto del resto es una estimación (texto ~280 px más los
-  /// botones visibles); si el diseño cambia mucho, medirlo de verdad.
-  double _altoCasilla(double altoDisponible) {
-    final escala = MediaQuery.textScalerOf(context).scale(1);
-    final extras =
-        (_purchased.isNotEmpty || _melodyFound ? 60 : 0) +
-        (_playing ? 72 : 0) +
-        (_message != null ? 48 : 0) +
-        _pistasDesbloqueadas.length * 46;
-    final libre = altoDisponible - 280 * escala - extras - 12;
-    // Mínimo bajo: la casilla encoge su contenido (FittedBox) en pantallas chicas.
-    return (libre / 2).clamp(56.0, 150.0);
-  }
+  /// Cuadrícula de instrumentos: ocupa el alto que dejan los demás elementos.
+  /// Con el teclado abierto ese alto baja y solo las casillas se encogen
+  /// (su contenido se reduce con ellas).
+  Widget _cuadriculaInstrumentos() => LayoutBuilder(
+    builder: (context, caja) {
+      const espacio = 12.0;
+      final instrumentos = widget.nivel.instrumentos;
+      if (instrumentos.isEmpty) return const SizedBox.shrink();
+      final columnas = max(1, (caja.maxWidth / 240).ceil());
+      final filas = (instrumentos.length / columnas).ceil();
+      final alto = ((caja.maxHeight - (filas - 1) * espacio) / filas)
+          .clamp(0.0, 140.0)
+          .toDouble();
+      return SizedBox(
+        height: alto * filas + (filas - 1) * espacio,
+        child: GridView(
+          padding: EdgeInsets.zero,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 240,
+            mainAxisExtent: alto,
+            crossAxisSpacing: espacio,
+            mainAxisSpacing: espacio,
+          ),
+          children: [
+            for (final instrumento in instrumentos)
+              _instrumentoTile(instrumento),
+          ],
+        ),
+      );
+    },
+  );
 
   Widget _instrumentoTile(Instrumento instrumento) {
     final comprado = _purchased.contains(instrumento.id);
     final limite = !_melodyFound && !comprado && _purchased.length >= 3;
     final disponible = !(_buying || _won || limite);
+    final precio = _prices[instrumento.id];
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     return Tooltip(
@@ -849,7 +970,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           : 'Comprar y escuchar ${instrumento.nombre}',
       child: LiquidGlassCard(
         tintColor: _colorGenero,
-        borderColor: comprado ? scheme.primary : null,
+        borderColor: comprado || _melodyFound ? scheme.primary : null,
         // Expandir hace que toda
         // la casilla responda al toque y el contenido quede centrado.
         child: SizedBox.expand(
@@ -860,8 +981,9 @@ class _GameScreenState extends ConsumerState<GameScreen> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                 // Con letra grande del sistema se encoge en vez de desbordarse.
+                // Con casilla alta el contenido crece con ella.
                 child: FittedBox(
-                  fit: BoxFit.scaleDown,
+                  fit: BoxFit.contain,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -876,13 +998,22 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                           style: text.titleMedium,
                         ),
                       ),
+                      if (precio != null)
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '\$${formatearMiles(precio)}',
+                            style: text.titleSmall?.copyWith(
+                              color: scheme.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
                       Icon(
-                        comprado
+                        comprado || _melodyFound
                             ? PhosphorIconsFill.checkCircle
-                            : _melodyFound
-                            ? PhosphorIconsFill.play
                             : Icons.shopping_cart,
-                        color: comprado ? scheme.primary : null,
+                        color: comprado || _melodyFound ? scheme.primary : null,
                         size: 26,
                       ),
                     ],
@@ -1045,156 +1176,148 @@ class _GameScreenState extends ConsumerState<GameScreen> {
                           Column(
                             children: [
                               Expanded(
-                                child: LayoutBuilder(
-                                  builder: (context, espacio) => ListView(
-                                    // En tablets el contenido queda centrado con un ancho máximo.
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: max(
-                                        16,
-                                        (MediaQuery.sizeOf(context).width -
-                                                680) /
-                                            2,
-                                      ),
-                                      vertical: 16,
+                                child: Center(
+                                  child: ConstrainedBox(
+                                    // En tablets queda centrado con un ancho máximo.
+                                    constraints: const BoxConstraints(
+                                      maxWidth: 712,
                                     ),
-                                    children: [
-                                      if (widget.cabecera
-                                          case final cabecera?) ...[
-                                        cabecera,
-                                        const SizedBox(height: 12),
-                                      ],
-                                      LiquidGlassCard(
-                                        borderRadius: 18,
-                                        tintColor: _colorGenero,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 16,
-                                          vertical: 12,
-                                        ),
-                                        child: _presupuesto(),
+                                    child: Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        16,
+                                        8,
+                                        16,
+                                        12,
                                       ),
-                                      const SizedBox(height: 8),
-                                      GridView(
-                                        shrinkWrap: true,
-                                        // Sin el margen del sistema: la grilla va en medio de
-                                        // la pantalla, no contra el borde.
-                                        padding: EdgeInsets.zero,
-                                        physics:
-                                            const NeverScrollableScrollPhysics(),
-                                        // 2 columnas en teléfonos, 3-4 en tablets. El alto sale
-                                        // del espacio libre para que el nivel quepa sin
-                                        // desplazar en teléfonos bajos.
-                                        gridDelegate:
-                                            SliverGridDelegateWithMaxCrossAxisExtent(
-                                              maxCrossAxisExtent: 240,
-                                              mainAxisExtent: _altoCasilla(
-                                                espacio.maxHeight,
-                                              ),
-                                              crossAxisSpacing: 12,
-                                              mainAxisSpacing: 12,
-                                            ),
+                                      // Sin desplazamiento: con el teclado abierto solo
+                                      // se encogen las casillas de instrumentos.
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
                                         children: [
-                                          for (final instrumento
-                                              in widget.nivel.instrumentos)
-                                            _instrumentoTile(instrumento),
-                                        ],
-                                      ),
-                                      if (_purchased.isNotEmpty &&
-                                          !_melodyFound) ...[
-                                        const SizedBox(height: 8),
-                                        LiquidGlassButton(
-                                          variant: LiquidGlassButtonVariant
-                                              .secondary,
-                                          onPressed: _buying || _playing
-                                              ? null
-                                              : _playPurchased,
-                                          icon: PhosphorIconsFill.playlist,
-                                          label:
-                                              'Escuchar instrumentos comprados',
-                                        ),
-                                      ],
-                                      // Al descubrir la melodía (comprando o con la pista
-                                      // del instrumento faltante) se escucha sin voz.
-                                      if (_melodyFound) ...[
-                                        const SizedBox(height: 8),
-                                        LiquidGlassButton(
-                                          variant: LiquidGlassButtonVariant
-                                              .secondary,
-                                          onPressed: _playing
-                                              ? null
-                                              : () => _playSong(
-                                                  'instrumentalSong',
-                                                ),
-                                          icon: PhosphorIconsFill.playlist,
-                                          label: 'Escuchar canción sin voz',
-                                        ),
-                                      ],
-                                      AnimatedSize(
-                                        duration: const Duration(
-                                          milliseconds: 250,
-                                        ),
-                                        curve: Curves.easeOut,
-                                        child: _playing
-                                            ? Padding(
-                                                padding: const EdgeInsets.only(
-                                                  top: 8,
-                                                ),
-                                                child: _reproductor(),
-                                              )
-                                            : const SizedBox(
-                                                width: double.infinity,
-                                              ),
-                                      ),
-                                      const Divider(height: 24),
-                                      // Pistas compradas, en el orden del diálogo.
-                                      for (final tipo in TipoPista.values)
-                                        if (_pistasDesbloqueadas[tipo]
-                                            case final valor?)
-                                          Container(
-                                            margin: const EdgeInsets.only(
-                                              bottom: 8,
-                                            ),
+                                          if (widget.cabecera
+                                              case final cabecera?) ...[
+                                            cabecera,
+                                            const SizedBox(height: 12),
+                                          ],
+                                          LiquidGlassCard(
+                                            borderRadius: 18,
+                                            tintColor: _colorGenero,
                                             padding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 8,
+                                              horizontal: 16,
+                                              vertical: 12,
                                             ),
-                                            decoration: BoxDecoration(
-                                              color: AppColors.signalOrange
-                                                  .withValues(alpha: 0.12),
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                              border: Border.all(
-                                                color: AppColors.signalOrange
-                                                    .withValues(alpha: 0.3),
-                                              ),
+                                            child: _presupuesto(),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          // Flexible (no Expanded): ocupa solo lo que
+                                          // necesita y lo de abajo sube con él.
+                                          Flexible(
+                                            child: _cuadriculaInstrumentos(),
+                                          ),
+                                          if (_purchased.isNotEmpty &&
+                                              !_melodyFound) ...[
+                                            const SizedBox(height: 8),
+                                            LiquidGlassButton(
+                                              variant: LiquidGlassButtonVariant
+                                                  .secondary,
+                                              onPressed: _buying || _playing
+                                                  ? null
+                                                  : _playPurchased,
+                                              icon: PhosphorIconsFill.playlist,
+                                              label:
+                                                  'Escuchar instrumentos comprados',
                                             ),
-                                            child: Row(
-                                              children: [
-                                                Icon(
-                                                  tipo.icono,
-                                                  size: 16,
-                                                  color: AppColors.signalOrange,
+                                          ],
+                                          // Al descubrir la melodía (comprando o con la pista
+                                          // del instrumento faltante) se escucha sin voz.
+                                          // Con el mini reproductor abierto se oculta para no
+                                          // saturar el espacio.
+                                          if (_melodyFound && !_playing) ...[
+                                            const SizedBox(height: 8),
+                                            LiquidGlassButton(
+                                              variant: LiquidGlassButtonVariant
+                                                  .secondary,
+                                              onPressed: () =>
+                                                  _playSong('instrumentalSong'),
+                                              icon: PhosphorIconsFill.playlist,
+                                              label: 'Escuchar canción sin voz',
+                                            ),
+                                          ],
+                                          AnimatedSize(
+                                            duration: const Duration(
+                                              milliseconds: 250,
+                                            ),
+                                            curve: Curves.easeOut,
+                                            child: _playing
+                                                ? Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          top: 8,
+                                                        ),
+                                                    child: _reproductor(),
+                                                  )
+                                                : const SizedBox(
+                                                    width: double.infinity,
+                                                  ),
+                                          ),
+                                          if (_pistasDesbloqueadas.isNotEmpty)
+                                            const Divider(height: 24),
+                                          // Pistas compradas, en el orden del diálogo.
+                                          for (final tipo in TipoPista.values)
+                                            if (_pistasDesbloqueadas[tipo]
+                                                case final valor?)
+                                              Container(
+                                                margin: const EdgeInsets.only(
+                                                  bottom: 8,
                                                 ),
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                  child: Text(
-                                                    '${tipo.etiqueta}: $valor',
-                                                    style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      fontSize: 13,
-                                                      letterSpacing:
-                                                          tipo ==
-                                                              TipoPista
-                                                                  .iniciales
-                                                          ? 1.5
-                                                          : null,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 8,
                                                     ),
+                                                decoration: BoxDecoration(
+                                                  color: AppColors.signalOrange
+                                                      .withValues(alpha: 0.12),
+                                                  borderRadius:
+                                                      BorderRadius.circular(8),
+                                                  border: Border.all(
+                                                    color: AppColors
+                                                        .signalOrange
+                                                        .withValues(alpha: 0.3),
                                                   ),
                                                 ),
-                                              ],
-                                            ),
-                                          ),
-                                    ],
+                                                child: Row(
+                                                  children: [
+                                                    Icon(
+                                                      tipo.icono,
+                                                      size: 16,
+                                                      color: AppColors
+                                                          .signalOrange,
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Expanded(
+                                                      child: Text(
+                                                        '${tipo.etiqueta}: $valor',
+                                                        style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontSize: 13,
+                                                          letterSpacing:
+                                                              tipo ==
+                                                                  TipoPista
+                                                                      .iniciales
+                                                              ? 1.5
+                                                              : null,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1284,10 +1407,16 @@ class _BotonConNombre extends StatelessWidget {
       filled
           ? IconButton.filled(
               tooltip: nombre,
+              visualDensity: VisualDensity.compact,
               onPressed: onPressed,
               icon: Icon(icon),
             )
-          : IconButton(tooltip: nombre, onPressed: onPressed, icon: Icon(icon)),
+          : IconButton(
+              tooltip: nombre,
+              visualDensity: VisualDensity.compact,
+              onPressed: onPressed,
+              icon: Icon(icon),
+            ),
       Text(nombre, style: Theme.of(context).textTheme.labelSmall),
     ],
   );

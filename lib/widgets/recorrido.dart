@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../theme.dart';
+import 'login_liquido.dart' show azulLogin, celesteLogin;
 
 /// Un paso del recorrido: el elemento a resaltar y qué explica la burbuja.
 class PasoRecorrido {
@@ -296,10 +297,20 @@ class _Burbuja extends StatelessWidget {
                     if (!ultimo)
                       TextButton(
                         onPressed: onOmitir,
+                        style: TextButton.styleFrom(
+                          foregroundColor: context.paleta.oscuro
+                              ? celesteLogin
+                              : azulLogin,
+                        ),
                         child: const Text('Omitir'),
                       ),
+                    // Azul del login, no el naranja del tema.
                     FilledButton(
                       onPressed: onSiguiente,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: azulLogin,
+                        foregroundColor: AppColors.paperWhite,
+                      ),
                       child: Text(ultimo ? '¡Listo!' : 'Siguiente'),
                     ),
                   ],

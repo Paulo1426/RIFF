@@ -47,9 +47,10 @@ class _LiquidLevelCardState extends State<LiquidLevelCard> {
 
   bool get _bloqueado => widget.estado == EstadoNivel.bloqueado;
 
-  // El nivel disponible no lleva subtítulo, solo "Nivel X".
+  // Disponible y completado no llevan subtítulo, solo "Nivel X" (el completado
+  // con su check al lado).
   String? get _textoEstado => switch (widget.estado) {
-    EstadoNivel.completado => 'Completado',
+    EstadoNivel.completado => null,
     EstadoNivel.disponible => null,
     EstadoNivel.bloqueado => 'Bloqueado',
   };
@@ -79,14 +80,35 @@ class _LiquidLevelCardState extends State<LiquidLevelCard> {
         const SizedBox(width: 12),
         Expanded(
           child: Column(
+            // Centrado en vertical, a la altura del número y del botón.
+            mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Una línea: al encogerse la tarjeta mientras gira no se desborda.
-              Text(
-                'Nivel ${widget.numero}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: text.titleMedium,
+              // La palabra "Nivel" siempre se ve: se encoge en vez de cortarse.
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Nivel ${widget.numero}',
+                      maxLines: 1,
+                      style: text.titleMedium,
+                    ),
+                    if (widget.estado == EstadoNivel.completado) ...[
+                      const SizedBox(width: 6),
+                      const LiquidShimmer(
+                        child: Icon(
+                          PhosphorIconsFill.checkCircle,
+                          color: AppColors.verde,
+                          size: 22,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
               if (_textoEstado != null)
                 Text(
@@ -100,12 +122,6 @@ class _LiquidLevelCardState extends State<LiquidLevelCard> {
             ],
           ),
         ),
-        if (widget.estado == EstadoNivel.completado) ...[
-          const LiquidShimmer(
-            child: Icon(PhosphorIconsFill.checkCircle, color: AppColors.verde),
-          ),
-          const SizedBox(width: 6),
-        ],
       ],
     );
     if (_bloqueado) {
@@ -137,7 +153,11 @@ class _LiquidLevelCardState extends State<LiquidLevelCard> {
     };
 
     return Semantics(
-      label: ['Nivel ${widget.numero}', ?_textoEstado].join(', '),
+      label: [
+        'Nivel ${widget.numero}',
+        if (widget.estado == EstadoNivel.completado) 'Completado',
+        ?_textoEstado,
+      ].join(', '),
       child: AnimatedScale(
         // Microanimación al tocar la tarjeta.
         scale: _presionada ? 0.98 : 1,
@@ -159,24 +179,40 @@ class _LiquidLevelCardState extends State<LiquidLevelCard> {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 6, 10, 6),
-                  child: Row(
-                    children: [
-                      Expanded(child: contenido),
-                      // En tarjetas angostas el botón se encoge en vez de
-                      // desbordar; nunca ocupa más de la mitad.
-                      Flexible(
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: accion,
+                LayoutBuilder(
+                  builder: (context, caja) {
+                    // La tarjeta crece con el espacio: el contenido se agranda
+                    // en proporción en vez de quedar chico en el centro.
+                    final k = (caja.maxHeight / 64).clamp(1.0, 1.2);
+                    final fila = Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 6, 10, 6),
+                      child: Row(
+                        children: [
+                          Expanded(child: contenido),
+                          // En tarjetas angostas el botón se encoge en vez de
+                          // desbordar; nunca ocupa más de la mitad.
+                          Flexible(
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: accion,
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
+                    );
+                    if (k < 1.05) return fila;
+                    return FittedBox(
+                      fit: BoxFit.fill,
+                      child: SizedBox(
+                        width: caja.maxWidth / k,
+                        height: caja.maxHeight / k,
+                        child: fila,
+                      ),
+                    );
+                  },
                 ),
                 if (_bloqueado)
                   // Velo oscuro muy sutil sobre el nivel bloqueado.

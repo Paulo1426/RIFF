@@ -26,6 +26,37 @@ void main() {
     ('telefono', const Size(393, 851), 1.0),
     ('tablet', const Size(1024, 1366), 1.0),
   ]) {
+    // Solo se encogen las casillas de instrumentos; con letra grande en un
+    // teléfono diminuto lo fijo ya no cabe y no se prueba.
+    testWidgets(
+      'con el teclado abierto el nivel no se desborda ni se desplaza '
+      'en $nombre',
+      skip: escalaTexto > 1,
+      (tester) async {
+        tester.view.physicalSize = tamano;
+        tester.view.devicePixelRatio = 1;
+        tester.view.viewInsets = FakeViewPadding(bottom: tamano.height * 0.4);
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          ProviderScope(
+            child: MaterialApp(
+              home: MediaQuery(
+                data: MediaQueryData(
+                  size: tamano,
+                  viewInsets: EdgeInsets.only(bottom: tamano.height * 0.4),
+                  textScaler: TextScaler.linear(escalaTexto),
+                ),
+                child: GameScreen(nivel: nivel, gameId: 'partida-1'),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+        expect(find.byType(ListView), findsNothing);
+      },
+    );
+
     testWidgets('el nivel no se desborda en $nombre', (tester) async {
       tester.view.physicalSize = tamano;
       tester.view.devicePixelRatio = 1;

@@ -869,7 +869,6 @@ class _TarjetaDificultad extends StatelessWidget {
                     physics: const AlwaysScrollableScrollPhysics(),
                     children: _llenarEspacio(
                       espacio.maxHeight,
-                      color,
                       bloqueada
                           ? [
                               for (var i = 0; i < cantidadBloqueados; i++)
@@ -901,11 +900,10 @@ class _TarjetaDificultad extends StatelessWidget {
     );
   }
 
-  /// Reparte el alto disponible: con pocos niveles las tarjetas crecen y, si
-  /// aún sobra espacio, abajo toca la banda. Con muchos niveles se desplaza.
+  /// Reparte el alto disponible: las tarjetas crecen (con su contenido) para
+  /// ocupar todo el espacio; con muchos niveles se desplaza.
   List<Widget> _llenarEspacio(
     double alto,
-    Color color,
     List<Widget> tarjetas, {
     required Widget vacio,
     required double escalaTexto,
@@ -913,33 +911,18 @@ class _TarjetaDificultad extends StatelessWidget {
     const separacion = 10.0;
     // Alto natural de la casilla, mayor si el sistema usa letra grande.
     final altoMinimo = max(64.0, 24 + escalaTexto * 44);
-    final altoMaximo = altoMinimo;
-    const altoBanda = 90.0;
     if (tarjetas.isEmpty) {
-      return [
-        Padding(padding: const EdgeInsets.only(top: 24), child: vacio),
-        SizedBox(
-          height: max(altoBanda, alto - 120),
-          child: BandaMusical(color: color),
-        ),
-      ];
+      return [Padding(padding: const EdgeInsets.only(top: 24), child: vacio)];
     }
     final n = tarjetas.length;
-    final altoTarjeta = ((alto - n * separacion) / n).clamp(
-      altoMinimo,
-      altoMaximo,
-    );
-    final sobrante = alto - n * (altoTarjeta + separacion);
+    final altoTarjeta = ((alto - n * separacion) / n)
+        .clamp(altoMinimo, max(altoMinimo, 150.0))
+        .toDouble();
     return [
       for (final tarjeta in tarjetas)
         Padding(
           padding: const EdgeInsets.only(bottom: separacion),
           child: SizedBox(height: altoTarjeta, child: tarjeta),
-        ),
-      if (sobrante >= altoBanda)
-        SizedBox(
-          height: sobrante - 1,
-          child: BandaMusical(color: color),
         ),
     ];
   }
