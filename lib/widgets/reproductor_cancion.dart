@@ -216,8 +216,8 @@ class ReproductorCancion extends StatelessWidget {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(_tiempo(posicion), style: text.bodySmall),
-                              Text(_tiempo(duracion), style: text.bodySmall),
+                              Text(_tiempo(posicion), style: text.headlineSmall?.copyWith(fontSize: 28)),
+                              Text(_tiempo(duracion), style: text.headlineSmall?.copyWith(fontSize: 28)),
                             ],
                           ),
                         ),

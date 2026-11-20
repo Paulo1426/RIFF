@@ -25,6 +25,7 @@ class LiquidGlassButton extends StatefulWidget {
     this.precio,
     this.color,
     this.precioBlanco = false,
+    this.grande = false,
   });
 
   // null deshabilita el botón.
@@ -35,6 +36,8 @@ class LiquidGlassButton extends StatefulWidget {
   final String? precio;
   // El costo en un cuadro blanco, para que se vea mejor.
   final bool precioBlanco;
+  // Más alto y con letra e icono mayores.
+  final bool grande;
   final LiquidGlassButtonVariant variant;
   // Si está, reemplaza el color de la variante.
   final Color? color;
@@ -128,7 +131,9 @@ class _LiquidGlassButtonState extends State<LiquidGlassButton> {
                   ),
                   child: ConstrainedBox(
                     // Altura mínima táctil de 48.
-                    constraints: const BoxConstraints(minHeight: 52),
+                    constraints: BoxConstraints(
+                      minHeight: widget.grande ? 64 : 52,
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
                       child: Row(
@@ -136,15 +141,26 @@ class _LiquidGlassButtonState extends State<LiquidGlassButton> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           if (widget.icon != null) ...[
-                            Icon(widget.icon, color: colorTexto, size: 20),
+                            Icon(
+                              widget.icon,
+                              color: colorTexto,
+                              size: widget.grande ? 24 : 20,
+                            ),
                             const SizedBox(width: 8),
                           ],
                           Flexible(
                             child: Text(
                               widget.label,
                               textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.labelLarge
-                                  ?.copyWith(color: colorTexto),
+                              style:
+                                  (widget.grande
+                                          ? Theme.of(
+                                              context,
+                                            ).textTheme.titleMedium
+                                          : Theme.of(
+                                              context,
+                                            ).textTheme.labelLarge)
+                                      ?.copyWith(color: colorTexto),
                             ),
                           ),
                           if (widget.precio case final precio?) ...[
