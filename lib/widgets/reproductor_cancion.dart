@@ -216,8 +216,19 @@ class ReproductorCancion extends StatelessWidget {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(_tiempo(posicion), style: text.headlineSmall?.copyWith(fontSize: 28)),
-                              Text(_tiempo(duracion), style: text.headlineSmall?.copyWith(fontSize: 28)),
+                              for (final d in [posicion, duracion])
+                                // Con letra grande del sistema se encoge en vez de desbordarse.
+                                Flexible(
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      _tiempo(d),
+                                      style: text.headlineSmall?.copyWith(
+                                        fontSize: 28,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -341,7 +352,10 @@ class _TextoAjustado extends StatelessWidget {
       var tamano = style.fontSize ?? 14;
       bool cabe(double t) {
         final medidor = TextPainter(
-          text: TextSpan(text: texto, style: style.copyWith(fontSize: t)),
+          text: TextSpan(
+            text: texto,
+            style: style.copyWith(fontSize: t),
+          ),
           textDirection: direccion,
           textScaler: escala,
           maxLines: maxLines,
