@@ -101,10 +101,15 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
 
   Future<void> _cargar() async {
     setState(() => _error = null);
+    // Solo la primera carga espera, para poder leer la curiosidad.
+    final minimo = _estado == null
+        ? Future<void>.delayed(esperaMinimaCarga)
+        : null;
     try {
       final estado = await ref
           .read(firebaseGameRepositoryProvider)
           .cargarIntros();
+      await minimo;
       if (!mounted) return;
       setState(() => _estado = estado);
       widget.onEstado?.call(estado);
@@ -1065,6 +1070,11 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
   }
 
   Future<void> _ganar(String titulo, String? artista) async {
+    // Fuera de las salas, "Comprobando respuesta" queda a la vista un mínimo
+    // para que carguen la canción y su portada.
+    final minimo = widget.sala == null
+        ? Future<void>.delayed(esperaMinimaCarga)
+        : null;
     _playbackGeneration++;
     await _audioService.detener();
     if (!mounted) return;
@@ -1077,6 +1087,7 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
     if (!mounted) return;
     if (nuevas.isEmpty) unawaited(_play('fullSong'));
     await portada;
+    await minimo;
     if (!mounted) return;
     setState(() {
       _won = true;
@@ -1407,7 +1418,11 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
         ),
         body: SafeArea(
           top: false,
-          child: _won ? _vistaGanada() : _vistaJuego(),
+          child: ConCarga(
+            cargando: _sending,
+            texto: 'Comprobando respuesta...',
+            child: _won ? _vistaGanada() : _vistaJuego(),
+          ),
         ),
       ),
     ),

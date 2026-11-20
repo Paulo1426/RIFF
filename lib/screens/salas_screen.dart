@@ -1544,7 +1544,10 @@ class _SalaScreenState extends ConsumerState<SalaScreen> {
               child: _error != null
                   ? Center(child: Text('No se pudo abrir la sala: $_error'))
                   : !_cargada
-                  ? const Cargando(texto: 'Abriendo la sala...')
+                  ? const Cargando(
+                      texto: 'Abriendo la sala...',
+                      curiosidad: false,
+                    )
                   : sala == null
                   ? const Center(
                       child: Text(

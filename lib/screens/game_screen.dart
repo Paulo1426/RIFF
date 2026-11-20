@@ -665,6 +665,11 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           .enviarRespuesta(gameId: widget.gameId, respuesta: answer);
       if (!mounted) return;
       if (resultado.correcta) {
+        // Fuera de las salas, "Comprobando respuesta" queda a la vista un
+        // mínimo para que carguen la canción y su portada.
+        final minimo = widget.pistas
+            ? Future<void>.delayed(esperaMinimaCarga)
+            : null;
         _playbackGeneration++;
         try {
           await _audioService.detener();
@@ -693,6 +698,7 @@ class _GameScreenState extends ConsumerState<GameScreen> {
           unawaited(_playSong('fullSong', replaceCurrent: true));
         }
         await portada;
+        await minimo;
         if (!mounted) return;
         setState(() {
           _ganar(

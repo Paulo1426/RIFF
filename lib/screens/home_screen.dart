@@ -738,7 +738,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     if (widget.user.isAnonymous) {
       _iniciarSesionInvitado();
     } else {
-      _cargar();
+      _cargar(esperar: true);
     }
   }
 
@@ -751,7 +751,7 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
   Future<void> _iniciarSesionInvitado() async {
     try {
       await ref.read(firebaseGameRepositoryProvider).iniciarSesionInvitado();
-      if (mounted) await _cargar();
+      if (mounted) await _cargar(esperar: true);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -761,14 +761,18 @@ class _AuthenticatedHomeState extends ConsumerState<_AuthenticatedHome> {
     }
   }
 
-  Future<void> _cargar() async {
+  /// [esperar]: en la primera carga se deja la pantalla [esperaMinimaCarga] para
+  /// leer la curiosidad; las recargas (tras un nivel) no esperan.
+  Future<void> _cargar({bool esperar = false}) async {
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final repository = ref.read(firebaseGameRepositoryProvider);
+      final minimo = esperar ? Future<void>.delayed(esperaMinimaCarga) : null;
       final estado = await repository.cargarEstado();
+      await minimo;
       if (!mounted) return;
       setState(() {
         _estado = estado;

@@ -693,10 +693,21 @@ class _CasetePainter extends CustomPainter {
 /// Pantalla de carga: los instrumentos del género que se juega saltan en ola
 /// sobre un ecualizador de su color, con una curiosidad del género debajo
 /// (una por carga).
+/// Tiempo mínimo que se deja a la vista una pantalla de carga larga (primera
+/// carga o acierto): da tiempo a leer la curiosidad y a que carguen la
+/// canción y su portada.
+const esperaMinimaCarga = Duration(seconds: 5);
+
 class Cargando extends StatefulWidget {
-  const Cargando({super.key, this.texto = 'Cargando...'});
+  const Cargando({
+    super.key,
+    this.texto = 'Cargando...',
+    this.curiosidad = true,
+  });
 
   final String texto;
+  // Con curiosidad del género debajo; sin ella en salas y al comprobar.
+  final bool curiosidad;
 
   @override
   State<Cargando> createState() => _CargandoState();
@@ -720,10 +731,11 @@ class _CargandoState extends State<Cargando> {
               context,
             ).textTheme.bodyMedium?.copyWith(color: context.paleta.tintaSuave),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
-            child: _TarjetaCuriosidad(_nota),
-          ),
+          if (widget.curiosidad)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
+              child: _TarjetaCuriosidad(_nota),
+            ),
         ],
       ),
     ),
@@ -904,7 +916,7 @@ class ConCarga extends StatelessWidget {
           child: cargando
               ? ColoredBox(
                   color: context.paleta.fondo.withValues(alpha: 0.9),
-                  child: Cargando(texto: texto),
+                  child: Cargando(texto: texto, curiosidad: false),
                 )
               : const SizedBox.shrink(),
         ),

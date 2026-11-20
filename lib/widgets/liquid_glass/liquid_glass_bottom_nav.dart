@@ -90,7 +90,8 @@ class _LiquidGlassBottomNavState extends State<LiquidGlassBottomNav> {
                           tween: ColorTween(
                             end: _colorDe(context, hayActiva ? actual : 0),
                           ),
-                          builder: (context, color, _) => GotaLiquida(color: color!),
+                          builder: (context, color, _) =>
+                              GotaLiquida(color: color!),
                         ),
                       ),
                     ),

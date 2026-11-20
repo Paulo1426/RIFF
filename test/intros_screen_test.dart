@@ -8,6 +8,7 @@ import 'package:riff/models/genero.dart';
 import 'package:riff/providers/providers.dart';
 import 'package:riff/screens/intros_screen.dart';
 import 'package:riff/services/firebase_game_repository.dart';
+import 'package:riff/theme.dart' show esperaMinimaCarga;
 
 class _AuthFalsa implements FirebaseAuth {
   @override
@@ -66,7 +67,7 @@ void main() {
       ),
     );
     await tester.pump();
-    await tester.pump();
+    await tester.pump(esperaMinimaCarga);
     expect(find.text('No hay conexión a internet'), findsOneWidget);
     expect(find.text('Reintentar'), findsOneWidget);
   });
@@ -107,7 +108,7 @@ void main() {
         ),
       );
       await tester.pump();
-      await tester.pump();
+      await tester.pump(esperaMinimaCarga);
       expect(tester.takeException(), isNull);
       expect(find.text('7'), findsOneWidget);
       // Las cartas salen directo: la descubierta con su título.
