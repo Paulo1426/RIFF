@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'animations/ciclo_lento.dart';
+import 'data/curiosidades.dart';
 import 'models/genero.dart';
 import 'models/logros.dart';
 import 'models/nivel.dart';
@@ -536,29 +537,251 @@ class _DiscoPainter extends CustomPainter {
   bool shouldRepaint(_DiscoPainter oldDelegate) => false;
 }
 
+/// Casete naranja de la intro; los carretes giran mientras [girando] es true.
+class CaseteGirando extends StatefulWidget {
+  const CaseteGirando({super.key, this.ancho = 200, this.girando = true});
+
+  final double ancho;
+  final bool girando;
+
+  @override
+  State<CaseteGirando> createState() => _CaseteGirandoState();
+}
+
+class _CaseteGirandoState extends State<CaseteGirando>
+    with SingleTickerProviderStateMixin {
+  late final _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 3),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.girando) _controller.repeat();
+  }
+
+  @override
+  void didUpdateWidget(CaseteGirando oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.girando && !_controller.isAnimating) {
+      _controller.repeat();
+    } else if (!widget.girando) {
+      _controller.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    size: Size(widget.ancho, widget.ancho / 1.6),
+    painter: _CasetePainter(_controller),
+  );
+}
+
+class _CasetePainter extends CustomPainter {
+  _CasetePainter(this.fase) : super(repaint: fase);
+
+  final Animation<double> fase;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    Paint p(Color c) => Paint()..color = c;
+    // Carcasa de plástico ahumado.
+    final cuerpo = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, w, h),
+      Radius.circular(w * 0.04),
+    );
+    canvas
+      ..drawRRect(cuerpo, p(const Color(0xFFCFC7C2)))
+      ..drawRRect(
+        cuerpo,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = w * 0.012
+          ..color = const Color(0xFF8D8581),
+      );
+    // Tornillos.
+    for (final o in [
+      Offset(w * 0.05, h * 0.07),
+      Offset(w * 0.95, h * 0.07),
+      Offset(w * 0.05, h * 0.93),
+      Offset(w * 0.95, h * 0.93),
+    ]) {
+      canvas.drawCircle(o, w * 0.016, p(const Color(0xFF4A4542)));
+    }
+    // Etiqueta blanca con franja naranja.
+    final etiqueta = Rect.fromLTWH(w * 0.09, h * 0.1, w * 0.82, h * 0.58);
+    canvas
+      ..drawRRect(
+        RRect.fromRectAndRadius(etiqueta, Radius.circular(w * 0.015)),
+        p(const Color(0xFFF6F2EC)),
+      )
+      ..drawRect(
+        Rect.fromLTWH(etiqueta.left, h * 0.3, etiqueta.width, h * 0.38),
+        p(AppColors.signalOrange),
+      );
+    for (final y in [0.16, 0.22]) {
+      canvas.drawLine(
+        Offset(etiqueta.left + w * 0.04, h * y),
+        Offset(etiqueta.right - w * 0.04, h * y),
+        Paint()
+          ..color = const Color(0xFFB9B2AB)
+          ..strokeWidth = h * 0.012,
+      );
+    }
+    // Ventana con la cinta y los dos carretes.
+    final ventana = RRect.fromRectAndRadius(
+      Rect.fromLTWH(w * 0.2, h * 0.34, w * 0.6, h * 0.3),
+      Radius.circular(h * 0.15),
+    );
+    canvas.drawRRect(ventana, p(const Color(0xFF3A3532)));
+    final giro = fase.value * 2 * pi;
+    for (final x in [0.34, 0.66]) {
+      final c = Offset(w * x, h * 0.49);
+      final r = h * 0.1;
+      canvas
+        ..drawCircle(c, r * 1.25, p(const Color(0xFF6B4A33)))
+        ..drawCircle(c, r, p(const Color(0xFFF1EEE9)));
+      final diente = Paint()
+        ..color = const Color(0xFF3A3532)
+        ..strokeWidth = r * 0.22
+        ..strokeCap = StrokeCap.round;
+      for (var i = 0; i < 6; i++) {
+        final a = giro + i * pi / 3;
+        canvas.drawLine(
+          c + Offset(cos(a), sin(a)) * r * 0.45,
+          c + Offset(cos(a), sin(a)) * r * 0.85,
+          diente,
+        );
+      }
+    }
+    // Parte baja trapezoidal con dos agujeros.
+    canvas
+      ..drawPath(
+        Path()
+          ..moveTo(w * 0.2, h)
+          ..lineTo(w * 0.28, h * 0.74)
+          ..lineTo(w * 0.72, h * 0.74)
+          ..lineTo(w * 0.8, h)
+          ..close(),
+        p(const Color(0xFFB3ABA6)),
+      )
+      ..drawCircle(
+        Offset(w * 0.36, h * 0.88),
+        w * 0.014,
+        p(const Color(0xFF4A4542)),
+      )
+      ..drawCircle(
+        Offset(w * 0.64, h * 0.88),
+        w * 0.014,
+        p(const Color(0xFF4A4542)),
+      );
+  }
+
+  @override
+  bool shouldRepaint(_CasetePainter old) => false;
+}
+
 /// Pantalla de carga: los instrumentos del género que se juega saltan en ola
-/// sobre un ecualizador de su color.
-class Cargando extends StatelessWidget {
+/// sobre un ecualizador de su color, con una curiosidad del género debajo
+/// (una por carga).
+class Cargando extends StatefulWidget {
   const Cargando({super.key, this.texto = 'Cargando...'});
 
   final String texto;
 
   @override
+  State<Cargando> createState() => _CargandoState();
+}
+
+class _CargandoState extends State<Cargando> {
+  final _nota = curiosidadAlAzar(generoActivo);
+
+  @override
+  // Con letra grande o pantalla baja se desplaza en vez de desbordarse.
   Widget build(BuildContext context) => Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const _BandaCargando(),
-        const SizedBox(height: 16),
-        Text(
-          texto,
-          style: Theme.of(
-            context,
-          ).textTheme.bodyMedium?.copyWith(color: context.paleta.tintaSuave),
-        ),
-      ],
+    child: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const _BandaCargando(),
+          const SizedBox(height: 16),
+          Text(
+            widget.texto,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: context.paleta.tintaSuave),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 28, 20, 16),
+            child: _TarjetaCuriosidad(_nota),
+          ),
+        ],
+      ),
     ),
   );
+}
+
+/// Curiosidad en un cuadro con el color del género y la tipografía de la app.
+/// El tamaño de letra baja con el largo del texto para que quepa entera.
+class _TarjetaCuriosidad extends StatelessWidget {
+  const _TarjetaCuriosidad(this.texto);
+
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) {
+    final tema = Theme.of(context);
+    final color = tema.colorScheme.primary;
+    final tamano = texto.length <= 70
+        ? 30.0
+        : texto.length <= 110
+        ? 26.0
+        : texto.length <= 150
+        ? 23.0
+        : 21.0;
+    final estilo = tema.textTheme.headlineSmall;
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(maxWidth: 480),
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+      decoration: BoxDecoration(
+        color: Color.alphaBlend(
+          color.withValues(alpha: 0.12),
+          context.paleta.superficie,
+        ),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: color.withValues(alpha: 0.55), width: 2),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '💡 ¿Sabías que...?',
+            style: estilo?.copyWith(color: color, fontSize: 24),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            texto,
+            style: estilo?.copyWith(
+              fontSize: tamano,
+              height: 1.1,
+              color: context.paleta.tinta,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _BandaCargando extends StatefulWidget {
