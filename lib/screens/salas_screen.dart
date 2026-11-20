@@ -18,6 +18,7 @@ import '../theme.dart';
 import '../theme/liquid_glass_theme.dart';
 import '../widgets/con_reflejo.dart';
 import '../widgets/login_liquido.dart';
+import '../widgets/genre_landscape/genre_landscape.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
 import '../widgets/liquid_glass/liquid_glass_appbar.dart';
 import '../widgets/liquid_glass/liquid_glass_bottom_nav.dart';
@@ -1072,80 +1073,84 @@ class _DetalleSalaState extends State<_DetalleSala> {
     final color = _colorTipo(widget.tipo);
     return LiquidBackground(
       acento: color,
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: LiquidGlassAppBar(
-          colorTitulo: color,
-          title: Text(intros ? 'Adivina la intro' : 'Adivina la canción'),
-        ),
-        // Se encoge para caber en la pantalla sin desplazarse.
-        body: Padding(
-          padding: _margenLista(context),
-          child: LayoutBuilder(
-            builder: (context, caja) => FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.topCenter,
-              child: SizedBox(
-                width: caja.maxWidth,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: LiquidGlassButton(
-                            color: _unirse ? _colorUnirse : azulLogin,
-                            onPressed: () => setState(() => _unirse = false),
-                            icon: Icons.add_rounded,
-                            label: 'Crear sala',
+      child: ConFondo(
+        fondo: FondoIntros.sala(intros: intros),
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          appBar: LiquidGlassAppBar(
+            colorTitulo: color,
+            title: Text(intros ? 'Adivina la intro' : 'Adivina la canción'),
+          ),
+          // Se encoge para caber en la pantalla sin desplazarse.
+          body: Padding(
+            padding: _margenLista(context),
+            child: LayoutBuilder(
+              builder: (context, caja) => FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.topCenter,
+                child: SizedBox(
+                  width: caja.maxWidth,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: LiquidGlassButton(
+                              color: _unirse ? _colorUnirse : azulLogin,
+                              onPressed: () => setState(() => _unirse = false),
+                              icon: Icons.add_rounded,
+                              label: 'Crear sala',
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: LiquidGlassButton(
+                              color: _unirse ? azulLogin : _colorUnirse,
+                              onPressed: () => setState(() => _unirse = true),
+                              icon: Icons.qr_code_rounded,
+                              label: 'Unirme con código',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      if (_unirse) ...[
+                        Text(
+                          'Unirse a una sala',
+                          textAlign: TextAlign.center,
+                          style: text.headlineSmall,
+                        ),
+                        const SizedBox(height: 12),
+                        _FormularioCodigo(
+                          fichas: intros ? precioEntrarSalaIntros : null,
+                          onUnirse: (codigo) => Navigator.of(
+                            context,
+                          ).pop(_PeticionUnirse(codigo)),
+                        ),
+                      ] else ...[
+                        Text(
+                          intros ? 'Nueva sala de intros' : 'Nueva sala',
+                          textAlign: TextAlign.center,
+                          style: text.headlineSmall,
+                        ),
+                        Text(
+                          'Hasta 10 jugadores · canciones de todas las dificultades',
+                          textAlign: TextAlign.center,
+                          style: text.bodySmall?.copyWith(
+                            color: context.paleta.tintaSuave,
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: LiquidGlassButton(
-                            color: _unirse ? azulLogin : _colorUnirse,
-                            onPressed: () => setState(() => _unirse = true),
-                            icon: Icons.qr_code_rounded,
-                            label: 'Unirme con código',
-                          ),
+                        _FormularioCrearSala(
+                          tipo: widget.tipo,
+                          fichas: widget.fichas,
+                          onCrear: (peticion) =>
+                              Navigator.of(context).pop(peticion),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 16),
-                    if (_unirse) ...[
-                      Text(
-                        'Unirse a una sala',
-                        textAlign: TextAlign.center,
-                        style: text.headlineSmall,
-                      ),
-                      const SizedBox(height: 12),
-                      _FormularioCodigo(
-                        fichas: intros ? precioEntrarSalaIntros : null,
-                        onUnirse: (codigo) =>
-                            Navigator.of(context).pop(_PeticionUnirse(codigo)),
-                      ),
-                    ] else ...[
-                      Text(
-                        intros ? 'Nueva sala de intros' : 'Nueva sala',
-                        textAlign: TextAlign.center,
-                        style: text.headlineSmall,
-                      ),
-                      Text(
-                        'Hasta 10 jugadores · canciones de todas las dificultades',
-                        textAlign: TextAlign.center,
-                        style: text.bodySmall?.copyWith(
-                          color: context.paleta.tintaSuave,
-                        ),
-                      ),
-                      _FormularioCrearSala(
-                        tipo: widget.tipo,
-                        fichas: widget.fichas,
-                        onCrear: (peticion) =>
-                            Navigator.of(context).pop(peticion),
-                      ),
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -1520,44 +1525,51 @@ class _SalaScreenState extends ConsumerState<SalaScreen> {
       },
       child: LiquidBackground(
         acento: sala == null ? _colorSalas : _colorDe(sala.tipo),
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          appBar: LiquidGlassAppBar(
-            leading: IconButton(
-              tooltip: 'Salir de la sala',
-              icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: _salir,
+        child: ConFondo(
+          fondo: FondoIntros.sala(intros: sala?.tipo == TipoSala.intros),
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: LiquidGlassAppBar(
+              leading: IconButton(
+                tooltip: 'Salir de la sala',
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: _salir,
+              ),
+              colorTitulo: sala == null ? _colorSalas : _colorDe(sala.tipo),
+              title: const Text('Sala'),
             ),
-            colorTitulo: sala == null ? _colorSalas : _colorDe(sala.tipo),
-            title: const Text('Sala'),
-          ),
-          body: ConCarga(
-            cargando: _ocupado,
-            texto: 'Un momento...',
-            child: _error != null
-                ? Center(child: Text('No se pudo abrir la sala: $_error'))
-                : !_cargada
-                ? const Cargando(texto: 'Abriendo la sala...')
-                : sala == null
-                ? const Center(child: Text('Esta sala ya no existe (se cierra tras 20 min sin actividad).'))
-                : ListView(
-                    padding: _margenLista(context),
-                    children: [
-                      Entrada(
-                        child: _Resumen(sala: sala, uid: _uid),
+            body: ConCarga(
+              cargando: _ocupado,
+              texto: 'Un momento...',
+              child: _error != null
+                  ? Center(child: Text('No se pudo abrir la sala: $_error'))
+                  : !_cargada
+                  ? const Cargando(texto: 'Abriendo la sala...')
+                  : sala == null
+                  ? const Center(
+                      child: Text(
+                        'Esta sala ya no existe (se cierra tras 20 min sin actividad).',
                       ),
-                      const SizedBox(height: 16),
-                      Entrada(
-                        indice: 1,
-                        child: Column(children: _contenido(sala)),
-                      ),
-                      const SizedBox(height: 16),
-                      Entrada(
-                        indice: 2,
-                        child: _Clasificacion(sala: sala, uid: _uid),
-                      ),
-                    ],
-                  ),
+                    )
+                  : ListView(
+                      padding: _margenLista(context),
+                      children: [
+                        Entrada(
+                          child: _Resumen(sala: sala, uid: _uid),
+                        ),
+                        const SizedBox(height: 16),
+                        Entrada(
+                          indice: 1,
+                          child: Column(children: _contenido(sala)),
+                        ),
+                        const SizedBox(height: 16),
+                        Entrada(
+                          indice: 2,
+                          child: _Clasificacion(sala: sala, uid: _uid),
+                        ),
+                      ],
+                    ),
+            ),
           ),
         ),
       ),

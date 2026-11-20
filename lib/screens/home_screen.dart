@@ -174,7 +174,8 @@ class _SelectorGenero extends ConsumerStatefulWidget {
 
 class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
   // Tarjeta al frente: tiñe el fondo.
-  int _frente = 0;
+  // Arranca en la tarjeta del género que se estaba jugando.
+  int _frente = Genero.values.indexOf(generoActivo);
   final _carrusel = GlobalKey<CarruselGiratorioState>();
   // Pestaña lateral tocada: la gota va hasta ella mientras gira el carrusel
   // y vuelve al centro con el nombre nuevo.
@@ -500,6 +501,7 @@ class _SelectorGeneroState extends ConsumerState<_SelectorGenero> {
                 padding: const EdgeInsets.only(top: 12),
                 child: CarruselGiratorio(
                   key: _carrusel,
+                  inicial: _frente,
                   itemCount: _total,
                   autoGiro: const Duration(seconds: 5),
                   compacto: true,
