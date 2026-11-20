@@ -22,6 +22,7 @@ import '../services/audio_service.dart';
 import '../services/firebase_game_repository.dart';
 import '../services/musica_menu.dart';
 import '../theme.dart';
+import '../widgets/genre_landscape/genre_landscape.dart';
 import '../widgets/liquid_glass/liquid_background.dart';
 import '../widgets/liquid_glass/liquid_glass_appbar.dart';
 import '../widgets/liquid_glass/liquid_glass_button.dart';
@@ -29,6 +30,7 @@ import '../widgets/liquid_glass/liquid_glass_card.dart';
 import '../widgets/recorrido.dart';
 import '../widgets/reproductor_cancion.dart';
 import '../widgets/monedas_genero.dart';
+import '../widgets/notas_flotantes.dart';
 import '../widgets/sin_conexion.dart';
 
 // Color de las intros del género que se está jugando.
@@ -352,31 +354,35 @@ class _IntrosScreenState extends ConsumerState<IntrosScreen> {
           children: [
             Expanded(
               key: _claveColeccion,
-              child: RefreshIndicator(
-                onRefresh: _cargar,
-                child: CustomScrollView(
-                  slivers: [
-                    if (estado.intros.isEmpty)
-                      SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            SizedBox(
-                              height: 160,
-                              child: BandaMusical(color: _colorIntros),
-                            ),
-                            Text(
-                              'Tu colección está vacía.\nSaca tu primera carta.',
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.bodyLarge,
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      _grillaCartas(estado),
-                  ],
+              // El fondo no se desplaza: las cartas pasan por encima.
+              child: ConFondo(
+                fondo: FondoIntros.genero(generoActivo),
+                child: RefreshIndicator(
+                  onRefresh: _cargar,
+                  child: CustomScrollView(
+                    slivers: [
+                      if (estado.intros.isEmpty)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                height: 160,
+                                child: BandaMusical(color: _colorIntros),
+                              ),
+                              Text(
+                                'Tu colección está vacía.\nSaca tu primera carta.',
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context).textTheme.bodyLarge,
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        _grillaCartas(estado),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1129,11 +1135,16 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
 
   /// Barra de avance de la intro con el tiempo transcurrido y el total. Se
   /// refresca sola mientras suena, sin reconstruir la pantalla.
-  Widget _lineaDeTiempo() =>
-      Refresco(activo: _playing && !_paused, builder: (_) => _barraDeTiempo());
+  Widget _lineaDeTiempo(double alturaOnda) => Refresco(
+    activo: _playing && !_paused,
+    builder: (_) => _barraDeTiempo(alturaOnda),
+  );
 
-  Widget _barraDeTiempo() {
-    final text = Theme.of(context).textTheme;
+  Widget _barraDeTiempo(double alturaOnda) {
+    // Tipografía pixel de la app, más grande que el texto chico.
+    final numeros = Theme.of(
+      context,
+    ).textTheme.headlineSmall?.copyWith(fontSize: 22);
     final posicion = _playing ? _audioService.posicion : Duration.zero;
     final total = _playing ? const Duration(seconds: 30) : null;
     // La onda lo lee en cada cuadro, así que sigue la reproducción sin reconstruir.
@@ -1155,7 +1166,7 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
               activo: _playing && !_paused,
               color: _colorIntros,
               width: caja.maxWidth,
-              height: 64,
+              height: alturaOnda,
               barras: 32,
               progreso: () => avanceActual(),
             ),
@@ -1163,12 +1174,9 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
           const SizedBox(height: 4),
           Row(
             children: [
-              Text(tiempo(posicion), style: text.bodySmall),
+              Text(tiempo(posicion), style: numeros),
               const Spacer(),
-              Text(
-                total == null ? '-:--' : tiempo(total),
-                style: text.bodySmall,
-              ),
+              Text(total == null ? '-:--' : tiempo(total), style: numeros),
             ],
           ),
         ],
@@ -1225,12 +1233,24 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
                 ),
               ),
             ],
-            const SizedBox(height: 12),
-            LiquidGlassButton(
-              // Del color del género.
-              color: colorGenero(generoActivo),
-              onPressed: _sending ? null : _submitAnswer,
-              label: 'Comprobar respuesta',
+            // El botón aparece al escribir algo, igual que en Adivina la canción.
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _answerController,
+              builder: (context, valor, _) => AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                alignment: Alignment.topCenter,
+                child: valor.text.trim().isNotEmpty
+                    ? Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: LiquidGlassButton(
+                          // Del color del género.
+                          color: colorGenero(generoActivo),
+                          onPressed: _sending ? null : _submitAnswer,
+                          label: 'Comprobar respuesta',
+                        ),
+                      )
+                    : const SizedBox(width: double.infinity),
+              ),
             ),
           ],
         ),
@@ -1239,86 +1259,113 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
   }
 
   Widget _zonaJuego() {
-    final text = Theme.of(context).textTheme;
-    return LayoutBuilder(
-      builder: (context, espacio) => SingleChildScrollView(
-        padding: EdgeInsets.symmetric(
-          horizontal: espacio.maxWidth > 568
-              ? (espacio.maxWidth - 520) / 2
-              : 24,
-          vertical: 16,
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: NotasFlotantes(
+            color: _colorIntros,
+            activo: _playing && !_paused,
+          ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (widget.sala?.cabecera case final cabecera?) ...[
-              cabecera,
-              const SizedBox(height: 12),
-            ],
-            Text(
-              'Escucha la intro y escribe el nombre de la canción.',
-              textAlign: TextAlign.center,
-              style: text.bodyLarge,
-            ),
-            const SizedBox(height: 12),
-            Center(
-              child: LiquidGlassCard(
-                borderRadius: 26,
-                tintColor: _colorIntros,
-                padding: const EdgeInsets.all(24),
-                child: DiscoGirando(
-                  size: (espacio.maxHeight * 0.28).clamp(120.0, 220.0),
-                  girando: _playing && !_paused,
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            _lineaDeTiempo(),
-            const SizedBox(height: 16),
-            if (_playing)
-              Row(
+        _contenidoZonaJuego(),
+      ],
+    );
+  }
+
+  Widget _contenidoZonaJuego() {
+    return LayoutBuilder(
+      // Sin desplazamiento: según el alto libre (el teclado lo reduce)
+      // se achican casete y onda. El FittedBox solo es
+      // la red de seguridad.
+      builder: (context, espacio) {
+        final ancho = espacio.maxWidth > 568 ? 520.0 : espacio.maxWidth - 48;
+        final alturaOnda = espacio.maxHeight < 520 ? 44.0 : 60.0;
+        // Lo que no cambia: relleno, tarjeta, separaciones, botón y tiempo.
+        final libre = espacio.maxHeight - 156 - alturaOnda;
+        final caseteMax = min(264.0, ancho - 28) / 1.6;
+        final alturaCasete = libre.clamp(72.0, caseteMax);
+        return Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: espacio.maxWidth > 568
+                ? (espacio.maxWidth - 520) / 2
+                : 24,
+            vertical: 8,
+          ),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            // Centrado en el espacio libre.
+            alignment: Alignment.center,
+            child: SizedBox(
+              width: espacio.maxWidth > 568 ? 520 : espacio.maxWidth - 48,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(
-                    child: LiquidGlassButton(
-                      // Pausar naranja; Reanudar verde.
-                      variant: _paused
-                          ? LiquidGlassButtonVariant.secondary
-                          : LiquidGlassButtonVariant.primary,
-                      onPressed: _togglePause,
-                      icon: _paused
-                          ? PhosphorIconsFill.play
-                          : PhosphorIconsFill.pause,
-                      label: _paused ? 'Reanudar' : 'Pausar',
+                  if (widget.sala?.cabecera case final cabecera?) ...[
+                    cabecera,
+                    const SizedBox(height: 12),
+                  ],
+                  Center(
+                    child: LiquidGlassCard(
+                      borderRadius: 26,
+                      tintColor: _colorIntros,
+                      padding: const EdgeInsets.all(14),
+                      child: CaseteGirando(
+                        ancho: alturaCasete * 1.6,
+                        girando: _playing && !_paused,
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  LiquidGlassButton(
-                    color: const Color(0xFFD64545),
-                    onPressed: () => _audioService.detener(),
-                    icon: PhosphorIconsFill.stop,
-                    label: 'Stop',
-                  ),
-                ],
-              )
-            else
-              LiquidGlassButton(
-                variant: LiquidGlassButtonVariant.secondary,
-                onPressed: () => _play('intro'),
-                icon: PhosphorIconsFill.headphones,
-                label: 'Escuchar intro',
-              ),
+                  const SizedBox(height: 8),
+                  _lineaDeTiempo(alturaOnda),
+                  const SizedBox(height: 18),
+                  if (_playing)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: LiquidGlassButton(
+                            // Pausar naranja; Reanudar verde.
+                            variant: _paused
+                                ? LiquidGlassButtonVariant.secondary
+                                : LiquidGlassButtonVariant.primary,
+                            onPressed: _togglePause,
+                            icon: _paused
+                                ? PhosphorIconsFill.play
+                                : PhosphorIconsFill.pause,
+                            label: _paused ? 'Reanudar' : 'Pausar',
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        LiquidGlassButton(
+                          color: const Color(0xFFD64545),
+                          onPressed: () => _audioService.detener(),
+                          icon: PhosphorIconsFill.stop,
+                          label: 'Stop',
+                        ),
+                      ],
+                    )
+                  else
+                    LiquidGlassButton(
+                      variant: LiquidGlassButtonVariant.secondary,
+                      onPressed: () => _play('intro'),
+                      icon: PhosphorIconsFill.headphones,
+                      label: 'Escuchar intro',
+                    ),
 
-            if (widget.sala?.onSaltar case final saltar?) ...[
-              const SizedBox(height: 8),
-              TextButton.icon(
-                onPressed: _sending ? null : saltar,
-                icon: const Icon(PhosphorIconsFill.skipForward),
-                label: const Text('Saltar intro (0 puntos)'),
+                  if (widget.sala?.onSaltar case final saltar?) ...[
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: _sending ? null : saltar,
+                      icon: const Icon(PhosphorIconsFill.skipForward),
+                      label: const Text('Saltar intro (0 puntos)'),
+                    ),
+                  ],
+                ],
               ),
-            ],
-          ],
-        ),
-      ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1332,29 +1379,37 @@ class _IntroGameScreenState extends ConsumerState<IntroGameScreen> {
 
   Widget _pantalla(BuildContext context) => LiquidBackground(
     acento: _colorIntros,
-    child: Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: LiquidGlassAppBar(
-        title: Text(
-          _titulo0,
-          style: TextStyle(color: context.paleta.tonoTexto(_colorIntros)),
-        ),
-        actions: [
-          if (!_won && _gratis != null && (_pista?.contains('') ?? true))
-            IconButton(
-              tooltip: (_gratis ?? 0) > 0
-                  ? 'Pista al azar ($_gratis gratis)'
-                  : 'Pista al azar (1 ${generoActivo.simboloMoneda})',
-              onPressed: _sending || _pidiendoPista ? null : _pedirPista,
-              icon: Badge(
-                isLabelVisible: (_gratis ?? 0) > 0,
-                label: Text('$_gratis'),
-                child: const Icon(Icons.lightbulb_outline),
+    child: ConPaisaje(
+      visible: !_won,
+      genero: generoParaPaisaje(generoActivo, widget.intro.id),
+      level: widget.intro.numero,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: LiquidGlassAppBar(
+          title: Text(
+            _titulo0,
+            style: TextStyle(color: context.paleta.tonoTexto(_colorIntros)),
+          ),
+          actions: [
+            if (!_won && _gratis != null && (_pista?.contains('') ?? true))
+              IconButton(
+                tooltip: (_gratis ?? 0) > 0
+                    ? 'Pista al azar ($_gratis gratis)'
+                    : 'Pista al azar (1 ${generoActivo.simboloMoneda})',
+                onPressed: _sending || _pidiendoPista ? null : _pedirPista,
+                icon: Badge(
+                  isLabelVisible: (_gratis ?? 0) > 0,
+                  label: Text('$_gratis'),
+                  child: const Icon(Icons.lightbulb_outline),
+                ),
               ),
-            ),
-        ],
+          ],
+        ),
+        body: SafeArea(
+          top: false,
+          child: _won ? _vistaGanada() : _vistaJuego(),
+        ),
       ),
-      body: SafeArea(top: false, child: _won ? _vistaGanada() : _vistaJuego()),
     ),
   );
 }
