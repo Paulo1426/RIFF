@@ -156,6 +156,8 @@ class ResultadoPista {
   final bool yaComprada;
   final int costo;
   final List<String> pistasUsadas;
+  // Título en casillas ("L__ C______"), con lo que las pistas destapan.
+  final String? mascara;
   final int monedasRestantes;
   final Map<String, int> monedasPorGenero;
   final List<String> instrumentosComprados;
@@ -167,6 +169,7 @@ class ResultadoPista {
     this.yaComprada = false,
     this.costo = 0,
     this.pistasUsadas = const [],
+    this.mascara,
     required this.monedasRestantes,
     this.monedasPorGenero = const {},
     this.instrumentosComprados = const [],
@@ -184,6 +187,7 @@ class ResultadoPista {
               ?.map((e) => e.toString())
               .toList(growable: false) ??
           const [],
+      mascara: json['mascara'] as String?,
       monedasRestantes: (json['monedasRestantes'] as num?)?.toInt() ?? 0,
       monedasPorGenero: {
         for (final entry in (json['monedasPorGenero'] as Map? ?? {}).entries)

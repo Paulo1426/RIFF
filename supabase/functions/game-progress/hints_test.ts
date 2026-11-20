@@ -4,6 +4,7 @@ import {
   introHintTotal,
   introHintView,
   maskInitials,
+  maskTitle,
   pickIntroHint,
   pickRandomHint,
   titleLetter,
@@ -25,6 +26,16 @@ Deno.test("las iniciales dejan ver solo la primera letra de cada palabra", () =>
     "L__ c______ d_ l_ v___",
   );
   assertEquals(maskInitials("¡Ay, corazón!"), "¡A_, c______!");
+});
+
+Deno.test("las casillas se destapan según las pistas compradas", () => {
+  assertEquals(maskTitle("Los caminos", []), "___ _______");
+  assertEquals(maskTitle("Los caminos", ["artist"]), "___ _______");
+  assertEquals(maskTitle("Los caminos", ["initials"]), "L__ C______");
+  assertEquals(
+    maskTitle("¡Ay, corazón!", ["first_letter", "last_letter"]),
+    "¡A_, ______N!",
+  );
 });
 
 Deno.test("primera y última letra ignoran puntuación y espacios", () => {

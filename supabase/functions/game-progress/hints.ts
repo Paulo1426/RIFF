@@ -49,6 +49,35 @@ export function maskInitials(title: string): string {
     .join(" ");
 }
 
+/// Casillas del título para el jugador: una "_" por letra o número, palabras
+/// separadas por espacio y puntuación visible. Se destapan según las pistas
+/// compradas: "initials" (inicial de cada palabra), "first_letter" y
+/// "last_letter" (primera y última del título, en mayúscula).
+export function maskTitle(title: string, pistas: readonly string[]): string {
+  const words = title.split(/\s+/).filter(Boolean);
+  const isLetter = (char: string) => /[\p{L}\p{N}]/u.test(char);
+  const total = [...title].filter(isLetter).length;
+  const initials = pistas.includes("initials");
+  let seen = 0;
+  return words.map((word) => {
+    let firstOfWord = true;
+    let masked = "";
+    for (const char of word) {
+      if (!isLetter(char)) {
+        masked += char;
+        continue;
+      }
+      seen++;
+      const show = (firstOfWord && initials) ||
+        (seen === 1 && pistas.includes("first_letter")) ||
+        (seen === total && pistas.includes("last_letter"));
+      masked += show ? char.toLocaleUpperCase() : "_";
+      firstOfWord = false;
+    }
+    return masked;
+  }).join(" ");
+}
+
 /// Primera o última letra (o número) del título, en mayúscula; "" si no hay.
 export function titleLetter(title: string, last = false): string {
   const letters = [...title].filter((char) => /[\p{L}\p{N}]/u.test(char));
